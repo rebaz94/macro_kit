@@ -1,6 +1,6 @@
 // import 'package:macro_kit/macro.dart';
 //
-// part 'github.g.dart';
+// part 'example4.g.dart';
 //
 // @dataClassMacro
 // class UserProfile with UserProfileData {

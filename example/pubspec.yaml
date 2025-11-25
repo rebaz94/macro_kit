@@ -6,7 +6,7 @@ environment:
 # Add regular dependencies here.
 dependencies:
   macro_kit:
-    path: /Volumes/Projects/Server/swiftybase/macro
+    path: ..
 
 dev_dependencies:
   lints: ^6.0.0
