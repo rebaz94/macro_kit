@@ -1,12 +1,12 @@
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:collection/collection.dart';
-import 'package:macro_kit/src/analyzer/analyzer.dart';
+import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/core/core.dart';
 
-extension AnalyzeClass on Analyzer {
+mixin AnalyzeClass on BaseAnalyzer {
   bool lockOrReturnInProgressClassFieldsFor(String? clsName) {
     final key = 'inProgress:$clsName';
     if (iterationCaches.containsKey(key)) {

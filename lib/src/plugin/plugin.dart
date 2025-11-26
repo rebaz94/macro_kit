@@ -8,17 +8,19 @@ import 'package:analyzer_plugin/plugin/plugin.dart';
 import 'package:analyzer_plugin/protocol/protocol_generated.dart';
 import 'package:collection/collection.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
-import 'package:macro_kit/src/analyzer/plugin_client.dart';
+import 'package:macro_kit/src/plugin/server_client.dart';
+import 'package:synchronized/synchronized.dart' as sync;
 
 class MacroPlugin extends ServerPlugin implements MacroServerListener {
   MacroPlugin(ResourceProvider provider, this.logger)
-    : client = PluginClient(pluginId: Random().nextInt(1000), logger: logger),
+    : client = MacroServerClient(pluginId: Random().nextInt(1000), logger: logger),
       super(resourceProvider: provider) {
     _initialize();
   }
 
   final MacroLogger logger;
-  final PluginClient client;
+  final MacroServerClient client;
+  final sync.Lock lock = sync.Lock();
   AnalysisContextCollection? lastContextCollection;
 
   void _initialize() async {
@@ -33,27 +35,32 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
   }
 
   @override
-  Future<void> reconnectToServer() async {
-    logger.fine('Checking MacroServer');
+  Future<void> reconnectToServer({bool forceStart = false}) async {
+    return lock.synchronized(() async {
+      logger.fine('Checking MacroServer');
 
-    final serverRunning = await client.isServerRunning();
-    if (serverRunning) {
-      logger.info('Server is running');
-      await client.establishWSConnection();
-      return;
-    }
+      final serverRunning = await client.isServerRunning();
+      if (serverRunning) {
+        logger.info('Server is running');
+        await client.establishWSConnection();
+        return;
+      }
 
-    final disableAutoStart = client.isDisabledAutoStartSever();
-    if (disableAutoStart) {
-      logger.info('Auto starting MacroServer is disabled');
-      return;
-    }
+      final disableAutoStart = client.isDisabledAutoStartSever();
+      if (disableAutoStart && !forceStart) {
+        logger.info('Auto starting MacroServer is disabled');
+        return;
+      }
 
-    logger.info('Starting MacroServer...');
-    final started = await client.startMacroServer();
-    if (!started) return;
+      logger.info('Starting MacroServer...');
+      final started = await client.startMacroServer();
+      if (!started) {
+        Future.delayed(const Duration(seconds: 3)).then((_) => reconnectToServer(forceStart: forceStart));
+        return;
+      }
 
-    client.establishWSConnection();
+      client.establishWSConnection();
+    });
   }
 
   @override
@@ -93,7 +100,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
     lastContextCollection = contextCollection;
     final sent = await client.analysisContentChanged();
     if (!sent) {
-      Future.delayed(const Duration(seconds: 5)).then((_) => reconnectToServer());
+      Future.delayed(const Duration(seconds: 3)).then((_) => reconnectToServer());
     }
   }
 

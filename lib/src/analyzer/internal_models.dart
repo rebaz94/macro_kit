@@ -2,6 +2,8 @@ import 'dart:async' as async;
 
 import 'package:macro_kit/src/core/core.dart';
 import 'package:meta/meta.dart';
+// ignore: depend_on_referenced_packages
+import 'package:yaml/yaml.dart';
 
 extension type CountedCache._((int, Object) _v) {
   factory CountedCache(Object value, {int count = 1}) {
@@ -20,6 +22,46 @@ extension type CountedCache._((int, Object) _v) {
 @internal
 class AnalyzeResult {
   List<MacroClassDeclaration> classes = [];
+}
+
+@internal
+class MacroClientConfiguration {
+  MacroClientConfiguration({
+    required this.context,
+    required this.rewriteGeneratedFileTo,
+  });
+
+  static MacroClientConfiguration fromYaml(String context, YamlMap map) {
+    final rewrite = (map['rewriteGeneratedFileTo'] as String?) ?? '';
+    return MacroClientConfiguration(
+      context: context,
+      rewriteGeneratedFileTo: switch (rewrite) {
+        _ when rewrite.startsWith('./') => rewrite.substring(2),
+        _ when rewrite.startsWith('.') => rewrite.substring(1),
+        _ when rewrite.startsWith('/') => rewrite.substring(1),
+        _ => rewrite,
+      },
+    );
+  }
+
+  static MacroClientConfiguration defaultConfig = MacroClientConfiguration(
+    context: '',
+    rewriteGeneratedFileTo: '',
+  );
+
+  final String context;
+  final String rewriteGeneratedFileTo;
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (rewriteGeneratedFileTo.isNotEmpty) 'rewriteGeneratedFileTo': rewriteGeneratedFileTo,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'MacroClientConfiguration{context: $context, rewriteGeneratedFileTo: $rewriteGeneratedFileTo}';
+  }
 }
 
 R runZoneGuarded<R>({required R Function() fn, required Map<Object?, Object?> values}) {

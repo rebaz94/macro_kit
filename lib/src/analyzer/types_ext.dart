@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
@@ -243,4 +245,26 @@ Object? encodeDartObject(Object? value) {
   throw StateError(
     'Should never get here – with ${value.runtimeType} - `$value`.',
   );
+}
+
+extension FileExt on File {
+  /// Write data to a file directly or retry when [createFile] is true and file not exist.
+  Object? writeDataSyncOrErr(String contents, {required bool createFile, bool recursive = false}) {
+    try {
+      writeAsStringSync(contents);
+      return null;
+    } on PathNotFoundException catch (e) {
+      if (!createFile) {
+        return e;
+      }
+
+      try {
+        createSync(recursive: recursive);
+        writeAsStringSync(contents);
+        return null;
+      } catch (e) {
+        return e;
+      }
+    }
+  }
 }

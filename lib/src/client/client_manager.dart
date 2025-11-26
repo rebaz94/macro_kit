@@ -6,7 +6,7 @@ import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/analyzer/macro_server.dart';
 import 'package:macro_kit/src/analyzer/models.dart';
-import 'package:macro_kit/src/analyzer/plugin_client.dart';
+import 'package:macro_kit/src/plugin/server_client.dart';
 import 'package:watcher/watcher.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -99,7 +99,10 @@ class MacroManager {
       _wsSubs = channel.stream.listen(
         _handleMessage,
         onError: (error) => logger.error('WebSocket error occurred', error),
-        onDone: () async => _status = ConnectionStatus.disconnected,
+        onDone: () async {
+          _status = ConnectionStatus.disconnected;
+          _reconnect();
+        },
       );
 
       _addMessage(
@@ -134,8 +137,15 @@ class MacroManager {
     if (!autoReconnect) return;
 
     logger.error('Reconnecting to MacroServer in 10 seconds');
+    _requestPluginToConnect();
     await Future.delayed(const Duration(seconds: 10));
     _establishWSConnection();
+  }
+
+  void _requestPluginToConnect() {
+    File('$macroDirectory/$macroPluginRequestFileName')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
   }
 
   void _handleMessage(Object? data) {
@@ -184,7 +194,7 @@ class MacroManager {
             targetName: declaration.className,
             modifier: declaration.modifier,
             isCombingGenerator: firstMacroApplied && isCombiningGenCode,
-            suffixName: suffixName ??generator.suffixName,
+            suffixName: suffixName ?? generator.suffixName,
             classesById: message.sharedClasses,
           );
 
@@ -275,11 +285,13 @@ class MacroManager {
       return;
     }
 
+    // send
     final sent = _addMessage(RunMacroResultMsg(id: message.id, result: generated.toString()));
     if (!sent) {
       logger.error('Failed to publish generated code: MacroServer maybe down!');
     }
 
+    // remove exceeded cache
     _removeExcessCache();
   }
 

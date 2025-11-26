@@ -82,9 +82,9 @@ class _MyHomePageState extends State<MyHomePage> with _MyHomePageStateForm {
   @FormzField(type: List<String>, defaultValue: ['a', 'b', 'c'])
   ListSchema get myListSchema => ListSchema();
 
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold();
+    return Scaffold(
+    );
   }
 }

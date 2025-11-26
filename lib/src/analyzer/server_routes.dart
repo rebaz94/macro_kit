@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:macro_kit/src/analyzer/macro_server.dart';
-import 'package:macro_kit/src/analyzer/vm_utils.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -60,7 +59,8 @@ Future<bool> _serveServer(Router app, {bool throwErr = false}) async {
       return true;
     }
 
-    rethrow;
+    MacroAnalyzerServer.instance.logger.error('Failed to run MacroServer', e);
+    exit(-1);
   }
 }
 

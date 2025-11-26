@@ -12,13 +12,13 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 enum ConnectionStatus { connecting, connected, disconnected }
 
 abstract class MacroServerListener {
-  void reconnectToServer();
+  void reconnectToServer({bool forceStart = false});
 
   List<String> listAnalysisContexts();
 }
 
-class PluginClient {
-  PluginClient({
+class MacroServerClient {
+  MacroServerClient({
     required this.pluginId,
     required this.logger, //
     String serverAddress = 'http://localhost:3232',
@@ -93,12 +93,11 @@ class PluginClient {
 
       // expired after 10 seconds
       if (DateTime.now().isAfter(expireTime)) {
-
         return;
       }
 
       if (request == 'reconnect') {
-        establishWSConnection();
+        listener.reconnectToServer(forceStart: true);
       }
     });
   }
@@ -107,6 +106,8 @@ class PluginClient {
     final home = Platform.environment['HOME'] ?? '~';
     var path = Platform.environment['PATH'] ?? '';
     path += ':$home/fvm/default/bin:$home/fvm/default/.pub-cache/bin:$home/.pub-cache/bin';
+
+    logger.fine('system path: $path');
 
     try {
       const args = ['macro'];

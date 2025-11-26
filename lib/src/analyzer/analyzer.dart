@@ -1,52 +1,17 @@
-import 'dart:io';
-import 'dart:math';
-
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
-import 'package:analyzer/file_system/physical_file_system.dart';
-import 'package:dart_style/dart_style.dart';
 import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/analyze_class.dart';
+import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
-import 'package:macro_kit/src/analyzer/macro_server.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
 
-abstract class Analyzer extends BaseAnalyzer {
-  Analyzer(super.logger);
+abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
+  MacroAnalyzer({required super.logger});
 
-  final random = Random();
-  final DartFormatter formatter = DartFormatter(
-    languageVersion: DartFormatter.latestLanguageVersion,
-    pageWidth: 120,
-    trailingCommas: TrailingCommas.preserve,
-  );
-
-  List<String> contexts = <String>[];
-  AnalysisContextCollection contextCollection = AnalysisContextCollection(
-    includedPaths: [],
-    resourceProvider: PhysicalResourceProvider.INSTANCE,
-  );
-
-  final Map<String, File> fileCaches = {};
-
-  /// per analyze cache for reusing common parsing like computing a class type info
-  final Map<String, CountedCache> iterationCaches = {};
-  final Set<String> mayContainsMacroCache = {};
-  final List<String> pendingAnalyze = [];
-  String currentAnalyzingPath = '';
-  bool isAnalyzingFile = false;
-
-  /// --- internal state of required of sub types, reset per [processSource] call
-  Map<String, AnalyzeResult> macroAnalyzeResult = {};
-  List<(List<MacroConfig>, ClassFragment)> pendingClassRequiredSubTypes = [];
-
-  int newId() => random.nextInt(100000);
-
-  @override
   Future<void> processSource(String path) async {
     final s = Stopwatch()..start();
 
@@ -120,9 +85,14 @@ abstract class Analyzer extends BaseAnalyzer {
     }
 
     // step:4 run macro
-    await executeMacro(path: path, result: macroAnalyzeResult, sharedClasses: sharedClasses);
+    await executeMacro(
+      path: path,
+      result: macroAnalyzeResult,
+      sharedClasses: sharedClasses,
+    );
   }
 
+  @override
   MacroClassDeclaration? parseClass(ClassFragment classFragment, {List<MacroConfig>? collectSubTypeConfig}) {
     // combine all declared macro in one list and share with each config
     // (one class can have many metadata attached, we parsed config based on each metadata)

@@ -1,26 +1,30 @@
 import 'package:macro_kit/macro.dart';
-import 'package:macro_test/custom/json_schema_macro.dart';
 
-part 'example3.g.dart';
+part 'example1.g.dart';
 
-@Macro(DataClassMacro(discriminatorKey: 'type'), combine: true)
-@jsonSchemaMacro
+@dataClassMacro
+class UserProfile with UserProfileData {
+  const UserProfile({required this.name, required this.age});
+
+  final String name;
+  final int age;
+}
+
+@dataClassMacro
 sealed class Animal with AnimalData {
   Animal({required this.name});
 
   final String name;
 }
 
-@Macro(DataClassMacro(includeDiscriminator: true), combine: true)
-@jsonSchemaMacro
+@Macro(DataClassMacro(includeDiscriminator: true))
 class Cat extends Animal with CatData {
   final String nickName;
 
   Cat({required super.name, required this.nickName});
 }
 
-@Macro(DataClassMacro(discriminatorValue: Dog.checkIsDog), combine: true)
-@jsonSchemaMacro
+@Macro(DataClassMacro(discriminatorValue: Dog.checkIsDog))
 class Dog extends Animal with DogData {
   final bool big;
 

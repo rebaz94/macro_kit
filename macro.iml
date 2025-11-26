@@ -12,6 +12,9 @@
       <excludeFolder url="file://$MODULE_DIR$/tools/analyzer_plugin/.dart_tool" />
       <excludeFolder url="file://$MODULE_DIR$/tools/analyzer_plugin/.pub" />
       <excludeFolder url="file://$MODULE_DIR$/tools/analyzer_plugin/build" />
+      <excludeFolder url="file://$MODULE_DIR$/example/macro_test/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/example/macro_test/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/example/macro_test/build" />
     </content>
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="Dart SDK" level="project" />

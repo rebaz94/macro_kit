@@ -3,10 +3,10 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:macro_kit/macro.dart';
-import 'package:macro_kit/src/analyzer/analyzer.dart';
+import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
 
-extension Types on Analyzer {
+extension Types on BaseAnalyzer {
   bool isValidAnnotation(
     ElementAnnotation? annotation, {
     required String className,
@@ -170,6 +170,7 @@ extension Types on Analyzer {
 
   /// return a tuple of dart representation of the literal along with
   /// regular value for the constant that can be encoded
+
   ({Object? constantValue, bool reqConversion, MacroModifier modifier}) computeMacroKeyValue(
     String fieldName,
     DartObject fieldValue,

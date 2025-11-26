@@ -32,5 +32,6 @@ analyzer:
 formatter:
   page_width: 120
   trailing_commas: preserve
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+
+macro_kit:
+  rewrite_generated_code: ./lib/.gen
