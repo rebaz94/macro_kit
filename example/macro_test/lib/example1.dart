@@ -6,6 +6,7 @@ part 'example1.g.dart';
 class UserProfile with UserProfileData {
   const UserProfile({required this.name, required this.age});
 
+  @JsonKey(name: 'UserName')
   final String name;
   final int age;
 }

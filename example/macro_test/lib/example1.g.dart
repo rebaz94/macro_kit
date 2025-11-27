@@ -5,7 +5,7 @@ part of 'example1.dart';
 mixin UserProfileData {
   static UserProfile fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      name: json['name'] as String,
+      name: json['UserName'] as String,
       age: (json['age'] as num).toInt(),
     );
   }
@@ -13,7 +13,7 @@ mixin UserProfileData {
   Map<String, dynamic> toJson() {
     final v = this as UserProfile;
     return <String, dynamic>{
-      'name': v.name,
+      'UserName': v.name,
       'age': v.age,
     };
   }

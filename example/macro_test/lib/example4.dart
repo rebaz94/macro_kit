@@ -2,6 +2,8 @@ import 'package:macro_kit/macro.dart';
 
 part 'example4.g.dart';
 
+// Github schema example
+
 @dataClassMacro
 class UserProfile with UserProfileData {
   @JsonKey(name: 'id')

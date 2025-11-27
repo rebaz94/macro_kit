@@ -90,6 +90,11 @@ class FormMacro extends MacroGenerator {
 
     buff.write('\n');
 
+    // Generate validate method
+    _generateValidate(state, buff, schemaFields);
+
+    // buff.write('\n');
+
     // Generate dispose method
     _generateDispose(state, buff, schemaFields);
 
@@ -136,6 +141,39 @@ class FormMacro extends MacroGenerator {
       buff.write('    }\n');
       buff.write('  }\n\n');
     }
+  }
+
+  void _generateValidate(MacroState state, StringBuffer buff, List<MacroProperty> fields) {
+    buff.write('Future<Map<String, List<ValidationError>>> validate() async {\n');
+    buff.write('  final state = this as ${state.targetName};\n');
+    buff.write('  final formState = <String, List<ValidationError>>{};\n');
+
+    final fieldNames = fields.map((e) => _getFieldName(e.name)).toList();
+    buff.write('  const fieldNames = [${fieldNames.map((e) => "'$e'").join(',')}];\n');
+
+    buff.write('try {\n');
+    buff.write('  final result = await Future.wait([\n');
+    for (final (i, field) in fields.indexed) {
+      buff.write('  state.${field.name}.validate(${fieldNames[i]}State.value.value),');
+    }
+    buff.write(']);\n\n');
+
+    buff.write('for (int i = 0; i < fieldNames.length; i++) {\n');
+    buff.write('  if (result[i].isNotEmpty) {\n');
+    buff.write('    formState[fieldNames[i]] = result[i];\n');
+    buff.write('  }\n');
+    buff.write('}\n');
+
+    buff.write('} catch (e) {\n');
+    buff.write("formState['__form__'] = [\n");
+    buff.write(
+      "ValidationError(ValidationErrorType.custom, path: const [], details: 'Validation failed: \${e.toString()}'),",
+    );
+    buff.write('];\n');
+    buff.write('}');
+
+    buff.write('  return formState;\n');
+    buff.write('}\n');
   }
 
   void _generateDispose(MacroState state, StringBuffer buff, List<MacroProperty> fields) {

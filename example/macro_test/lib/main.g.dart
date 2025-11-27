@@ -152,6 +152,31 @@ mixin _MyHomePageStateForm {
     }
   }
 
+  Future<Map<String, List<ValidationError>>> validate() async {
+    final state = this as _MyHomePageState;
+    final formState = <String, List<ValidationError>>{};
+    const fieldNames = ['name', 'age', 'profile', 'myList'];
+    try {
+      final result = await Future.wait([
+        state.nameSchema.validate(nameState.value.value),
+        state.ageSchema.validate(ageState.value.value),
+        state.profileSchema.validate(profileState.value.value),
+        state.myListSchema.validate(myListState.value.value),
+      ]);
+
+      for (int i = 0; i < fieldNames.length; i++) {
+        if (result[i].isNotEmpty) {
+          formState[fieldNames[i]] = result[i];
+        }
+      }
+    } catch (e) {
+      formState['__form__'] = [
+        ValidationError(ValidationErrorType.custom, path: const [], details: 'Validation failed: ${e.toString()}'),
+      ];
+    }
+    return formState;
+  }
+
   // Dispose all value notifiers
   void dispose() {
     nameState.dispose();

@@ -82,9 +82,64 @@ class _MyHomePageState extends State<MyHomePage> with _MyHomePageStateForm {
   @FormzField(type: List<String>, defaultValue: ['a', 'b', 'c'])
   ListSchema get myListSchema => ListSchema();
 
+  Map<String, List<ValidationError>> validationErrors = const {};
+
+  void _validateForm() async {
+    validationErrors = await validate();
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            const Text(
+              'You have pushed the button this many times:',
+            ),
+            Text('Age Counter: '),
+            ValueListenableBuilder(
+              valueListenable: ageState,
+              builder: (context, state, _) {
+                return Container(
+                  color: state.isUndefined ? Colors.amber : null,
+                  child: Text(
+                    '${state.isUndefined ? 'Not Set' : state.value}',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            for (final entry in validationErrors.entries)
+              Row(
+                spacing: 10,
+                children: [
+                  Text('Field: ${entry.key}'),
+                  Text('Value: ${entry.value.join(', ')}'),
+                ],
+              ),
+          ],
+        ),
+      ),
+      floatingActionButton: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 10,
+        children: [
+          FloatingActionButton(
+            onPressed: _validateForm,
+            tooltip: 'Validate',
+            child: const Icon(Icons.send),
+          ),
+          FloatingActionButton(
+            onPressed: () => age = (age ?? 0) + 1,
+            tooltip: 'Increment',
+            child: const Icon(Icons.add),
+          ),
+        ],
+      ),
     );
   }
 }
