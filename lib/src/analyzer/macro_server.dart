@@ -9,7 +9,6 @@ import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/analyzer/models.dart';
-import 'package:macro_kit/src/analyzer/vm_utils.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart' as sync;
 import 'package:watcher/watcher.dart';
@@ -42,7 +41,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   final Map<String, StreamSubscription<WatchEvent>> _subs = {};
   final Map<int, _PluginChannelInfo> _pluginChannels = {};
   final List<StreamSubscription> _wsPluginSubs = [];
-  VmUtils? vmUtils;
+  // VmUtils? vmUtils;
 
   /// List of connected client by client id with ws socket and supported macro names
   final Map<int, _ClientChannelInfo> _clientChannels = {};
@@ -409,7 +408,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   void dispose() {
     _autoShutdownTimer?.cancel();
-    vmUtils?.dispose();
+    // vmUtils?.dispose();
 
     void tryFn(void Function() fn) {
       try {
