@@ -7,6 +7,7 @@ void main() async {
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
     },
+    enabled: true,
   );
 
   final profile = UserProfile(name: 'Rebaz', age: 30);

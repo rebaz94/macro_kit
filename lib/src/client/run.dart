@@ -2,7 +2,10 @@ import 'package:logging/logging.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/client/client_manager.dart';
 
-const kRelease = bool.fromEnvironment("dart.vm.product");
+// copied from flutter
+const bool _kReleaseMode = bool.fromEnvironment('dart.vm.product');
+const bool _kProfileMode = bool.fromEnvironment('dart.vm.profile');
+const bool _kDebugMode = !_kReleaseMode && !_kProfileMode;
 
 Future<MacroManager?> runMacro({
   required Map<String, MacroInitFunction> macros,
@@ -11,7 +14,7 @@ Future<MacroManager?> runMacro({
   String serverAddress = 'http://localhost:3232',
   bool autoReconnect = true,
   Duration generateTimeout = const Duration(seconds: 30),
-  bool enabled = !kRelease,
+  bool enabled = _kDebugMode,
 }) async {
   if (!enabled) return null;
 

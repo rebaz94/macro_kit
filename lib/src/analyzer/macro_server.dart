@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:collection/collection.dart';
-import 'package:http/http.dart';
+import 'package:http/http.dart' as http;
 import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
@@ -18,7 +18,6 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 // ignore: depend_on_referenced_packages
 import 'package:yaml/yaml.dart';
 
-const kRelease = bool.fromEnvironment("dart.vm.product");
 const macroPluginRequestFileName = 'macro_plugin_request';
 const macroClientRequestFileName = 'macro_client_request';
 
@@ -29,10 +28,10 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   MacroAnalyzerServer({required super.logger});
 
   static final MacroAnalyzerServer instance = () {
-    void Function(Object? log)? logTo;
-    if (kRelease) {
-      final sink = MacroLogger.getFileAppendLogger('macro_analyzer.log');
-      logTo = sink.writeln;
+    final sink = MacroLogger.getFileAppendLogger('server.log');
+    void logTo(Object? log) {
+      print(log);
+      sink.writeln(log);
     }
 
     final logger = MacroLogger.createLogger(name: 'MacroAnalyzer', into: logTo);
@@ -53,7 +52,6 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   /// List of requested code generation by request id
   final Map<int, Completer<RunMacroResultMsg>> _pendingOperations = {};
-  Client? httpClient;
   Timer? _autoShutdownTimer;
   bool _scheduleToShutdown = false;
 
@@ -94,8 +92,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   Future<bool> shutdownMacroServer() async {
     try {
-      httpClient ??= Client();
-      final res = await httpClient!.post(Uri.parse('http://localhost:3232/shutdown'), body: '{}');
+      final res = await http.post(Uri.parse('http://localhost:3232/shutdown'), body: '{}');
       return res.statusCode == HttpStatus.ok;
     } catch (e) {
       logger.error('Failed to shut down existing MacroServer', e);
@@ -128,7 +125,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   void _reloadMacroConfiguration(List<String> contexts) {
+    logger.info('reloading context configuration');
     _macroClientConfigs.clear();
+    fileCaches.clear();
 
     for (final context in contexts) {
       try {
@@ -306,6 +305,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
           case ClientConnectMsg msg:
             _clientChannels[msg.id] = (webSocket, msg.macros, msg.runTimeout, sub);
             clientId = msg.id;
+            onContextChanged();
           case RunMacroResultMsg msg:
             final operation = _pendingOperations.remove(msg.id);
             if (operation == null) {
@@ -411,24 +411,29 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     _autoShutdownTimer?.cancel();
     vmUtils?.dispose();
 
-    for (final sub in _subs.values) {
-      sub.cancel();
+    void tryFn(void Function() fn) {
+      try {
+        fn();
+      } catch (_) {}
     }
 
-    for (final channel in _pluginChannels.values) {
-      channel.$1.sink.close(goingAway, 'Server is closing').catchError((_) {});
+    for (final sub in _wsPluginSubs.toList()) {
+      tryFn(sub.cancel);
     }
 
-    for (final channel in _clientChannels.values) {
-      channel.$4?.cancel();
-      channel.$1.sink.close(goingAway, 'Server is closing').catchError((_) {});
+    for (final sub in _subs.values.toList()) {
+      tryFn(sub.cancel);
     }
 
-    for (final sub in _wsPluginSubs) {
-      sub.cancel();
+    for (final channel in _pluginChannels.values.toList()) {
+      tryFn(() => channel.$1.sink.close(normalClosure, 'Server is closing'));
     }
 
-    contextCollection.dispose();
-    httpClient?.close();
+    for (final channel in _clientChannels.values.toList()) {
+      tryFn(() => channel.$4?.cancel);
+      tryFn(() => channel.$1.sink.close(normalClosure, 'Server is closing').catchError((_) {}));
+    }
+
+    tryFn(contextCollection.dispose);
   }
 }

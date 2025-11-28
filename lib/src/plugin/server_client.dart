@@ -6,7 +6,7 @@ import 'package:http/http.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/analyzer/macro_server.dart';
 import 'package:macro_kit/src/analyzer/models.dart';
-import 'package:watcher/watcher.dart';
+import 'package:macro_kit/src/analyzer/watch_file_request.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum ConnectionStatus { connecting, connected, disconnected }
@@ -28,12 +28,15 @@ class MacroServerClient {
   final MacroLogger logger;
   final Uri serverAddress;
   final Client httpClient = Client();
+  final _pluginRequestWatcher = WatchFileRequest(
+    fileName: macroPluginRequestFileName,
+    inDirectory: macroDirectory,
+  );
   late MacroServerListener listener;
   ConnectionStatus status = ConnectionStatus.disconnected;
   bool autoReconnect = true;
 
   Process? _process;
-  StreamSubscription? _subs;
   WebSocketChannel? wsChannel;
   StreamSubscription? _wsSubs;
 
@@ -73,33 +76,28 @@ class MacroServerClient {
 
   /// setup a file watcher to be updated by macro server while in development mode
   /// so that the plugin establish connection to macro server and send their analysis contexts path
-  void listenToManualReconnectionRequest() {
+  void listenToManualRequest() {
     // here we listen to change coming from MacroServer in order to
     // reconnect to it in case of disabling auto starting in development or crashing server
-    final file = File('$macroDirectory/$macroPluginRequestFileName');
-    _subs = Watcher(file.path).events.listen((e) {
-      if (e.type != ChangeType.ADD && e.type != ChangeType.MODIFY) return;
+    _pluginRequestWatcher.listen(
+      onChanged: (changeType, data) {
+        logger.info('on plugin request: $data');
 
-      final content = file.readAsStringSync().split(':');
+        final content = data.split(':');
+        if (content.length != 2) {
+          logger.error('invalid plugin request');
+          return;
+        }
 
-      logger.info('new manual request received: $content');
-      if (content.length != 2) return;
-
-      final [expireTimeMs, request] = content;
-      final time = int.tryParse(expireTimeMs);
-
-      if (time == null) return;
-      final expireTime = DateTime.fromMicrosecondsSinceEpoch(time).add(const Duration(seconds: 10));
-
-      // expired after 10 seconds
-      if (DateTime.now().isAfter(expireTime)) {
-        return;
-      }
-
-      if (request == 'reconnect') {
-        listener.reconnectToServer(forceStart: true);
-      }
-    });
+        final [_, request] = content;
+        switch (request) {
+          case 'reconnect':
+            listener.reconnectToServer(forceStart: true);
+        }
+      },
+      onError: (Object? err, StackTrace? s) => logger.info('An error occurred in watching plugin request file', err, s),
+      onClosed: () => logger.info('watching plugin request closed'),
+    );
   }
 
   Future<bool> startMacroServer() async {
@@ -111,14 +109,14 @@ class MacroServerClient {
 
     try {
       const args = ['macro'];
-      final process = await Process.start(
+      _process = await Process.start(
         args.first,
         args.sublist(1),
         environment: {...Platform.environment, 'PATH': path},
       );
 
-      process.stdout.transform(utf8.decoder).listen(logger.info);
-      process.stderr.transform(utf8.decoder).listen(logger.error);
+      // wait until macro server initialize itself
+      await Future.delayed(const Duration(seconds: 3));
       return true;
     } catch (e, s) {
       if (e.toString().contains('Address already in use')) {
@@ -198,9 +196,8 @@ class MacroServerClient {
   }
 
   void dispose() {
-    _process?.kill();
-    _subs?.cancel();
-    _subs = null;
+    _process?.kill(ProcessSignal.sighup);
+    _pluginRequestWatcher.close();
     _wsSubs?.cancel();
     _wsSubs = null;
     wsChannel?.sink.close();

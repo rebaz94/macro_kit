@@ -26,7 +26,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
   void _initialize() async {
     client.listener = this;
 
-    client.listenToManualReconnectionRequest();
+    client.listenToManualRequest();
     if (client.isDisabledAutoStartSever()) {
       client.autoReconnect = false;
     }
@@ -36,8 +36,10 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
 
   @override
   Future<void> reconnectToServer({bool forceStart = false}) async {
+    logger.info('Reconnect to MacroServer, lock: ${lock.locked}');
+
     return lock.synchronized(() async {
-      logger.fine('Checking MacroServer');
+      logger.info('Checking MacroServer, lock: ${lock.locked}');
 
       final serverRunning = await client.isServerRunning();
       if (serverRunning) {
@@ -55,7 +57,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
       logger.info('Starting MacroServer...');
       final started = await client.startMacroServer();
       if (!started) {
-        Future.delayed(const Duration(seconds: 3)).then((_) => reconnectToServer(forceStart: forceStart));
+        Future.delayed(const Duration(seconds: 5)).then((_) => reconnectToServer(forceStart: forceStart));
         return;
       }
 
@@ -79,7 +81,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
   String get name => 'Macro Plugin';
 
   @override
-  String get version => '1.0.0';
+  String get version => '1.40.0';
 
   @override
   Future<AnalysisHandleWatchEventsResult> handleAnalysisHandleWatchEvents(
@@ -111,6 +113,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
 
   @override
   Future<PluginShutdownResult> handlePluginShutdown(PluginShutdownParams parameters) {
+    logger.info('shutting down');
     client.dispose();
     return super.handlePluginShutdown(parameters);
   }

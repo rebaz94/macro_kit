@@ -5,7 +5,7 @@ import 'package:analyzer_plugin/starter.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/plugin/plugin.dart';
 
-void start(Iterable<String> args, SendPort sendPort) {
+void start(List<String> args, SendPort sendPort) {
   final sink = MacroLogger.getFileAppendLogger('plugin.log');
   final logger = MacroLogger.createLogger(name: 'MacroPlugin', into: sink.writeln);
   ServerPluginStarter(MacroPlugin(PhysicalResourceProvider.INSTANCE, logger)).start(sendPort);

@@ -86,7 +86,7 @@ Future<Response> _getServerContexts(Request request) async {
 }
 
 Future<Response> _onShutdown(Request request) async {
-  Future.delayed(const Duration(seconds: 3)).then((_) => exit(0));
   MacroAnalyzerServer.instance.dispose();
+  Future.delayed(const Duration(seconds: 2)).then((_) => exit(0));
   return Response.ok('');
 }

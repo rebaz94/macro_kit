@@ -1,3 +1,3 @@
-## 1.0.0
+## 0.0.5
 
-- Initial version.
+- Initial version released

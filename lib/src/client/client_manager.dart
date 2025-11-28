@@ -6,8 +6,9 @@ import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/analyzer/macro_server.dart';
 import 'package:macro_kit/src/analyzer/models.dart';
+import 'package:macro_kit/src/analyzer/watch_file_request.dart';
 import 'package:macro_kit/src/plugin/server_client.dart';
-import 'package:watcher/watcher.dart';
+import 'package:synchronized/synchronized.dart' as sync;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 typedef MacroInitFunction = MacroGenerator Function(MacroConfig config);
@@ -22,11 +23,16 @@ class MacroManager {
   }) : serverAddress = Uri.parse(serverAddress);
 
   final int clientId = 1000 + Random().nextInt(1000);
+  final sync.Lock lock = sync.Lock();
   final MacroLogger logger;
   final Uri serverAddress;
   final Map<String, MacroInitFunction> macros;
   final bool autoReconnect;
   final Duration generateTimeout;
+  final _clientRequestWatcher = WatchFileRequest(
+    fileName: macroClientRequestFileName,
+    inDirectory: macroDirectory,
+  );
 
   /// A cache of generator keyed by hash of the json that build MacroGenerator instance
   final Map<int, MacroGenerator> _generatorCaches = {};
@@ -36,43 +42,56 @@ class MacroManager {
   ConnectionStatus get status => _status;
 
   WebSocketChannel? _wsChannel;
-  StreamSubscription? _subs;
   StreamSubscription? _wsSubs;
 
   void connect() {
-    _listenToManualReconnectionRequest();
-    _establishWSConnection();
+    _listenToManualRequest();
+    _reconnect(force: true, delay: false);
   }
 
   /// setup a file watcher to be updated by macro server while in development mode
   /// so that the plugin establish connection to macro server and send their analysis contexts path
-  void _listenToManualReconnectionRequest() {
-    final file = File('$macroDirectory/$macroClientRequestFileName');
-    _subs?.cancel();
-    _subs = Watcher(file.path).events.listen((e) {
-      if (e.type != ChangeType.ADD && e.type != ChangeType.MODIFY) return;
+  void _listenToManualRequest() {
+    _clientRequestWatcher.listen(
+      onChanged: (type, data) {
+        final content = data.split(':');
+        if (content.length != 2) {
+          logger.error('invalid client request');
+          return;
+        }
 
-      final content = file.readAsStringSync().split(':');
-      if (content.length != 2) return;
-
-      final [expireTimeMs, request] = content;
-      final time = int.tryParse(expireTimeMs);
-
-      if (time == null) return;
-      final expireTime = DateTime.fromMicrosecondsSinceEpoch(time).add(const Duration(seconds: 10));
-
-      // expired after 10 seconds
-      if (DateTime.now().isAfter(expireTime)) {
-        return;
-      }
-
-      if (request == 'reconnect') {
-        _establishWSConnection();
-      }
-    });
+        final [_, request] = content;
+        switch (request) {
+          case 'reconnect':
+            _establishConnection();
+        }
+      },
+    );
   }
 
-  Future<void> _establishWSConnection() async {
+  void _reconnect({bool force = false, bool delay = true}) async {
+    lock.synchronized(
+      () async {
+        if (!autoReconnect && !force) return;
+
+        if (delay) {
+          logger.error('Reconnecting to MacroServer in 10 seconds');
+        }
+
+        _requestPluginToConnect();
+        await Future.delayed(delay ? const Duration(seconds: 10) : const Duration(seconds: 1));
+        _establishConnection();
+      },
+    );
+  }
+
+  void _requestPluginToConnect() {
+    File('$macroDirectory/$macroPluginRequestFileName')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
+  }
+
+  Future<void> _establishConnection() async {
     if (_status == ConnectionStatus.connected) {
       if (_wsChannel != null && _wsChannel!.closeCode == null && _wsChannel!.closeReason == null) {
         logger.fine('Using existing active connection..');
@@ -112,7 +131,6 @@ class MacroManager {
           macros: macros.keys.toList(),
         ),
       );
-      await Future.delayed(const Duration(seconds: 1));
 
       logger.info('Connected');
     } catch (e) {
@@ -131,21 +149,6 @@ class MacroManager {
       _reconnect();
       return false;
     }
-  }
-
-  void _reconnect() async {
-    if (!autoReconnect) return;
-
-    logger.error('Reconnecting to MacroServer in 10 seconds');
-    _requestPluginToConnect();
-    await Future.delayed(const Duration(seconds: 10));
-    _establishWSConnection();
-  }
-
-  void _requestPluginToConnect() {
-    File('$macroDirectory/$macroPluginRequestFileName')
-      ..createSync(recursive: true)
-      ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
   }
 
   void _handleMessage(Object? data) {
@@ -328,8 +331,7 @@ class MacroManager {
   }
 
   void dispose() {
-    _subs?.cancel();
-    _subs = null;
+    _clientRequestWatcher.close();
     _wsSubs?.cancel();
     _wsSubs = null;
     _wsChannel?.sink.close().catchError((_) {});

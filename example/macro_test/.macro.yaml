@@ -1,2 +1,2 @@
 config:
-#  rewriteGeneratedFileTo: "lib/gen"
+#   rewriteGeneratedFileTo: "lib/gen"
