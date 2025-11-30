@@ -35,6 +35,20 @@ class Macro {
   /// This is useful when multiple macros must collaborate to build a
   /// single combined implementation.
   final bool combine;
+
+  static T parseMacroConfig<T>({
+    required Object? value,
+    required T Function(Map<String, dynamic> json) fn,
+    required T defaultValue,
+  }) {
+    if (value is! Map) return defaultValue;
+
+    try {
+      return fn(value as Map<String, dynamic>);
+    } catch (e) {
+      return defaultValue;
+    }
+  }
 }
 
 /// A `MacroCapability` describes which elements of a class (constructors,
@@ -1133,7 +1147,7 @@ class AssetMacroInfo {
     required this.macroName,
     this.extension = '*',
     required this.output,
-    this.config = const {},
+    this.config,
   });
 
   static AssetMacroInfo fromJson(Map<String, dynamic> json) {

@@ -1,3 +1,7 @@
+## 0.0.8
+
+- fix: remove default value for asset configuration
+
 ## 0.0.7
 
 - fix: handle invalid value for the asset path macro configuration
