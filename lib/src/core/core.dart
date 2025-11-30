@@ -1,11 +1,12 @@
 import 'dart:core';
 
-import 'package:collection/collection.dart';
+import 'package:dart_style/dart_style.dart';
 import 'package:hashlib/hashlib.dart';
+import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
-import 'package:macro_kit/src/core/extension.dart';
 import 'package:meta/meta.dart';
+import 'package:path/path.dart' as p;
 
 /// Macro used to attach metadata to a Dart declaration.
 ///
@@ -1050,7 +1051,190 @@ class MacroClassDeclaration {
   }
 }
 
-enum TargetType { clazz }
+/// Represents an asset file change event for macro processing.
+///
+/// This class encapsulates information about an asset file that has been
+/// created, modified, or deleted.
+///
+/// Asset macros use this information to determine which files need processing
+/// and what type of change occurred.
+class MacroAssetDeclaration {
+  MacroAssetDeclaration({
+    required this.path,
+    required this.type,
+  });
+
+  static MacroAssetDeclaration fromJson(Map<String, dynamic> json) {
+    return MacroAssetDeclaration(
+      path: json['p'] as String,
+      type: MacroExt.decodeEnum<AssetChangeType, String>(
+        AssetChangeType.values,
+        json['t'] as String,
+        unknownValue: AssetChangeType.modify,
+      ),
+    );
+  }
+
+  /// Absolute path of the asset file.
+  ///
+  /// This is the full filesystem path to the asset file that triggered
+  /// the macro execution.
+  ///
+  /// Example: `'/home/user/project/assets/data/config.json'`
+  final String path;
+
+  /// The type of change that occurred to the asset file.
+  ///
+  /// Indicates whether the file was added, modified, or removed,
+  /// allowing macros to handle different change types appropriately.
+  final AssetChangeType type;
+
+  /// The basename of the asset file (filename with extension).
+  ///
+  /// Example: For path `'/project/assets/config.json'`, returns `'config.json'`
+  String get name => p.basename(path);
+
+  /// The file extension including the dot.
+  ///
+  /// Uses [p.extension] with level 2 to handle double extensions like `.tar.gz`.
+  ///
+  /// Example: For path `'/project/assets/archive.tar.gz'`, returns `'.tar.gz'`
+  String get extension => p.extension(path, 2);
+
+  Map<String, dynamic> toJson() {
+    return {
+      'p': path,
+      't': type.name,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'MacroAssetDeclaration{path: $path, type: $type}';
+  }
+}
+
+/// Configuration for asset-based macro generation.
+///
+/// This class defines which macro should process asset files and where
+/// the generated output should be written. It's used to configure macros
+/// that monitor asset directories and generate code or data based on
+/// asset file changes.
+///
+/// Example:
+/// ```dart
+/// AssetMacroInfo(
+///   macroName: 'ResizeImageMacro',
+///   output: 'assets/images-generated',
+/// )
+/// ```
+class AssetMacroInfo {
+  AssetMacroInfo({
+    required this.macroName,
+    this.extension = '*',
+    required this.output,
+    this.config = const {},
+  });
+
+  static AssetMacroInfo fromJson(Map<String, dynamic> json) {
+    return AssetMacroInfo(
+      macroName: json['name'] as String,
+      extension: json['ext'] as String,
+      output: json['output'] as String,
+      config: json['config'] as Map<String, dynamic>?,
+    );
+  }
+
+  /// Names of macros that should respond to asset directory changes
+  final String macroName;
+
+  /// File extensions to monitor within the directory
+  ///
+  /// Only files with these extensions will trigger macro regeneration.
+  ///
+  /// Supports:
+  ///   - `'*'` to monitor all file types
+  ///   - Specific extensions ex. `'.png,.json'`
+  ///
+  /// Examples: `'.json',.yaml'`, `'*'`, `'.png,.jpg,.svg'`
+  final String extension;
+
+  /// Output directory path for generated assets.
+  ///
+  /// When asset macros generate data based on asset files, the generated
+  /// files must be written to this directory to avoid recursive regeneration loops.
+  ///
+  /// If generated files were written back to [assetDirectories], they would trigger
+  /// the file watcher again, causing infinite regeneration cycles.
+  ///
+  /// Path should be relative to your project root.
+  ///
+  /// Example: `'assets-gen'`, `'lib/generated/assets'`
+  final String output;
+
+  /// Custom configuration for provided macro
+  final Map<String, dynamic>? config;
+
+  late final List<String> allExtensions = extension == '*' ? const [] : extension.split(',');
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': macroName,
+      'ext': extension,
+      'output': output,
+      if (config != null) 'config': config,
+    };
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AssetMacroInfo &&
+          runtimeType == other.runtimeType &&
+          macroName == other.macroName &&
+          extension == other.extension &&
+          output == other.output &&
+          config == other.config;
+
+  @override
+  int get hashCode => macroName.hashCode ^ extension.hashCode ^ output.hashCode ^ config.hashCode;
+
+  @override
+  String toString() {
+    return 'AssetMacroInfo{macroName: $macroName, extension: $extension, output: $output, config: $config}';
+  }
+}
+
+enum AssetChangeType {
+  add,
+  modify,
+  remove,
+}
+
+enum TargetType { clazz, asset }
+
+class AssetState {
+  AssetState({
+    required this.relativeBasePath,
+    required this.absoluteBasePath,
+    required this.absoluteBaseOutputPath,
+  });
+
+  /// Relative path of the base asset directory in which macro triggered
+  ///
+  /// Example: `'assets'`
+  final String relativeBasePath;
+
+  /// Absolute path of the base asset directory.
+  ///
+  /// Example: `'/home/user/project/assets'`
+  final String absoluteBasePath;
+
+  /// The base output path for generated asset file
+  ///
+  /// its only has non null value when generating asset file
+  final String absoluteBaseOutputPath;
+}
 
 class MacroState {
   MacroState({
@@ -1061,30 +1245,82 @@ class MacroState {
     required this.modifier,
     required this.isCombingGenerator,
     required this.suffixName,
+    required this.assetState,
     required Map<String, MacroClassDeclaration>? classesById,
   }) : _classesById = classesById;
 
+  /// Represents a single metadata annotation applied to a declaration,
+  /// such as `@JsonKey` or any custom macro configuration.
   final MacroKey macro;
+
+  /// The list of remaining macros that will be executed after the current one
   final Iterable<MacroKey> remainingMacro;
+
+  /// The type of target this macro is applied to (class, asset, variable,...)
   final TargetType targetType;
+
+  /// The name of the target element (class, asset or variable name,...)
   final String targetName;
+
+  /// The modifier flags containing information about target declaration
   final MacroModifier modifier;
+
+  /// Whether this macro' combine generated code with other macros' output
   final bool isCombingGenerator;
+
+  /// The suffix to append to generated code
   final String suffixName;
+
+  /// The asset information in which triggered the macro generation
+  final AssetState? assetState;
+
+  /// Formatter for generated code produced by the asset macro.
+  ///
+  /// This formatter is specifically configured for code generated through the asset
+  /// macro system.
+  ///
+  /// Note: Regular macros have automatic formatting applied by the Dart macro system.
+  /// This formatter is only needed for custom code generation scenarios where the
+  /// asset macro produces output that requires explicit formatting.
+  static final dartFormatter = DartFormatter(
+    languageVersion: DartFormatter.latestLanguageVersion,
+    trailingCommas: TrailingCommas.preserve,
+    pageWidth: 120,
+  );
+
+  static String formatCode(String code) {
+    try {
+      return dartFormatter.format(code);
+    } catch (_) {
+      return code;
+    }
+  }
+
   final Map<String, Object?> _data = {};
   final Map<String, MacroClassDeclaration>? _classesById;
+  List<String>? _generatedFilePath;
 
+  /// The generated code that can be combined with other macros
   String get generated => _generated;
   String _generated = '';
 
+  /// The generated code that cannot be combined with other macros
   String? get generatedNonCombinable => _generatedNonCombinable;
   String? _generatedNonCombinable;
 
+  /// The generated asset file during execution
+  List<String> get generatedFilePaths => _generatedFilePath ?? const [];
+
+  /// Retrieves a class declaration by its unique class ID
   @pragma('vm:prefer-inline')
   MacroClassDeclaration? getClassById(String classId) {
     return _classesById?[classId];
   }
 
+  /// Reports generated code to be written to output files
+  ///
+  /// If [canBeCombined] is true, the code will be combined with other macros' output
+  /// in a single generated file. If false, it will be written not combined.
   void reportGenerated(String code, {bool canBeCombined = true}) {
     if (!canBeCombined) {
       _generatedNonCombinable = code;
@@ -1093,16 +1329,33 @@ class MacroState {
     }
   }
 
+  /// Reports file paths that was generated during macro execution
+  void reportGeneratedFile(List<String> paths) {
+    _generatedFilePath ??= [];
+    _generatedFilePath!.addAll(paths);
+  }
+
+  /// Stores a value in the macro state's temporary data storage
+  ///
+  /// This can be used to share data between different lifecycle methods
+  /// (e.g., between onClassFields and onClassConstructors).
   void set(String key, Object? value) {
     _data[key] = value;
   }
 
+  /// Retrieves a value from the macro state's temporary data storage
+  ///
+  /// Throws an assertion error if the value is not of type [T].
   T get<T>(String key) {
     assert(_data[key] is T);
 
     return _data[key] as T;
   }
 
+  /// Retrieves a value from the macro state's temporary data storage, or null if not found
+  ///
+  /// Returns null if the key doesn't exist or the value is null.
+  /// Throws an assertion error if the value exists but is not of type [T].
   T? getOrNull<T>(String key) {
     final value = _data[key];
     if (value == null) return null;
@@ -1111,11 +1364,17 @@ class MacroState {
     return value as T;
   }
 
+  /// Retrieves a boolean value from the macro state's temporary data storage
+  ///
+  /// Returns [defaultVal] if the key doesn't exist or the value is not a boolean.
   bool getBool(String key, [bool defaultVal = false]) {
     final value = _data[key];
     return value is bool ? value : defaultVal;
   }
 
+  /// Retrieves a nullable boolean value from the macro state's temporary data storage
+  ///
+  /// Returns [defaultVal] if the key doesn't exist or the value is not a boolean.
   bool? getBoolOrNull(String key, [bool? defaultVal]) {
     final value = _data[key];
     return value is bool ? value : defaultVal;
@@ -1147,6 +1406,9 @@ abstract class BaseMacroGenerator {
   /// called with all class declaration that's a subtype of target class
   Future<void> onClassSubTypes(MacroState state, List<MacroClassDeclaration> subTypes) async {}
 
+  /// called when a monitored asset file is created, modified, or deleted in configured asset directories
+  Future<void> onAsset(MacroState state, MacroAssetDeclaration asset);
+
   /// called at last step to generate the code
   Future<void> onGenerate(MacroState state);
 }
@@ -1173,6 +1435,9 @@ abstract class MacroGenerator implements BaseMacroGenerator {
 
   @override
   Future<void> onClassSubTypes(MacroState state, List<MacroClassDeclaration> subTypes) async {}
+
+  @override
+  Future<void> onAsset(MacroState state, MacroAssetDeclaration asset) async {}
 
   /// Return whether a class have a method with specified [name] or in metadata support
   /// generating this capability to the class.

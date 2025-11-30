@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
-import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
+import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
@@ -17,11 +17,22 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 // ignore: depend_on_referenced_packages
 import 'package:yaml/yaml.dart';
 
+import 'base.dart';
+
 const macroPluginRequestFileName = 'macro_plugin_request';
 const macroClientRequestFileName = 'macro_client_request';
 
-typedef _PluginChannelInfo = (WebSocketChannel, List<String>);
-typedef _ClientChannelInfo = (WebSocketChannel, List<String>, Duration, StreamSubscription?);
+typedef _PluginChannelInfo = ({WebSocketChannel ch, List<String> contexts});
+
+typedef _ClientChannelInfo = ({
+  WebSocketChannel ch,
+  List<String> macros,
+  Map<String, List<AssetMacroInfo>> assetMacros,
+  Duration timeout,
+  StreamSubscription? sub,
+});
+
+typedef _AssetDirInfo = ({AssetMacroInfo macro, String relativeBasePath, String absoluteOutputPath});
 
 class MacroAnalyzerServer extends MacroAnalyzer {
   MacroAnalyzerServer({required super.logger});
@@ -41,10 +52,14 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   final Map<String, StreamSubscription<WatchEvent>> _subs = {};
   final Map<int, _PluginChannelInfo> _pluginChannels = {};
   final List<StreamSubscription> _wsPluginSubs = [];
+
   // VmUtils? vmUtils;
 
   /// List of connected client by client id with ws socket and supported macro names
   final Map<int, _ClientChannelInfo> _clientChannels = {};
+
+  /// List of absolute asset directory mapping to each user macro
+  final Map<String, Set<_AssetDirInfo>> _assetsDir = {};
 
   /// A map of all loaded context with plugin configuration
   final Set<MacroClientConfiguration> _macroClientConfigs = {};
@@ -101,7 +116,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   Future<void> onContextChanged() async {
     return lock.synchronized(() async {
-      final newContexts = Set<String>.of(_pluginChannels.values.map((e) => e.$2).expand((e) => e)).toList();
+      final newContexts = Set<String>.of(_pluginChannels.values.map((e) => e.contexts).expand((e) => e)).toList();
       if (const DeepCollectionEquality().equals(contexts, newContexts)) {
         _reloadMacroConfiguration(contexts);
         return;
@@ -126,8 +141,10 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   void _reloadMacroConfiguration(List<String> contexts) {
     logger.info('reloading context configuration');
     _macroClientConfigs.clear();
+    _assetsDir.clear();
     fileCaches.clear();
 
+    // reload macro config defined in the project
     for (final context in contexts) {
       try {
         final content = loadYamlNode(File('$context/.macro.yaml').readAsStringSync());
@@ -135,9 +152,63 @@ class MacroAnalyzerServer extends MacroAnalyzer {
           _macroClientConfigs.add(MacroClientConfiguration.fromYaml(context, config));
         }
       } on PathNotFoundException {
-        continue;
+        _macroClientConfigs.add(MacroClientConfiguration(context: context, rewriteGeneratedFileTo: ''));
       } catch (e) {
         logger.error('Failed to read macro configuration for: $context');
+      }
+    }
+
+    // reload asset macro configuration
+    // map each asset to absolute path with applied macros
+    final Set<String> outputsDir = {};
+
+    for (final channelAsset in _clientChannels.values) {
+      inner:
+      for (final entry in channelAsset.assetMacros.entries) {
+        final assetDirRelative = entry.key;
+        final assetMacros = entry.value;
+
+        if (!p.isRelative(assetDirRelative)) {
+          logger.warn('Skipping asset directory "$assetDirRelative": must be a relative path');
+          continue inner;
+        }
+
+        // combine context with provided asset directory
+        for (final ctx in contexts) {
+          final assetAbsolutePath = p.join(ctx, assetDirRelative);
+          final assetAbsolutePaths = _assetsDir.putIfAbsent(assetAbsolutePath, () => {});
+
+          macroLoop:
+          for (final macro in assetMacros) {
+            if (!p.isRelative(macro.output)) {
+              logger.warn(
+                'Skipping output directory "${macro.output}" for macro "${macro.macroName}": must be a relative path',
+              );
+              continue macroLoop;
+            }
+
+            final absoluteOutputPath = p.join(ctx, macro.output);
+            outputsDir.add(absoluteOutputPath);
+            assetAbsolutePaths.add((
+              macro: macro,
+              relativeBasePath: assetDirRelative,
+              absoluteOutputPath: absoluteOutputPath,
+            ));
+          }
+        }
+      }
+    }
+
+    // remove any macro that generated output to same asset dir to prevent recursion
+    final inputDirs = _assetsDir.keys.toList();
+    for (final inputDir in inputDirs) {
+      if (outputsDir.contains(inputDir)) {
+        // remove input directory, because output to same location cause recursion
+        _assetsDir.remove(inputDir);
+        logger.warn(
+          'Skipping asset directory "$inputDir": output directory cannot be the same as input '
+          '(would cause infinite regeneration loop)',
+        );
       }
     }
   }
@@ -171,10 +242,11 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   void _onWatchFileChanged(WatchEvent event) {
-    if (p.extension(event.path, 2) != '.dart') {
+    final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(event.path);
+    if (assetMacros == null && (p.extension(event.path, 2) != '.dart')) {
       logger.fine('Ignored: ${event.path}');
       return;
-    } else if (event.type == ChangeType.REMOVE) {
+    } else if (assetMacros == null && event.type == ChangeType.REMOVE) {
       mayContainsMacroCache.remove(event.path);
       final (:genFilePath, relativePartFilePath: _) = buildGeneratedFileInfo(event.path);
       removeFile(genFilePath);
@@ -183,8 +255,14 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
     if (currentAnalyzingPath == '' || currentAnalyzingPath == event.path) {
       // its first time or file changed during current analyzing, so we have to run it again
-      pendingAnalyze.add(event.path);
-    } else if (pendingAnalyze.contains(event.path)) {
+      final type = switch (event.type) {
+        ChangeType.ADD => AssetChangeType.add,
+        ChangeType.MODIFY => AssetChangeType.modify,
+        ChangeType.REMOVE => AssetChangeType.remove,
+        _ => AssetChangeType.modify,
+      };
+      pendingAnalyze.add((path: event.path, asset: assetMacros, type: type));
+    } else if (pendingAnalyze.firstWhereOrNull((e) => e.path == event.path) != null) {
       // its already in pending list, so no duplicate, next time it process it
       return;
     }
@@ -192,14 +270,57 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     _processNext();
   }
 
+  List<AnalyzingAsset>? _maybeRunAssetMacro(String path) {
+    // Check if the file is in any monitored asset directory
+    List<AnalyzingAsset>? appliedMacros;
+
+    for (final entry in _assetsDir.entries) {
+      final assetAbsoluteBasePath = entry.key;
+      final macroInfos = entry.value;
+
+      // Check if file is within this asset directory
+      if (p.isWithin(assetAbsoluteBasePath, path)) {
+        late final fileExtension = p.extension(path);
+
+        // Check if any macro in this directory accepts this file extension
+        for (final macroInfo in macroInfos) {
+          if (macroInfo.macro.extension == '*') {
+            (appliedMacros ??= []).add((
+              macro: macroInfo.macro,
+              absoluteBasePath: assetAbsoluteBasePath,
+              relativeBasePath: macroInfo.relativeBasePath,
+              absoluteOutputPath: macroInfo.absoluteOutputPath,
+            ));
+          } else if (macroInfo.macro.allExtensions.contains(fileExtension)) {
+            (appliedMacros ??= []).add((
+              macro: macroInfo.macro,
+              absoluteBasePath: assetAbsoluteBasePath,
+              relativeBasePath: macroInfo.relativeBasePath,
+              absoluteOutputPath: macroInfo.absoluteOutputPath,
+            ));
+          }
+        }
+
+        // break it since, at least one macro handled it or its ignored
+        break;
+      }
+    }
+
+    return appliedMacros;
+  }
+
   Future<void> _processNext() async {
     if (isAnalyzingFile || pendingAnalyze.isEmpty) return;
 
     isAnalyzingFile = true;
-    final currentPath = pendingAnalyze.removeAt(0);
+    final currentAnalyze = pendingAnalyze.removeAt(0);
 
     try {
-      await processSource(currentPath);
+      if (currentAnalyze.asset != null) {
+        await processAssetSource(currentAnalyze.path, currentAnalyze.asset!, currentAnalyze.type);
+      } else {
+        await processDartSource(currentAnalyze.path);
+      }
     } catch (e, s) {
       logger.error('Failed to parse source code', e, s);
     } finally {
@@ -241,7 +362,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
         switch (message) {
           case PluginConnectMsg(id: final id):
-            _pluginChannels[id] = (webSocket, const []);
+            _pluginChannels[id] = (ch: webSocket, contexts: const []);
             pluginId = id;
           case AnalysisContextsMsg(contexts: var contexts):
             final current = pluginId == -1 ? null : _pluginChannels[pluginId];
@@ -258,10 +379,11 @@ class MacroAnalyzerServer extends MacroAnalyzer {
               'build/intermediates',
               '.symlinks/plugins',
               'Intermediates.noindex',
+              'build/macos',
             ];
             contexts = contexts.where((path) => !excluded.any((word) => path.contains(word))).toList();
 
-            _pluginChannels[pluginId] = (current.$1, contexts);
+            _pluginChannels[pluginId] = (ch: current.ch, contexts: contexts);
             onContextChanged();
           default:
             logger.info('Unhandled message: $message');
@@ -279,9 +401,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   Iterable<WebSocketChannel> getChannelsForPath(String path) sync* {
     for (final entry in _pluginChannels.entries) {
       inner:
-      for (final contextPath in entry.value.$2) {
+      for (final contextPath in entry.value.contexts) {
         if (p.isWithin(contextPath, path)) {
-          yield entry.value.$1;
+          yield entry.value.ch;
           break inner;
         }
       }
@@ -302,8 +424,15 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
         switch (message) {
           case ClientConnectMsg msg:
-            _clientChannels[msg.id] = (webSocket, msg.macros, msg.runTimeout, sub);
+            _clientChannels[msg.id] = (
+              ch: webSocket,
+              macros: msg.macros,
+              timeout: msg.runTimeout,
+              sub: sub,
+              assetMacros: msg.assetMacros,
+            );
             clientId = msg.id;
+
             onContextChanged();
           case RunMacroResultMsg msg:
             final operation = _pendingOperations.remove(msg.id);
@@ -324,12 +453,12 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   bool _addMessageToClient(int channelId, Message msg) {
     try {
-      _clientChannels[channelId]?.$1.sink.add(encodeMessage(msg));
+      _clientChannels[channelId]?.ch.sink.add(encodeMessage(msg));
       return true;
     } catch (e, s) {
       logger.error('Unable to add message to client', e, s);
       final channelInfo = _clientChannels.remove(channelId);
-      channelInfo?.$4?.cancel();
+      channelInfo?.sub?.cancel();
       return false;
     }
   }
@@ -337,7 +466,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   @override
   int? getClientChannelFor(String targetMacro) {
     for (final entry in _clientChannels.entries) {
-      for (final macroName in entry.value.$2) {
+      for (final macroName in entry.value.macros) {
         if (macroName == targetMacro) {
           return entry.key;
         }
@@ -350,15 +479,25 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   Future<RunMacroResultMsg> runMacroGenerator(int channelId, RunMacroMsg message) async {
     final completer = Completer<RunMacroResultMsg>();
     if (!_addMessageToClient(channelId, message)) {
-      completer.complete(RunMacroResultMsg(id: message.id, result: '', error: 'No Macro Generator running!'));
+      completer.complete(
+        RunMacroResultMsg(
+          id: message.id,
+          result: '',
+          error: 'No Macro Generator running!',
+        ),
+      );
       return completer.future;
     }
 
     _pendingOperations[message.id] = completer;
 
     return completer.future.timeout(
-      _clientChannels[channelId]?.$3 ?? const Duration(seconds: 30),
-      onTimeout: () => RunMacroResultMsg(id: message.id, result: '', error: 'Generation timeout!'),
+      _clientChannels[channelId]?.timeout ?? const Duration(seconds: 30),
+      onTimeout: () => RunMacroResultMsg(
+        id: message.id,
+        result: '',
+        error: 'Generation timeout!',
+      ),
     );
   }
 
@@ -425,12 +564,12 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     for (final channel in _pluginChannels.values.toList()) {
-      tryFn(() => channel.$1.sink.close(normalClosure, 'Server is closing'));
+      tryFn(() => channel.ch.sink.close(normalClosure, 'Server is closing'));
     }
 
     for (final channel in _clientChannels.values.toList()) {
-      tryFn(() => channel.$4?.cancel);
-      tryFn(() => channel.$1.sink.close(normalClosure, 'Server is closing').catchError((_) {}));
+      tryFn(() => channel.sub?.cancel);
+      tryFn(() => channel.ch.sink.close(normalClosure, 'Server is closing').catchError((_) {}));
     }
 
     tryFn(contextCollection.dispose);

@@ -4,7 +4,7 @@ environment:
   sdk: ^3.9.0
 
 dependencies:
-  macro_kit: ^0.0.5
+  macro_kit: ^0.0.6
 #    path: /Volumes/Projects/Server/swiftybase/macro
 
 dev_dependencies:

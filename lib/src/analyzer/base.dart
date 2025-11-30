@@ -29,6 +29,15 @@ abstract class MacroServer {
   void onClientError(int channelId, String message, [Object? err, StackTrace? trace]);
 }
 
+typedef PendingAnalyze = ({String path, List<AnalyzingAsset>? asset, AssetChangeType type});
+
+typedef AnalyzingAsset = ({
+  AssetMacroInfo macro,
+  String absoluteBasePath,
+  String relativeBasePath,
+  String absoluteOutputPath,
+});
+
 abstract class BaseAnalyzer implements MacroServer {
   BaseAnalyzer({required this.logger});
 
@@ -51,11 +60,11 @@ abstract class BaseAnalyzer implements MacroServer {
   /// per analyze cache for reusing common parsing like computing a class type info
   final Map<String, CountedCache> iterationCaches = {};
   final Set<String> mayContainsMacroCache = {};
-  final List<String> pendingAnalyze = [];
+  final List<PendingAnalyze> pendingAnalyze = [];
   String currentAnalyzingPath = '';
   bool isAnalyzingFile = false;
 
-  /// --- internal state of required of sub types, reset per [processSource] call
+  /// --- internal state of required of sub types, reset per [processDartSource] call
   Map<String, AnalyzeResult> macroAnalyzeResult = {};
   List<(List<MacroConfig>, ClassFragment)> pendingClassRequiredSubTypes = [];
 

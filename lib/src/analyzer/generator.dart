@@ -55,7 +55,7 @@ part of '$relativePartFilePath';
 
       if (clientChannelId == null) {
         requestClientToConnect();
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 3));
 
         clientChannelId = getClientChannelFor(macroName);
         if (clientChannelId == null) {
@@ -87,7 +87,6 @@ part of '$relativePartFilePath';
       return;
     }
 
-    // TODO: make all generated file in one location if possible?
     // step:3 generate the part file
     final partFile = fileCaches.putIfAbsent(path, () => File(genFilePath));
     final codeRes = _formatCode(generated, genFilePath);
@@ -97,6 +96,61 @@ part of '$relativePartFilePath';
       logger.error('Failed to write generated code into: $genFilePath', error);
     }
 
+    _cleanupCachedFile();
+  }
+
+  Future<void> executeAssetMacro({
+    required String path,
+    required AssetChangeType changeType,
+    required List<AnalyzingAsset> macros,
+  }) async {
+    // step:1 map each config to a macro asset declaration, ready to be run
+    final runConfigs = macros
+        .map(
+          (assetMacro) => RunMacroMsg(
+            id: newId(),
+            macroName: assetMacro.macro.macroName,
+            assetDeclaration: MacroAssetDeclaration(path: path, type: changeType),
+            assetConfig: assetMacro.macro.config,
+            assetBasePath: assetMacro.relativeBasePath,
+            assetAbsoluteBasePath: assetMacro.absoluteBasePath,
+            assetAbsoluteOutputPath: assetMacro.absoluteOutputPath,
+          ),
+        )
+        .toList();
+
+    // step:2 run the macro generator
+    // final generatedFiles = <String>[];
+    for (final msg in runConfigs) {
+      var clientChannelId = getClientChannelFor(msg.macroName);
+
+      if (clientChannelId == null) {
+        requestClientToConnect();
+        await Future.delayed(const Duration(seconds: 3));
+
+        clientChannelId = getClientChannelFor(msg.macroName);
+        if (clientChannelId == null) {
+          logger.error('No Macro generator found for: ${msg.macroName}');
+          onClientError(-1, 'No Macro generator found for: ${msg.macroName}');
+          return;
+        }
+      }
+
+      try {
+        final runRes = await runMacroGenerator(clientChannelId, msg);
+        if (runRes.error?.isNotEmpty == true) {
+          onClientError(clientChannelId, runRes.error!);
+          return;
+        }
+
+        // generatedFiles.addAll(runRes.generatedFiles ?? const []);
+      } catch (e, s) {
+        onClientError(clientChannelId, e.toString(), e, s);
+        return;
+      }
+    }
+
+    // TODO: process generated file?
     _cleanupCachedFile();
   }
 

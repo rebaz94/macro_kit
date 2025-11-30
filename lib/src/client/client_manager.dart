@@ -20,6 +20,7 @@ class MacroManager {
     required this.macros,
     required this.autoReconnect,
     required this.generateTimeout,
+    required this.assetMacros,
   }) : serverAddress = Uri.parse(serverAddress);
 
   final int clientId = 1000 + Random().nextInt(1000);
@@ -29,6 +30,7 @@ class MacroManager {
   final Map<String, MacroInitFunction> macros;
   final bool autoReconnect;
   final Duration generateTimeout;
+  final Map<String, List<AssetMacroInfo>> assetMacros;
   final _clientRequestWatcher = WatchFileRequest(
     fileName: macroClientRequestFileName,
     inDirectory: macroDirectory,
@@ -36,6 +38,10 @@ class MacroManager {
 
   /// A cache of generator keyed by hash of the json that build MacroGenerator instance
   final Map<int, MacroGenerator> _generatorCaches = {};
+  final _mapStrDynamicTypeArg = [
+    MacroProperty(name: '', type: 'String', typeInfo: TypeInfo.string),
+    MacroProperty(name: '', type: 'dynamic', typeInfo: TypeInfo.dynamic),
+  ];
 
   ConnectionStatus _status = ConnectionStatus.disconnected;
 
@@ -129,6 +135,7 @@ class MacroManager {
           id: clientId,
           runTimeout: generateTimeout,
           macros: macros.keys.toList(),
+          assetMacros: assetMacros,
         ),
       );
 
@@ -160,7 +167,11 @@ class MacroManager {
 
     switch (message) {
       case RunMacroMsg msg:
-        _runMacro(msg);
+        if (msg.assetDeclaration != null) {
+          _runAssetMacro(message);
+        } else {
+          _runMacro(msg);
+        }
     }
   }
 
@@ -199,6 +210,7 @@ class MacroManager {
             isCombingGenerator: firstMacroApplied && isCombiningGenCode,
             suffixName: suffixName ?? generator.suffixName,
             classesById: message.sharedClasses,
+            assetState: null,
           );
 
           final cap = macroConfig.capability;
@@ -292,6 +304,75 @@ class MacroManager {
     final sent = _addMessage(RunMacroResultMsg(id: message.id, result: generated.toString()));
     if (!sent) {
       logger.error('Failed to publish generated code: MacroServer maybe down!');
+    }
+
+    // remove exceeded cache
+    _removeExcessCache();
+  }
+
+  void _runAssetMacro(RunMacroMsg message) async {
+    List<String> generatedFiles = [];
+
+    try {
+      final declaration = message.assetDeclaration!;
+      final macroConfig = MacroConfig(
+        capability: const MacroCapability(),
+        combine: false,
+        key: MacroKey(
+          name: message.macroName,
+          properties: [
+            MacroProperty(
+              name: 'config',
+              type: 'Map<String, dynamic>',
+              typeInfo: TypeInfo.map,
+              typeArguments: _mapStrDynamicTypeArg,
+              constantValue: message.assetConfig,
+            ),
+          ],
+        ),
+      );
+
+      final (generator, errMsg) = _getMacroGenerator(macroConfig);
+      if (errMsg != null || generator == null) {
+        _addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
+        return;
+      }
+
+      assert(message.assetBasePath != null);
+      assert(message.assetAbsoluteBasePath != null);
+      assert(message.assetAbsoluteOutputPath != null);
+
+      final state = MacroState(
+        macro: macroConfig.key,
+        remainingMacro: const [],
+        targetType: TargetType.asset,
+        targetName: declaration.name,
+        modifier: MacroModifier(const {}),
+        isCombingGenerator: false,
+        suffixName: generator.suffixName,
+        classesById: const {},
+        assetState: AssetState(
+          relativeBasePath: message.assetBasePath!,
+          absoluteBasePath: message.assetAbsoluteBasePath!,
+          absoluteBaseOutputPath: message.assetAbsoluteOutputPath!,
+        ),
+      );
+
+      await generator.init(state);
+      await generator.onAsset(state, declaration);
+      await generator.onGenerate(state);
+
+      generatedFiles.addAll(state.generatedFilePaths);
+    } catch (e, s) {
+      logger.error('Macro execution failed', e, s);
+      _addMessage(RunMacroResultMsg(id: message.id, result: '', error: 'Generation Failed: ${e.toString()}'));
+      return;
+    }
+
+    // send
+    final sent = _addMessage(RunMacroResultMsg(id: message.id, result: '', generatedFiles: generatedFiles));
+    if (!sent) {
+      logger.error('Failed to publish generated files: MacroServer maybe down!');
     }
 
     // remove exceeded cache

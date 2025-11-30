@@ -310,26 +310,61 @@ class JsonKeyConfig {
   final bool? asRequired;
 }
 
+/// Defines naming conventions for transforming field names.
+///
+/// Used to specify how field names should be transformed when generating
+/// code, particularly useful for converting between different naming conventions
+/// like snake_case, camelCase, PascalCase, etc.
 enum FieldRename {
   /// Use the field name without changes.
+  ///
+  /// Example: `myFieldName` → `myFieldName`
   none,
 
-  /// Encodes a field named `kebabCase` with a JSON key `kebab-case`.
+  /// Converts a field name to camelCase.
+  ///
+  /// The first letter is lowercase, and subsequent words start with uppercase.
+  /// Example: `my_field_name` → `myFieldName`
+  camelCase,
+
+  /// Converts a field name to kebab-case.
+  ///
+  /// Words are separated by hyphens and all letters are lowercase.
+  /// Example: `myFieldName` → `my-field-name`
   kebab,
 
-  /// Encodes a field named `snakeCase` with a JSON key `snake_case`.
+  /// Converts a field name to snake_case.
+  ///
+  /// Words are separated by underscores and all letters are lowercase.
+  /// Example: `myFieldName` → `my_field_name`
   snake,
 
-  /// Encodes a field named `pascalCase` with a JSON key `PascalCase`.
+  /// Converts a field name to PascalCase.
+  ///
+  /// The first letter and the first letter of each subsequent word are uppercase.
+  /// Example: `my_field_name` → `MyFieldName`
   pascal,
 
-  /// Encodes a field named `screamingSnakeCase` with a JSON key
-  /// `SCREAMING_SNAKE_CASE`
+  /// Converts a field name to SCREAMING_SNAKE_CASE.
+  ///
+  /// Words are separated by underscores and all letters are uppercase.
+  /// Example: `myFieldName` → `MY_FIELD_NAME`
   screamingSnake;
 
+  /// Transforms the given [name] according to this naming convention.
+  ///
+  /// Returns a new string with the [name] transformed based on the selected
+  /// [FieldRename] option.
+  ///
+  /// Example:
+  /// ```dart
+  /// FieldRename.snake.renameOf('myFieldName'); // Returns 'my_field_name'
+  /// FieldRename.pascal.renameOf('my_field_name'); // Returns 'MyFieldName'
+  /// ```
   String renameOf(String name) {
     return switch (this) {
       FieldRename.none => name,
+      FieldRename.camelCase => name.toCamelCase(),
       FieldRename.kebab => name.toKebabCase(),
       FieldRename.snake => name.toSnakeCase(),
       FieldRename.pascal => name.toPascalCase(),

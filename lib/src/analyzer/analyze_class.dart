@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:collection/collection.dart';
+import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
@@ -19,6 +20,181 @@ mixin AnalyzeClass on BaseAnalyzer {
 
   void clearInProgressClassFieldsFor(String? clsName) {
     iterationCaches.remove('inProgress:$clsName');
+  }
+
+  @override
+  MacroClassDeclaration? parseClass(ClassFragment classFragment, {List<MacroConfig>? collectSubTypeConfig}) {
+    // combine all declared macro in one list and share with each config
+    // (one class can have many metadata attached, we parsed config based on each metadata)
+    List<MacroConfig> macroConfigs = [];
+    Set<String> macroNames = {};
+    bool combined = false;
+
+    // 1. get all metadata attached to the class
+    if (collectSubTypeConfig == null) {
+      for (final macroAnnotation in classFragment.metadata.annotations) {
+        if (!isValidAnnotation(macroAnnotation, className: 'Macro', pkgName: 'macro')) {
+          continue;
+        }
+
+        final macroConfig = computeMacroMetadata(macroAnnotation);
+        if (macroConfig == null) {
+          // if no compute macro metadata, return
+          continue;
+        }
+
+        final capability = macroConfig.capability;
+        if (!capability.classFields && !capability.classConstructors && !capability.classMethods) {
+          // if there is no capability, return it
+          logger.info('Class ${classFragment.name} does not defined any Macro capability, ignored');
+          continue;
+        }
+
+        macroConfigs.add(macroConfig);
+        macroNames.add(macroConfig.key.name);
+      }
+    } else {
+      macroConfigs = collectSubTypeConfig;
+      macroNames = collectSubTypeConfig.map((e) => e.key.name).toSet();
+    }
+
+    // 2. combine each requested capability to produce one result, then
+    //    at execution time only provide the requested capability.
+    //    * the generator maybe get extra data if not easily removed or for performance reason
+    MacroCapability capability;
+    if (macroConfigs.isEmpty) {
+      // does not contain macro and not allowed
+      return null;
+    }
+
+    capability = macroConfigs.first.capability;
+
+    // combine capability
+    for (final config in macroConfigs.skip(1)) {
+      capability = capability.combine(config.capability);
+      combined = true;
+    }
+
+    List<String>? classTypeParams;
+    List<MacroProperty>? classFields;
+    List<MacroClassConstructor>? constructors;
+    List<MacroMethod>? methods;
+    bool isInProgress;
+
+    final effectiveCollectClassSubTypes = () {
+      if (!capability.collectClassSubTypes || capability.filterCollectSubTypes == '') {
+        return false;
+      }
+
+      final isSealed = classFragment.element.isSealed;
+      final isAbstract = classFragment.element.isAbstract;
+      if (capability.filterCollectSubTypes == '*') {
+        return isSealed || isAbstract;
+      }
+
+      final parts = capability.filterCollectSubTypes.split(',');
+      if (isSealed && parts.contains('sealed') || (isAbstract && parts.contains('abstract'))) {
+        return true;
+      }
+
+      return false;
+    }();
+
+    // only add to pending while not preparing the sub types
+    if (effectiveCollectClassSubTypes && collectSubTypeConfig == null) {
+      pendingClassRequiredSubTypes.add((macroConfigs, classFragment));
+    }
+
+    final (cacheKey, classId) = _classDeclarationCachedKey(classFragment, capability);
+    if (iterationCaches[cacheKey]?.value case MacroClassDeclaration declaration) {
+      iterationCaches[cacheKey] = iterationCaches[cacheKey]!.increaseCount();
+      return collectSubTypeConfig == null ? declaration.copyWith(classId: classId, configs: macroConfigs) : declaration;
+    }
+
+    final classElem = classFragment.element;
+    final classModifier = MacroModifier.create(
+      isAbstract: classElem.isAbstract,
+      isSealed: classElem.isSealed,
+      isExhaustive: classElem.isExhaustive,
+      // isExtendableOutside: classElem.isExtendableOutside,
+      // isImplementableOutside: classElem.isImplementableOutside,
+      // isMixableOutside: classElem.isMixableOutside,
+      isMixinClass: classElem.isMixinClass,
+      isBase: classElem.isBase,
+      isInterface: classElem.isInterface,
+      // isConstructable: classElem.isConstructable,
+      hasNonFinalField: classElem.hasNonFinalField,
+    );
+
+    if (capability.classFields) {
+      (classFields, classTypeParams, isInProgress) = parseClassFields(capability, classFragment, null);
+      if (isInProgress) {
+        return MacroClassDeclaration.pendingDeclaration(
+          classId: classId,
+          className: classElem.name ?? '',
+          configs: macroConfigs,
+          modifier: classModifier,
+          classTypeParameters: classTypeParams,
+          subTypes: effectiveCollectClassSubTypes ? [] : null,
+        );
+      }
+    }
+
+    if (capability.classConstructors) {
+      (constructors, classTypeParams, isInProgress) = parseClassConstructors(
+        capability,
+        classFragment,
+        classTypeParams,
+        classFields,
+      );
+      if (isInProgress) {
+        return MacroClassDeclaration.pendingDeclaration(
+          classId: classId,
+          className: classElem.name ?? '',
+          configs: macroConfigs,
+          modifier: classModifier,
+          classTypeParameters: classTypeParams,
+          subTypes: effectiveCollectClassSubTypes ? [] : null,
+        );
+      }
+    }
+
+    if (capability.classMethods) {
+      (methods, isInProgress) = parseClassMethods(capability, classFragment, classTypeParams);
+      if (isInProgress) {
+        return MacroClassDeclaration.pendingDeclaration(
+          classId: classId,
+          className: classElem.name ?? '',
+          configs: macroConfigs,
+          modifier: classModifier,
+          classTypeParameters: classTypeParams,
+          subTypes: effectiveCollectClassSubTypes ? [] : null,
+        );
+      }
+    }
+
+    final declaration = MacroClassDeclaration(
+      classId: classId,
+      configs: macroConfigs,
+      className: classElem.name ?? '',
+      modifier: classModifier,
+      classTypeParameters: classTypeParams,
+      classFields: classFields,
+      constructors: constructors,
+      methods: methods,
+      subTypes: effectiveCollectClassSubTypes ? [] : null,
+    );
+
+    if (combined) {
+      macroAnalyzeResult.putIfAbsent(macroNames.first, () => AnalyzeResult()).classes.add(declaration);
+    } else {
+      for (final name in macroNames) {
+        macroAnalyzeResult.putIfAbsent(name, () => AnalyzeResult()).classes.add(declaration);
+      }
+    }
+
+    iterationCaches[cacheKey] = CountedCache(declaration);
+    return declaration;
   }
 
   (List<MacroProperty>?, List<String>?, bool) parseClassFields(
@@ -305,5 +481,81 @@ mixin AnalyzeClass on BaseAnalyzer {
 
     clearInProgressClassFieldsFor(classFragment.name);
     return (methods, false);
+  }
+
+  void collectClassSubTypes(
+      List<(List<MacroConfig>, ClassFragment)> pendingRequiredSubTypes,
+      LibraryFragment libraryFragment,
+      ) {
+    for (final (capability, classFragment) in pendingRequiredSubTypes) {
+      // get sub types
+      final subTypes = findSubTypesOf(classFragment.element, libraryFragment);
+      if (subTypes.isEmpty) continue;
+
+      // convert to macro declaration
+      final classDeclaration = <MacroClassDeclaration>[];
+      for (final classSubType in subTypes) {
+        final declaration = parseClass(classSubType, collectSubTypeConfig: capability);
+        if (declaration != null) {
+          classDeclaration.add(declaration);
+        }
+      }
+
+      final targetClassRequestedSubTypes = classFragment.element.name ?? '';
+      // add subtypes only for the class that requested and has collectSubTypes capability
+      for (final analyzeRes in macroAnalyzeResult.values) {
+        classLoop:
+        for (final clazz in analyzeRes.classes) {
+          if (clazz.className != targetClassRequestedSubTypes) continue;
+
+          for (final config in clazz.configs) {
+            if (config.capability.collectClassSubTypes) {
+              //  clazz.subTypes never be null because we init with empty
+              clazz.subTypes?.addAll(classDeclaration);
+              continue classLoop;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  List<ClassFragment> findSubTypesOf(ClassElement baseClass, LibraryFragment libraryFragment) {
+    final result = <ClassFragment>[];
+    for (final classElem in libraryFragment.element.classes) {
+      if (_isSubTypeOf(classElem, baseClass, libraryFragment)) {
+        result.add(classElem.firstFragment);
+      }
+    }
+
+    return result;
+  }
+
+  bool _isSubTypeOf(InterfaceElement type, ClassElement target, LibraryFragment libraryFragment) {
+    final superType = type.supertype;
+    if (superType != null && superType.element == target) return true;
+
+    // Check implements
+    for (final interface in type.interfaces) {
+      if (interface.element == target) return true;
+    }
+
+    // Check mixins
+    for (final mixin in type.mixins) {
+      if (mixin.element == target) return true;
+    }
+
+    // OPTIONAL: recursively check inherited subtypes
+    if (type.supertype != null) {
+      return _isSubTypeOf(type.supertype!.element, target, libraryFragment);
+    }
+
+    return false;
+  }
+
+  (String, String) _classDeclarationCachedKey(ClassFragment classFragment, MacroCapability capability) {
+    final uri = classFragment.element.library.uri.toString();
+    final id = '${classFragment.element.name}:${xxh32code('$capability${classFragment.element.name}$uri')}';
+    return ('classDec:$id', id);
   }
 }

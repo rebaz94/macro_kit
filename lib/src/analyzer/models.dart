@@ -81,6 +81,7 @@ class ClientConnectMsg implements Message {
   ClientConnectMsg({
     required this.id,
     required this.macros,
+    required this.assetMacros,
     required this.runTimeout,
   });
 
@@ -88,12 +89,21 @@ class ClientConnectMsg implements Message {
     return ClientConnectMsg(
       id: (json['id'] as num).toInt(),
       macros: (json['macros'] as List).map((e) => e as String).toList(),
+      assetMacros: (json['assetMacros'] as Map).map(
+        (k, v) {
+          return MapEntry(
+            k as String,
+            (v as List).map((e) => AssetMacroInfo.fromJson(e as Map<String, dynamic>)).toList(),
+          );
+        },
+      ),
       runTimeout: Duration(microseconds: (json['runTimeout'] as num).toInt()),
     );
   }
 
   final int id;
   final List<String> macros;
+  final Map<String, List<AssetMacroInfo>> assetMacros;
   final Duration runTimeout;
 
   @override
@@ -104,6 +114,7 @@ class ClientConnectMsg implements Message {
     return {
       'id': id,
       'macros': macros,
+      'assetMacros': assetMacros.map((k, v) => MapEntry(k, v.map((e) => e.toJson()).toList())),
       'runTimeout': runTimeout.inMicroseconds,
     };
   }
@@ -113,8 +124,13 @@ class RunMacroMsg implements Message {
   RunMacroMsg({
     required this.id,
     required this.macroName,
-    required this.sharedClasses,
-    required this.classes,
+    this.sharedClasses = const {},
+    this.classes,
+    this.assetDeclaration,
+    this.assetConfig,
+    this.assetBasePath,
+    this.assetAbsoluteBasePath,
+    this.assetAbsoluteOutputPath,
   });
 
   static RunMacroMsg fromJson(Map<String, dynamic> json) {
@@ -155,13 +171,42 @@ class RunMacroMsg implements Message {
       macroName: json['name'] as String,
       sharedClasses: sharedDec,
       classes: classesRes,
+      assetDeclaration: json['asset'] != null
+          ? MacroAssetDeclaration.fromJson(json['asset'] as Map<String, dynamic>)
+          : null,
+      assetConfig: json['assetConfig'] as Map<String, dynamic>?,
+      assetBasePath: json['assetBasePath'] as String?,
+      assetAbsoluteBasePath: json['assetAbsoluteBasePath'] as String?,
+      assetAbsoluteOutputPath: json['assetAbsoluteOutputPath'] as String?,
     );
   }
 
+  /// Unique id of the run
   final int id;
+
+  /// Name of the macro to run
   final String macroName;
+
+  /// The shared classes by id which seen multiple times in analysis
   final Map<String, MacroClassDeclaration> sharedClasses;
+
+  /// The class declarations of a processed dart code
   final List<MacroClassDeclaration>? classes;
+
+  /// The file or directory which triggered macro generation
+  final MacroAssetDeclaration? assetDeclaration;
+
+  /// The asset configuration
+  final Map<String, dynamic>? assetConfig;
+
+  /// The relative path of asset directory which triggered macro
+  final String? assetBasePath;
+
+  /// The absolute path of asset directory which triggered macro
+  final String? assetAbsoluteBasePath;
+
+  /// The absolute path of output directory
+  final String? assetAbsoluteOutputPath;
 
   @override
   String get type => 'run_macro';
@@ -173,17 +218,28 @@ class RunMacroMsg implements Message {
       'name': macroName,
       if (sharedClasses.isNotEmpty) 'sharedClasses': sharedClasses.map((k, v) => MapEntry(k, v.toJson())),
       if (classes?.isNotEmpty == true) 'classes': classes!.map((e) => e.toJson()).toList(),
+      if (assetDeclaration != null) 'asset': assetDeclaration!.toJson(),
+      if (assetConfig != null) 'assetConfig': assetConfig,
+      if (assetBasePath != null) 'assetBasePath': assetBasePath,
+      if (assetAbsoluteBasePath != null) 'assetAbsoluteBasePath': assetAbsoluteBasePath,
+      if (assetAbsoluteOutputPath != null) 'assetAbsoluteOutputPath': assetAbsoluteOutputPath,
     };
   }
 }
 
 class RunMacroResultMsg implements Message {
-  RunMacroResultMsg({required this.id, required this.result, this.error});
+  RunMacroResultMsg({
+    required this.id,
+    required this.result,
+    this.generatedFiles,
+    this.error,
+  });
 
   static RunMacroResultMsg fromJson(Map<String, dynamic> json) {
     return RunMacroResultMsg(
       id: (json['id'] as num).toInt(),
       result: json['result'] as String,
+      generatedFiles: (json['generatedFiles'] as List?)?.map((e) => e as String).toList(),
       error: json['error'] as String?,
     );
   }
@@ -191,6 +247,7 @@ class RunMacroResultMsg implements Message {
   final int id;
   final String result;
   final String? error;
+  final List<String>? generatedFiles;
 
   @override
   String get type => 'run_macro_result';
@@ -200,6 +257,7 @@ class RunMacroResultMsg implements Message {
     return {
       'id': id,
       'result': result,
+      if (generatedFiles?.isNotEmpty == true) 'generatedFiles': generatedFiles!,
       if (error != null) 'error': error!,
     };
   }

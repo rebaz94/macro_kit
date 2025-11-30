@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:macro_kit/macro.dart';
+import 'package:macro_test/assets.dart';
 import 'package:macro_test/custom/form_macro.dart';
 import 'package:macro_test/custom/json_schema_macro.dart';
 
@@ -13,6 +14,20 @@ void main() async {
       'DataClassMacro': DataClassMacro.initialize,
       'JsonSchemaMacro': JsonSchemaMacro.initialize,
       'FormMacro': FormMacro.initialize,
+      'AssetPathMacro': AssetPathMacro.initialize,
+    },
+    assetMacros: {
+      'assets': [
+        AssetMacroInfo(
+          macroName: 'AssetPathMacro',
+          extension: '*',
+          output: 'lib',
+          config: const AssetPathConfig(
+            extension: '*',
+            rename: FieldRename.camelCase,
+          ).toJson(),
+        ),
+      ],
     },
   );
 
