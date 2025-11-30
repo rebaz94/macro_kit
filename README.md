@@ -1,39 +1,46 @@
 # Macro Kit
 
-A blazingly fast code generation tool for Dart that generates code instantly on save—no build runner required.
+A blazingly fast code generation tool for Dart that generates code instantly on save—no build runner
+required.
 
-## Features
+## ✨ Features
 
-- **⚡ Lightning Fast**: Generate code in under 100ms after the initial run
-- **🎯 Instant Generation**: Simply press Ctrl+S and watch your code appear
-- **🐛 Easy Debugging**: Debug your own macros or third-party packages to understand and fix code generation issues
-- **🚫 No Build Runner**: Say goodbye to slow build processes and generated file conflicts
-- **🔧 Flexible**: Apply macros to classes with enough capability for most day-to-day code generation needs
+- **⚡ Lightning Fast**: Code generation in under 100ms after initial run
+- **💾 Instant Generation**: Press Ctrl+S and watch your code appear immediately
+- **🐛 Easy Debugging**: Debug your macros or third-party packages in real-time to understand and fix
+  generation issues
+- **🚫 No Build Runner**: Eliminate slow build processes and generated file conflicts
+- **🎯 Flexible & Capable**: Handles most day-to-day code generation needs with macros
+- **🔄 Live Development**: Changes take effect instantly—no separate build step needed
 
-## Installation
+## 📦 Installation
 
 ### 1. Activate the macro tool globally
+
 ```bash
 dart pub global activate macro_kit
 ```
 
 Or install from source:
+
 ```bash
 dart pub global activate --source path ./
 ```
 
+if you updating, just deactivate first and activate again.
+
 ### 2. Add macro_kit to your project
 
-In your `pubspec.yaml`:
 ```yaml
+# pubspec.yaml
 dependencies:
   macro_kit: ^latest_version
 ```
 
 ### 3. Configure the analyzer plugin
 
-In your `analysis_options.yaml`:
 ```yaml
+# analysis_options.yaml
 analyzer:
   plugins:
     - macro_kit
@@ -41,14 +48,16 @@ analyzer:
 
 ### 4. Initialize macros in your app
 
-Add this code to your main entry point. This only runs in development mode and has no effect in production.
+Add this to your main entry point. It only runs in development and has zero impact on production
+builds:
+
 ```dart
 void main() async {
   await runMacro(
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
-      'MyMacro': MyMacro.initialize,
-      // Add your own macros or use from other packages
+      'AssetPathMacro': AssetPathMacro.initialize,
+      // Add your own macros or import from packages
     },
   );
 
@@ -56,39 +65,10 @@ void main() async {
 }
 ```
 
-## Usage
+## 🚀 Quick Start
 
 ### 1. Annotate your class
 
-To apply a macro like `DataClassMacro` to your class:
-```dart
-@dataClassMacro
-class UserProfile with UserProfileData {
-  const UserProfile({required this.name, required this.age});
-
-  final String name;
-  final int age;
-}
-```
-
-### 2. Save and generate
-
-Press **Ctrl+S** to save the file. Code generation happens instantly!
-
-- First run: ~3-5 seconds
-- Subsequent runs: <100ms
-
-The macro will automatically generate:
-- `fromJson` method
-- `toJson` method
-- `Equality` operators
-- `toString` method
-
-### 3. Debug when needed
-
-If your macro isn't generating code properly, simply run your app in debug mode and step through the generation process to identify and fix issues.
-
-## Example
 ```dart
 import 'package:macro_kit/macro_kit.dart';
 
@@ -104,26 +84,117 @@ class User with UserData {
   final String name;
   final String email;
 }
-
-// Generated code includes:
-// - User.fromJson(Map<String, dynamic> json)
-// - Map<String, dynamic> toJson()
-// - operator ==(Object other)
-// - int get hashCode
-// - String toString()
 ```
 
-## Limitations
+### 2. Save and generate
 
-Currently, macros can only be applied to classes with limited functionality. However, this provides sufficient capability for most common code generation tasks. Future updates will include:
-- Support for applying macros to variables
-- More information exposed to library developers for building custom packages
+Press **Ctrl+S** to save. Generation happens instantly!
 
+- **First run**: ~3-5 seconds (one-time setup)
+- **Subsequent runs**: <100ms ⚡
 
-## Contributing
+### 3. Use the generated code
 
-Contributions are welcome! Feel free to submit issues and pull requests.
+The macro automatically generates:
 
-## License
+- ✅ `fromJson(Map<String, dynamic> json)` constructor
+- ✅ `toJson()` method
+- ✅ Equality operators (`==`, `hashCode`)
+- ✅ `copyWith()` method
+- ✅ `toString()` method
 
-This repo is licenced under MIT.
+```dart
+// Use it immediately
+final User user = UserData.fromJson({'id': 1, 'name': 'Alice', 'email': 'alice@example.com'});
+final json = user.toJson();
+final updated = user.copyWith(name: 'Bob');
+```
+
+### 4. Debug when needed
+
+Unlike build_runner, you can debug macro code generation in real-time. Run your app in debug mode
+and step through the generation process to identify and fix issues.
+
+## 📚 Built-in Macros
+
+### DataClassMacro
+
+Generates data class boilerplate including `fromJson`, `toJson`, `copyWith`, equality operators, and
+`toString`.
+
+```dart
+@dataClassMacro
+class UserProfile with UserProfileData {
+  const UserProfile({required this.name, required this.age});
+
+  final String name;
+  final int age;
+}
+```
+
+### AssetPathMacro
+
+Generates type-safe constants for your asset paths. Never hardcode asset strings again!
+
+```dart
+void main() async {
+  await runMacro(
+    macros: {
+      'DataClassMacro': DataClassMacro.initialize,
+      'AssetPathMacro': AssetPathMacro.initialize,
+      // Add your own macros or import from packages
+    },
+    assetMacros: {
+      'assets': [
+        AssetMacroInfo(
+          macroName: 'AssetPathMacro',
+          extension: '*',
+          output: 'lib',
+        ),
+      ],
+    },
+  );
+
+  runApp(MyApp());
+}
+```
+
+```dart
+// Usage in code
+final asset = Image.asset(AssetPaths.logo);
+final asset = Image.asset(AssetPaths.icons.home);
+```
+
+## 🎯 Why Macro Kit?
+
+| Feature          | Macro Kit            | build_runner       |
+|------------------|----------------------|--------------------|
+| Generation Speed | <100ms               | Seconds to minutes |
+| Debugging        | ✅ Full debug support | ❌ Limited          |
+| File Conflicts   | ❌ Never              | ✅ Common issue     |
+| IDE Integration  | ✅ Instant feedback   | ⏳ Wait for build   |
+| Learning Curve   | 🟢 Simple            | 🔴 Complex         |
+
+## ⚠️ Current Limitations
+
+Macros can currently only be applied to classes. This covers most common use cases, but future
+updates will include:
+
+- 🔜 Support for applying macros to variables and functions
+- 🔜 Additional macro capabilities for library developers
+- 🔜 More built-in macros for common patterns
+
+Despite these limitations, Macro Kit handles the majority of day-to-day code generation needs
+efficiently.
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to:
+
+- 🐛 Report bugs and issues
+- 💡 Suggest new features
+- 🔧 Submit pull requests
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details

@@ -484,9 +484,9 @@ mixin AnalyzeClass on BaseAnalyzer {
   }
 
   void collectClassSubTypes(
-      List<(List<MacroConfig>, ClassFragment)> pendingRequiredSubTypes,
-      LibraryFragment libraryFragment,
-      ) {
+    List<(List<MacroConfig>, ClassFragment)> pendingRequiredSubTypes,
+    LibraryFragment libraryFragment,
+  ) {
     for (final (capability, classFragment) in pendingRequiredSubTypes) {
       // get sub types
       final subTypes = findSubTypesOf(classFragment.element, libraryFragment);
