@@ -77,11 +77,12 @@ class AssetPathMacro extends MacroGenerator {
   static AssetPathMacro initialize(MacroConfig config) {
     final key = config.key;
     final props = Map.fromEntries(key.properties.map((e) => MapEntry(e.name, e)));
+    final configValue = props['config']?.constantValue;
 
     return AssetPathMacro(
       capability: config.capability,
-      config: props['config']?.constantValue is Map
-          ? AssetPathConfig.fromJson(props['config']!.constantValue as Map<String, dynamic>)
+      config: configValue != null && configValue is Map
+          ? AssetPathConfig.fromJson(configValue as Map<String, dynamic>)
           : const AssetPathConfig(),
     );
   }
