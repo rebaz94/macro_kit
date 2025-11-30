@@ -414,8 +414,8 @@ class DataClassMacroConfig {
   /// fields annotated with [JsonKey].
   final FieldRename? fieldRename;
 
-  /// If `true` (the default), A static function is created in [ClassNameJson] that you can
-  /// reference from your class. when argument became stable you can access it directly using [ClassName]
+  /// If `true` (the default), A static function is created in '{ClassName}Json' that you can
+  /// reference from your class. when argument became stable you can access it directly using 'ClassName'
   ///
   /// ```dart
   /// @Macro(DataClassMacro())

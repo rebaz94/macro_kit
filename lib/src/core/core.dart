@@ -1178,7 +1178,7 @@ class AssetMacroInfo {
   /// When asset macros generate data based on asset files, the generated
   /// files must be written to this directory to avoid recursive regeneration loops.
   ///
-  /// If generated files were written back to [assetDirectories], they would trigger
+  /// If generated files were written back to same asset directories, they would trigger
   /// the file watcher again, causing infinite regeneration cycles.
   ///
   /// Path should be relative to your project root.
@@ -1408,7 +1408,7 @@ abstract class BaseMacroGenerator {
 
   /// called when macro has class fields capability.
   /// you can use these fields and generate constructor, when augment feature released
-  /// or use the [onClassConstructor] to know the field defined as positional or named.
+  /// or use the [onClassConstructors] to know the field defined as positional or named.
   Future<void> onClassFields(MacroState state, List<MacroProperty> classFields);
 
   /// called with all available constructor of the class when macro has class constructor capability

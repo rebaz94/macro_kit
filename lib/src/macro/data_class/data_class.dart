@@ -12,8 +12,7 @@ import 'package:macro_kit/src/macro/data_class/utils.dart';
 /// future) constructor implementations.
 ///
 /// The macro is fully configurable through annotation metadata and can
-/// optionally support polymorphic class hierarchies via a
-/// [Discriminator].
+/// optionally support polymorphic class hierarchies via a discriminator configuration
 ///
 /// **Example**
 /// Annotate your class with `@Macro(DataClassMacro)` or use the shorthand
@@ -105,7 +104,7 @@ class DataClassMacro extends MacroGenerator {
   /// Supported values:
   ///   * int, double, number, bool, string or
   ///   * a custom function with signature of
-  ///     [bool Function(Map<String, dynamic> json)] returning `true`
+  ///     `bool Function(Map<String, dynamic> json)` returning `true`
   ///     to match the provided class.
   final Object? discriminatorValue;
 
@@ -1487,7 +1486,6 @@ class DataClassMacro extends MacroGenerator {
 ///
 /// The macro is fully configurable through annotation metadata and can
 /// optionally support polymorphic class hierarchies via a
-/// [Discriminator].
 const dataClassMacro = Macro(
   DataClassMacro(
     capability: MacroCapability(
