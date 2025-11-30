@@ -7,6 +7,7 @@ import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/analyzer/macro_server.dart';
 import 'package:macro_kit/src/analyzer/models.dart';
 import 'package:macro_kit/src/analyzer/watch_file_request.dart';
+import 'package:path/path.dart' as p;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum ConnectionStatus { connecting, connected, disconnected }
@@ -55,7 +56,7 @@ class MacroServerClient {
 
   bool isDisabledAutoStartSever() {
     try {
-      final file = File('$macroDirectory/macro_config.json');
+      final file = File(p.join(macroDirectory, 'macro_config.json'));
       if (!file.existsSync()) {
         return false;
       }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:logging/logging.dart';
 import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/client/client_manager.dart';
@@ -44,7 +46,7 @@ Future<MacroManager?> runMacro({
   /// connect to this server to receive analysis updates and send generated code.
   ///
   /// Default: `'http://localhost:3232'`
-  String serverAddress = 'http://localhost:3232',
+  String? serverAddress,
 
   /// Whether to automatically reconnect on connection loss.
   ///
@@ -93,7 +95,7 @@ Future<MacroManager?> runMacro({
   final logger = MacroLogger.createLogger(name: 'MacroGenerator', into: log, level: logLevel);
   final manager = MacroManager(
     logger: logger,
-    serverAddress: serverAddress,
+    serverAddress: serverAddress ?? (Platform.isAndroid || Platform.isFuchsia ? 'http://10.0.2.2:3232' :'http://localhost:3232'),
     macros: macros,
     autoReconnect: autoReconnect,
     generateTimeout: generateTimeout,

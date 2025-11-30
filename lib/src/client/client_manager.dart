@@ -8,6 +8,7 @@ import 'package:macro_kit/src/analyzer/macro_server.dart';
 import 'package:macro_kit/src/analyzer/models.dart';
 import 'package:macro_kit/src/analyzer/watch_file_request.dart';
 import 'package:macro_kit/src/plugin/server_client.dart';
+import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart' as sync;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -50,6 +51,10 @@ class MacroManager {
   WebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubs;
 
+  bool get isMobilePlatform {
+    return Platform.isAndroid || Platform.isIOS || Platform.isFuchsia;
+  }
+
   void connect() {
     _listenToManualRequest();
     _reconnect(force: true, delay: false);
@@ -58,6 +63,11 @@ class MacroManager {
   /// setup a file watcher to be updated by macro server while in development mode
   /// so that the plugin establish connection to macro server and send their analysis contexts path
   void _listenToManualRequest() {
+    if (isMobilePlatform) {
+      // can't listen to file system in mobile
+      return;
+    }
+
     _clientRequestWatcher.listen(
       onChanged: (type, data) {
         final content = data.split(':');
@@ -81,7 +91,14 @@ class MacroManager {
         if (!autoReconnect && !force) return;
 
         if (delay) {
-          logger.error('Reconnecting to MacroServer in 10 seconds');
+          if (isMobilePlatform) {
+            logger.error(
+              'MacroServer is not running. Restart the analyzer to automatically start the server.'
+              '\nNote: When testing macOS Desktop or Windows applications, the server is started automatically.',
+            );
+          } else {
+            logger.error('Reconnecting to MacroServer in 10 seconds');
+          }
         }
 
         _requestPluginToConnect();
@@ -92,7 +109,13 @@ class MacroManager {
   }
 
   void _requestPluginToConnect() {
-    File('$macroDirectory/$macroPluginRequestFileName')
+    if (isMobilePlatform) {
+      // File system not work here, if auto starting macro server is enabled
+      // restarting analyzer start the server
+      return;
+    }
+
+    File(p.join(macroDirectory, macroPluginRequestFileName))
       ..createSync(recursive: true)
       ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
   }

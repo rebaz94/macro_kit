@@ -91,7 +91,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   @override
   void requestPluginToConnect() {
-    File('$macroDirectory/$macroPluginRequestFileName')
+    File(p.join(macroDirectory, macroPluginRequestFileName))
       ..createSync(recursive: true)
       ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
   }
@@ -99,7 +99,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   @override
   void requestClientToConnect() {
     // send macro generator to reconnect
-    File('$macroDirectory/$macroClientRequestFileName')
+    File(p.join(macroDirectory, macroClientRequestFileName))
       ..createSync(recursive: true)
       ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
   }
@@ -147,7 +147,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     // reload macro config defined in the project
     for (final context in contexts) {
       try {
-        final content = loadYamlNode(File('$context/.macro.yaml').readAsStringSync());
+        final content = loadYamlNode(File(p.join(context, '.macro.yaml')).readAsStringSync());
         if (content.value['config'] case YamlMap config) {
           _macroClientConfigs.add(MacroClientConfiguration.fromYaml(context, config));
         }

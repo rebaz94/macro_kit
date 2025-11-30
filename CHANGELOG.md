@@ -1,3 +1,7 @@
+## 0.0.10
+
+- fix: crashing on iOS fixed
+
 ## 0.0.9
 
 - fix: missing doc & set sdk constraints

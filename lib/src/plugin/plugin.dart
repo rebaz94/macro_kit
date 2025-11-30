@@ -36,10 +36,10 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
 
   @override
   Future<void> reconnectToServer({bool forceStart = false}) async {
-    logger.info('Reconnect to MacroServer, lock: ${lock.locked}');
+    logger.info('Reconnecting to MacroServer, lock: ${lock.locked}');
 
     return lock.synchronized(() async {
-      logger.info('Checking MacroServer, lock: ${lock.locked}');
+      logger.info('Checking MacroServer');
 
       final serverRunning = await client.isServerRunning();
       if (serverRunning) {
