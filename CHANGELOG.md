@@ -1,3 +1,7 @@
+## 0.0.9
+
+- fix: missing doc & set sdk constraints
+
 ## 0.0.8
 
 - fix: remove default value for asset configuration
