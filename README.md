@@ -175,6 +175,50 @@ final asset = Image.asset(AssetPaths.icons.home);
 | IDE Integration  | ✅ Instant feedback   | ⏳ Wait for build   |
 | Learning Curve   | 🟢 Simple            | 🔴 Complex         |
 
+## 🔧 Running Macros Separately
+
+You can create a dedicated macro runner file to keep your macro setup separate from your app's main
+entry point. This is currently the recommended approach until we add full support for running macros
+on physical Android/iOS devices.
+
+### Create a macro runner
+
+Create a new file `macro.dart` in your project root or `lib` directory:
+
+```dart
+// macro.dart
+import 'package:macro_kit/macro_kit.dart';
+
+void main() async {
+  await runMacro(
+    macros: {
+      'DataClassMacro': DataClassMacro.initialize,
+      'AssetPathMacro': AssetPathMacro.initialize,
+      // Add your own macros or import from packages
+    },
+    assetMacros: {
+      'assets': [
+        AssetMacroInfo(
+          macroName: 'AssetPathMacro',
+          extension: '*',
+          output: 'lib',
+        ),
+      ],
+    },
+  );
+}
+```
+
+### Run from CLI
+
+```bash
+dart run macro.dart
+```
+
+### Run from IDE
+
+Simply open `macro.dart` in your IDE and run it directly using the run button or keyboard shortcut.
+
 ## ⚠️ Current Limitations
 
 Macros can currently only be applied to classes. This covers most common use cases, but future
