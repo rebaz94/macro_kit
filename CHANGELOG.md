@@ -1,3 +1,7 @@
+## 0.0.12
+
+- remove returning `MacroManager` in `runMacro` function
+
 ## 0.0.11
 
 - allow customizing class name for AssetPathMacro

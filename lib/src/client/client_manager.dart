@@ -56,6 +56,7 @@ class MacroManager {
   }
 
   void connect() {
+    logger.info('Initializing MacroManager');
     _listenToManualRequest();
     _reconnect(force: true, delay: false);
   }

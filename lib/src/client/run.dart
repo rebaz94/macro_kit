@@ -15,8 +15,8 @@ const bool _kDebugMode = !_kReleaseMode && !_kProfileMode;
 /// This function initializes the macro system, connects to the macro server,
 /// and optionally watches asset directories for changes to trigger regeneration.
 ///
-/// Returns a [MacroManager] instance if successful, or null if disabled.
-Future<MacroManager?> runMacro({
+/// Returns immediately if disabled.
+Future<void> runMacro({
   /// Map of macro names to their initialization functions.
   ///
   /// Each key is a unique macro name, and each value is a function that
@@ -90,19 +90,18 @@ Future<MacroManager?> runMacro({
   /// Default: `true` in debug mode, `false` in release mode
   bool enabled = _kDebugMode,
 }) async {
-  if (!enabled) return null;
+  if (!enabled) return;
 
-  final logger = MacroLogger.createLogger(name: 'MacroGenerator', into: log, level: logLevel);
+  final logger = MacroLogger.createLogger(name: 'MacroManager', into: log, level: logLevel);
   final manager = MacroManager(
     logger: logger,
-    serverAddress: serverAddress ?? (Platform.isAndroid || Platform.isFuchsia ? 'http://10.0.2.2:3232' :'http://localhost:3232'),
+    serverAddress:
+        serverAddress ?? (Platform.isAndroid || Platform.isFuchsia ? 'http://10.0.2.2:3232' : 'http://localhost:3232'),
     macros: macros,
     autoReconnect: autoReconnect,
     generateTimeout: generateTimeout,
     assetMacros: assetMacros,
   );
 
-  logger.info('MacroManager initializing');
   manager.connect();
-  return manager;
 }
