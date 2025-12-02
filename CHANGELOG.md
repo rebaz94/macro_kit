@@ -1,3 +1,7 @@
+## 0.0.11
+
+- allow customizing class name for AssetPathMacro
+
 ## 0.0.10
 
 - fix: crashing on iOS fixed
