@@ -178,8 +178,11 @@ final asset = Image.asset(AssetPaths.icons.home);
 ## 🔧 Running Macros Separately
 
 You can create a dedicated macro runner file to keep your macro setup separate from your app's main
-entry point. This is currently the recommended approach until we add full support for running macros
-on physical Android/iOS devices.
+entry point.
+
+For mobile apps, it’s recommended to use a separate macro-runner file to isolate your
+macro setup from the main entry point. This remains the preferred workflow until macros are fully
+supported on physical Android and iOS devices
 
 ### Create a macro runner
 
