@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/analysis_context.dart';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:http/http.dart' as http;
@@ -14,7 +15,6 @@ import 'package:synchronized/synchronized.dart' as sync;
 import 'package:watcher/watcher.dart';
 import 'package:web_socket_channel/status.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-// ignore: depend_on_referenced_packages
 import 'package:yaml/yaml.dart';
 
 import 'base.dart';
@@ -242,32 +242,36 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   void _onWatchFileChanged(WatchEvent event) {
-    final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(event.path);
-    if (assetMacros == null && (p.extension(event.path, 2) != '.dart')) {
-      logger.fine('Ignored: ${event.path}');
+    _onFileChanged(event.path, event.type);
+  }
+
+  void _onFileChanged(String path, ChangeType changeType, {bool startProcessing = true}) {
+    final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
+    if (assetMacros == null && (p.extension(path, 2) != '.dart')) {
+      logger.fine('Ignored: $path');
       return;
-    } else if (assetMacros == null && event.type == ChangeType.REMOVE) {
-      mayContainsMacroCache.remove(event.path);
-      final (:genFilePath, relativePartFilePath: _) = buildGeneratedFileInfo(event.path);
+    } else if (assetMacros == null && changeType == ChangeType.REMOVE) {
+      mayContainsMacroCache.remove(path);
+      final (:genFilePath, relativePartFilePath: _) = buildGeneratedFileInfo(path);
       removeFile(genFilePath);
       return;
     }
 
-    if (currentAnalyzingPath == '' || currentAnalyzingPath == event.path) {
+    if (currentAnalyzingPath == '' || currentAnalyzingPath == path) {
       // its first time or file changed during current analyzing, so we have to run it again
-      final type = switch (event.type) {
+      final type = switch (changeType) {
         ChangeType.ADD => AssetChangeType.add,
         ChangeType.MODIFY => AssetChangeType.modify,
         ChangeType.REMOVE => AssetChangeType.remove,
         _ => AssetChangeType.modify,
       };
-      pendingAnalyze.add((path: event.path, asset: assetMacros, type: type));
-    } else if (pendingAnalyze.firstWhereOrNull((e) => e.path == event.path) != null) {
+      pendingAnalyze.add((path: path, asset: assetMacros, type: type));
+    } else if (pendingAnalyze.firstWhereOrNull((e) => e.path == path) != null) {
       // its already in pending list, so no duplicate, next time it process it
       return;
     }
 
-    _processNext();
+    if (startProcessing) _processNext();
   }
 
   List<AnalyzingAsset>? _maybeRunAssetMacro(String path) {
@@ -310,7 +314,13 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   Future<void> _processNext() async {
-    if (isAnalyzingFile || pendingAnalyze.isEmpty) return;
+    if (isAnalyzingFile) return;
+
+    if (pendingAnalyze.isEmpty) {
+      // broadcast no work(currently used only for force generation)
+      pendingAnalyzeCompleted.sink.add(true);
+      return;
+    }
 
     isAnalyzingFile = true;
     final currentAnalyze = pendingAnalyze.removeAt(0);
@@ -344,6 +354,8 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   void removeFile(String path) {
     try {
       (fileCaches[path] ?? File(path)).deleteSync();
+    } on PathNotFoundException {
+      return;
     } catch (e) {
       logger.error('Failed to delete file', e);
     }
@@ -461,6 +473,81 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       channelInfo?.sub?.cancel();
       return false;
     }
+  }
+
+  Future<String?> forceRegenerateCodeFor({
+    required int clientId,
+    required String contextPath,
+    required bool filterOnlyDirectory,
+    required bool addToContext,
+    required bool removeInContext,
+  }) async {
+    final clientInfo = _clientChannels[clientId];
+    if (clientInfo == null) return 'No Client registered with id: $clientId';
+
+    (AnalysisContext?, StateError?) getContext(String path) {
+      try {
+        final context = contextCollection.contextFor(contextPath);
+        return (context, null);
+      } on StateError catch (e) {
+        return (null, e);
+      }
+    }
+
+    MapEntry<int, _PluginChannelInfo>? firstPlugin;
+    var (context, err) = getContext(contextPath);
+    if (err != null) {
+      if (!addToContext) {
+        return 'No analysis context found for: $contextPath, please ensure plugin installed';
+      }
+
+      firstPlugin = _pluginChannels.entries.firstOrNull;
+      if (firstPlugin == null) {
+        return 'No plugin registered, please ensure plugin installed';
+      }
+
+      _pluginChannels[firstPlugin.key] = (
+        ch: firstPlugin.value.ch,
+        contexts: firstPlugin.value.contexts.toList()..add(contextPath),
+      );
+      await onContextChanged();
+
+      (context, err) = getContext(contextPath);
+      if (err != null) {
+        _pluginChannels[firstPlugin.key] = firstPlugin.value;
+        return 'No analysis context found for: $contextPath after loading trying to load it';
+      }
+    } else if (context == null) {
+      return 'Unexpected state: context must not null';
+    }
+
+    context as AnalysisContext;
+
+    final isRootContext = contexts.contains(contextPath);
+    final List<String> files;
+
+    if (!isRootContext && filterOnlyDirectory) {
+      files = Directory(contextPath).listSync(recursive: true).whereType<File>().map((e) => e.path).toList();
+    } else {
+      files = context.contextRoot.analyzedFiles().toList();
+    }
+
+    for (final file in files) {
+      _onFileChanged(file, ChangeType.MODIFY, startProcessing: false);
+    }
+
+    // start processing file
+    _processNext();
+
+    // wait until receive completed event
+    await pendingAnalyzeCompleted.stream.first;
+
+    if (firstPlugin != null && removeInContext) {
+      _pluginChannels[firstPlugin.key] = firstPlugin.value;
+      await onContextChanged();
+    }
+
+    return null;
   }
 
   @override

@@ -381,6 +381,7 @@ class MacroClassConstructor {
     this.redirectFactory,
     required this.positionalFields,
     required this.namedFields,
+    required this.constantInitializers,
   });
 
   static MacroClassConstructor fromJson(Map<String, dynamic> json) {
@@ -392,15 +393,33 @@ class MacroClassConstructor {
       redirectFactory: json['rf'] as String?,
       positionalFields: MacroProperty._decodeUpdatableList((json['pf'] as List?) ?? const []),
       namedFields: MacroProperty._decodeUpdatableList((json['nf'] as List?) ?? const []),
+      constantInitializers: json['ci'] != null
+          ? (json['ci'] as Map<String, dynamic>).map(
+              (k, v) => MapEntry(k, MacroProperty.fromJson(v as Map<String, dynamic>)),
+            )
+          : null,
     );
   }
 
+  /// The name of the constructor
   final String constructorName;
+
+  /// A constructor modifier information
   final MacroModifier modifier;
+
+  /// Redirect factory name
   final String? redirectFactory;
+
+  /// Positional field of the constructor
   final List<MacroProperty> positionalFields;
+
+  /// Named field of the constructor
   final List<MacroProperty> namedFields;
 
+  /// A Key of field name to the dart constant expression
+  final Map<String, MacroProperty>? constantInitializers;
+
+  /// Return true if has positional or named field
   bool get hasFields => positionalFields.isNotEmpty || namedFields.isNotEmpty;
 
   Map<String, dynamic> toJson() {
@@ -410,7 +429,13 @@ class MacroClassConstructor {
       if (redirectFactory?.isNotEmpty == true) 'rf': redirectFactory,
       if (positionalFields.isNotEmpty) 'pf': positionalFields.map((e) => e.toJson()).toList(),
       if (namedFields.isNotEmpty) 'nf': namedFields.map((e) => e.toJson()).toList(),
+      if (constantInitializers?.isNotEmpty == true) 'ci': constantInitializers!.map((k, v) => MapEntry(k, v.toJson())),
     };
+  }
+
+  @override
+  String toString() {
+    return 'MacroClassConstructor{constructorName: $constructorName, modifier: $modifier, redirectFactory: $redirectFactory, positionalFields: $positionalFields, namedFields: $namedFields, constantInitializers: $constantInitializers}';
   }
 }
 
@@ -427,6 +452,7 @@ class MacroProperty {
     this.modifier = const MacroModifier({}),
     this.keys,
     this.constantValue,
+    this.constantModifier,
     this.requireConversionToLiteral,
   });
 
@@ -458,6 +484,9 @@ class MacroProperty {
         ),
         _ => constantValue,
       },
+      constantModifier: json['cm'] == null
+          ? null
+          : MacroModifier((json['cm'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
       requireConversionToLiteral: json['rcl'] as bool?,
     );
   }
@@ -482,6 +511,81 @@ class MacroProperty {
     return results;
   }
 
+  static String toLiteralValue(Object? prop, {Map<String, List<MacroClassConstructor>>? types}) {
+    if (prop is MacroProperty) {
+      if (prop.requireConversionToLiteral == true) {
+        if (prop.typeInfo == TypeInfo.clazz) {
+          return clazzToLiteral(prop, types);
+        }
+      }
+
+      if (prop.typeInfo == TypeInfo.enumData) {
+        return prop.asStringConstantValue() ?? '';
+      }
+
+      return jsonLiteralAsDart(prop.constantValue);
+    }
+
+    return jsonLiteralAsDart(prop);
+  }
+
+  static String clazzToLiteral(MacroProperty prop, Map<String, List<MacroClassConstructor>>? types) {
+    final config = prop.constantValue;
+    if (config is! Map<String, dynamic>) return '';
+
+    types ??= {};
+    final constructors = types[prop.type] ?? prop.classInfo?.constructors ?? const [];
+    types[prop.type] = constructors;
+
+    final constantConstructor = config['__constructor__'] as String? ?? '';
+    var constructor = constructors.firstWhereOrNull((e) => e.constructorName == constantConstructor);
+    // if no constructor fallback to the first one with const(maybe fails at compile time)
+    constructor ??= constructors.firstWhereOrNull((e) => e.modifier.isGenerative || e.modifier.isConst);
+
+    // still null, return raw data as literal
+    if (constructor == null) {
+      return jsonLiteralAsDart(config);
+    }
+
+    final str = StringBuffer('const ${prop.type}(');
+    bool needComma = false;
+    for (final field in constructor.positionalFields) {
+      if (needComma) {
+        str.write(', ');
+      }
+      final value = config[field.name];
+      final literal = toLiteralValue(value, types: types);
+      str.write(literal);
+      needComma = true;
+    }
+
+    if (constructor.namedFields.isNotEmpty) {
+      if (constructor.positionalFields.isEmpty) {
+        str.write('{');
+      } else {
+        str.write(',{ ');
+      }
+    }
+
+    needComma = false;
+    for (final field in constructor.namedFields) {
+      if (needComma) {
+        str.write(', ');
+      }
+      final value = config[field.name];
+      final literal = toLiteralValue(value, types: types);
+      str.write('${field.name}: $literal');
+      needComma = true;
+    }
+
+    if (constructor.namedFields.isNotEmpty) {
+      str.write('}');
+    }
+
+    str.write(')');
+    return str.toString();
+  }
+
   final String name;
   final String type;
   final TypeInfo typeInfo;
@@ -493,6 +597,7 @@ class MacroProperty {
   final MacroModifier modifier;
   final List<MacroKey>? keys;
   final Object? constantValue;
+  final MacroModifier? constantModifier;
   final bool? requireConversionToLiteral;
 
   String? get constantValueToDartLiteralIfNeeded {
@@ -504,7 +609,7 @@ class MacroProperty {
     return null;
   }
 
-  bool get isNullable => modifier.isNullable || type.endsWith('?');
+  bool get isNullable => modifier.isNullable;
 
   static bool isDynamicIterable(String type) {
     return const [
@@ -574,7 +679,7 @@ class MacroProperty {
   }
 
   /// Convert first key in [keys] into [T] and cache it for future use
-  T? cacheFirstKeyTo<T>(String keyName, T Function(MacroKey key) convertFn, {bool disableCache = false}) {
+  T? cacheFirstKeyInto<T>(String keyName, T Function(MacroKey key) convertFn, {bool disableCache = false}) {
     var key = disableCache ? null : _cacheKeysByKeyName?[keyName];
     if (key is T) return key;
 
@@ -611,13 +716,34 @@ class MacroProperty {
       typeInfo: typeInfo,
       modifier: modifier,
       typeArguments: typeArguments,
-      constantValue: constantValue,
       functionTypeInfo: functionTypeInfo,
-      requireConversionToLiteral: requireConversionToLiteral,
-      keys: keys,
-      extraMetadata: extraMetadata,
       classInfo: classInfo ?? this.classInfo,
       deepEquality: deepEquality,
+      keys: keys,
+      constantValue: constantValue,
+      constantModifier: constantModifier,
+      requireConversionToLiteral: requireConversionToLiteral,
+      extraMetadata: extraMetadata,
+    );
+  }
+
+  MacroProperty toNullableType() {
+    if (isNullable) return this;
+
+    return MacroProperty(
+      name: name,
+      type: type.endsWith('?') ? type : '$type?',
+      typeInfo: typeInfo,
+      modifier: MacroModifier({...modifier})..setIsNullable(true),
+      typeArguments: typeArguments,
+      functionTypeInfo: functionTypeInfo,
+      classInfo: classInfo,
+      deepEquality: deepEquality,
+      keys: keys,
+      constantValue: constantValue,
+      constantModifier: constantModifier,
+      requireConversionToLiteral: requireConversionToLiteral,
+      extraMetadata: extraMetadata,
     );
   }
 
@@ -672,13 +798,14 @@ class MacroProperty {
         'cvType': 'macro_property',
       } else if (constantValue != null)
         'cv': constantValue,
+      if (constantModifier?.isNotEmpty == true) 'cm': constantModifier!,
       if (requireConversionToLiteral == true) 'rcl': true,
     };
   }
 
   @override
   String toString() {
-    return 'MacroProperty{name: $name, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, deepEquality: $deepEquality, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, constantValue: $constantValue, requireConversionToLiteral: $requireConversionToLiteral, _cacheKeysByKeyName: $_cacheKeysByKeyName}';
+    return 'MacroProperty{name: $name, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, deepEquality: $deepEquality, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, constantValue: $constantValue, constantModifier: $constantModifier, requireConversionToLiteral: $requireConversionToLiteral}';
   }
 }
 
@@ -768,6 +895,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
     bool hasInitializer = false,
     bool hasDefaultValue = false,
     bool isInitializingFormal = false,
+    bool fieldFormalParameter = false,
+    bool formalParameter = false,
   }) {
     return MacroModifier({
       if (isConst) 'c': true,
@@ -806,7 +935,12 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
       if (hasInitializer) 'hi': true,
       if (hasDefaultValue) 'hd': true,
       if (isInitializingFormal) 'if': true,
+      if (fieldFormalParameter) 'ffp': true else if (formalParameter) 'fp': true,
     });
+  }
+
+  void setIsNullable(bool isNull) {
+    this['n'] = isNull;
   }
 
   bool get isConst => value['c'] == true;
@@ -889,6 +1023,12 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
 
   ///  Whether the parameter is an initializing formal parameter.
   bool get isInitializingFormal => value['if'] == true;
+
+  /// Whether the parameter defined in constructor and as a field
+  bool get isFieldFormalParameter => value['ffp'] == true;
+
+  /// Whether the parameter defined in constructor only
+  bool get isFormalParameter => value['fp'] == true;
 }
 
 class MacroMethod {

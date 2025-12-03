@@ -1,3 +1,7 @@
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:collection/collection.dart';
@@ -23,21 +27,32 @@ mixin AnalyzeClass on BaseAnalyzer {
   }
 
   @override
-  MacroClassDeclaration? parseClass(ClassFragment classFragment, {List<MacroConfig>? collectSubTypeConfig}) {
+  Future<MacroClassDeclaration?> parseClass(
+    ClassFragment classFragment, {
+    List<MacroConfig>? collectSubTypeConfig,
+    List<ElementAnnotation>? typeAliasAnnotation,
+    String? typeAliasClassName,
+  }) async {
     // combine all declared macro in one list and share with each config
     // (one class can have many metadata attached, we parsed config based on each metadata)
     List<MacroConfig> macroConfigs = [];
     Set<String> macroNames = {};
     bool combined = false;
 
+    final className = typeAliasClassName ?? classFragment.element.name;
+
     // 1. get all metadata attached to the class
     if (collectSubTypeConfig == null) {
-      for (final macroAnnotation in classFragment.metadata.annotations) {
+      final annotations = typeAliasAnnotation != null
+          ? CombinedListView([typeAliasAnnotation, classFragment.metadata.annotations])
+          : classFragment.metadata.annotations;
+
+      for (final macroAnnotation in annotations) {
         if (!isValidAnnotation(macroAnnotation, className: 'Macro', pkgName: 'macro')) {
           continue;
         }
 
-        final macroConfig = computeMacroMetadata(macroAnnotation);
+        final macroConfig = await computeMacroMetadata(macroAnnotation);
         if (macroConfig == null) {
           // if no compute macro metadata, return
           continue;
@@ -46,7 +61,7 @@ mixin AnalyzeClass on BaseAnalyzer {
         final capability = macroConfig.capability;
         if (!capability.classFields && !capability.classConstructors && !capability.classMethods) {
           // if there is no capability, return it
-          logger.info('Class ${classFragment.name} does not defined any Macro capability, ignored');
+          logger.info('Class $className does not defined any Macro capability, ignored');
           continue;
         }
 
@@ -105,7 +120,7 @@ mixin AnalyzeClass on BaseAnalyzer {
       pendingClassRequiredSubTypes.add((macroConfigs, classFragment));
     }
 
-    final (cacheKey, classId) = _classDeclarationCachedKey(classFragment, capability);
+    final (cacheKey, classId) = _classDeclarationCachedKey(classFragment, capability, typeAliasClassName);
     if (iterationCaches[cacheKey]?.value case MacroClassDeclaration declaration) {
       iterationCaches[cacheKey] = iterationCaches[cacheKey]!.increaseCount();
       return collectSubTypeConfig == null ? declaration.copyWith(classId: classId, configs: macroConfigs) : declaration;
@@ -127,11 +142,11 @@ mixin AnalyzeClass on BaseAnalyzer {
     );
 
     if (capability.classFields) {
-      (classFields, classTypeParams, isInProgress) = parseClassFields(capability, classFragment, null);
+      (classFields, classTypeParams, isInProgress) = await parseClassFields(capability, classFragment, null);
       if (isInProgress) {
         return MacroClassDeclaration.pendingDeclaration(
           classId: classId,
-          className: classElem.name ?? '',
+          className: className ?? '',
           configs: macroConfigs,
           modifier: classModifier,
           classTypeParameters: classTypeParams,
@@ -141,7 +156,7 @@ mixin AnalyzeClass on BaseAnalyzer {
     }
 
     if (capability.classConstructors) {
-      (constructors, classTypeParams, isInProgress) = parseClassConstructors(
+      (constructors, classTypeParams, isInProgress) = await parseClassConstructors(
         capability,
         classFragment,
         classTypeParams,
@@ -150,7 +165,7 @@ mixin AnalyzeClass on BaseAnalyzer {
       if (isInProgress) {
         return MacroClassDeclaration.pendingDeclaration(
           classId: classId,
-          className: classElem.name ?? '',
+          className: className ?? '',
           configs: macroConfigs,
           modifier: classModifier,
           classTypeParameters: classTypeParams,
@@ -160,11 +175,11 @@ mixin AnalyzeClass on BaseAnalyzer {
     }
 
     if (capability.classMethods) {
-      (methods, isInProgress) = parseClassMethods(capability, classFragment, classTypeParams);
+      (methods, isInProgress) = await parseClassMethods(capability, classFragment, classTypeParams);
       if (isInProgress) {
         return MacroClassDeclaration.pendingDeclaration(
           classId: classId,
-          className: classElem.name ?? '',
+          className: className ?? '',
           configs: macroConfigs,
           modifier: classModifier,
           classTypeParameters: classTypeParams,
@@ -176,7 +191,7 @@ mixin AnalyzeClass on BaseAnalyzer {
     final declaration = MacroClassDeclaration(
       classId: classId,
       configs: macroConfigs,
-      className: classElem.name ?? '',
+      className: className ?? '',
       modifier: classModifier,
       classTypeParameters: classTypeParams,
       classFields: classFields,
@@ -197,11 +212,11 @@ mixin AnalyzeClass on BaseAnalyzer {
     return declaration;
   }
 
-  (List<MacroProperty>?, List<String>?, bool) parseClassFields(
+  Future<(List<MacroProperty>?, List<String>?, bool)> parseClassFields(
     MacroCapability capability,
     ClassFragment classFragment,
     List<String>? classTypeParams,
-  ) {
+  ) async {
     if (!capability.classFields) {
       return (null, classTypeParams, false);
     }
@@ -241,7 +256,7 @@ mixin AnalyzeClass on BaseAnalyzer {
         }
       }
 
-      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = getTypeInfoFrom(
+      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
         fieldElem,
         classTypeParams,
         capability.filterClassMethodMetadata,
@@ -253,9 +268,9 @@ mixin AnalyzeClass on BaseAnalyzer {
         continue;
       }
 
-      var macroKeys = computeMacroKeys(capability.filterClassFieldMetadata, field.metadata, capability);
+      var macroKeys = await computeMacroKeys(capability.filterClassFieldMetadata, field.metadata, capability);
       if (fieldElem.getter != null && fieldElem.getter!.metadata.annotations.isNotEmpty) {
-        final getterMacroKeys = computeMacroKeys(
+        final getterMacroKeys = await computeMacroKeys(
           capability.filterClassFieldMetadata,
           fieldElem.getter!.metadata,
           capability,
@@ -265,7 +280,7 @@ mixin AnalyzeClass on BaseAnalyzer {
       }
 
       if (fieldElem.setter != null && fieldElem.setter!.metadata.annotations.isNotEmpty) {
-        final setterMacroKeys = computeMacroKeys(
+        final setterMacroKeys = await computeMacroKeys(
           capability.filterClassFieldMetadata,
           fieldElem.setter!.metadata,
           capability,
@@ -297,47 +312,50 @@ mixin AnalyzeClass on BaseAnalyzer {
     return (classFields, classTypeParams, false);
   }
 
-  (List<MacroClassConstructor>, List<String>?, bool) parseClassConstructors(
+  Future<(List<MacroClassConstructor>, List<String>?, bool)> parseClassConstructors(
     MacroCapability capability,
     ClassFragment classFragment,
     List<String>? classTypeParams,
     List<MacroProperty>? classFields,
-  ) {
+  ) async {
     if (!capability.classConstructors) {
-      return ([], classTypeParams, true);
+      return (<MacroClassConstructor>[], classTypeParams, true);
     }
 
     // return for nested class field with same type, only the first one
     // get types of the class fields, nested one is null,
     // its user code and its responsibility to handle that,
     if (lockOrReturnInProgressClassFieldsFor(classFragment.name)) {
-      return ([], classTypeParams, true);
+      return (<MacroClassConstructor>[], classTypeParams, true);
     }
 
     classTypeParams ??= classFragment.typeParameters.map((e) => e.name ?? '').toList();
     final constructors = <MacroClassConstructor>[];
 
     for (int k = 0; k < classFragment.constructors.length; k++) {
-      final constructor = classFragment.constructors[k];
+      final ConstructorFragment constructor = classFragment.constructors[k];
       List<MacroProperty> constructorPosFields = [];
       List<MacroProperty> constructorNamedFields = [];
+
+      final constructorDec = await getConstructorDeclaration(constructor.element);
+      Map<String, MacroProperty>? constructorInitializer;
 
       final params = constructor.formalParameters;
       for (int i = 0; i < params.length; i++) {
         final param = params[i];
         final paramElem = param.element;
 
-        final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = getTypeInfoFrom(
+        final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
           paramElem,
           classTypeParams,
           capability.filterClassMethodMetadata,
           capability,
         );
 
-        final fieldName = param.name ?? '';
+        final paramName = param.name ?? '';
 
         // get @[Key] from the constructor or from classFields if exists
-        var macroKeys = computeMacroKeys(
+        var macroKeys = await computeMacroKeys(
           capability.filterClassConstructorParameterMetadata,
           param.metadata,
           capability,
@@ -347,16 +365,16 @@ mixin AnalyzeClass on BaseAnalyzer {
           List<MacroKey>? fieldMacroKeys;
 
           if (classFields == null) {
-            final fieldMetadata = classFragment.fields.firstWhereOrNull((e) => e.name == fieldName);
-            if (fieldMetadata != null) {
-              fieldMacroKeys = computeMacroKeys(
+            final classField = classFragment.fields.firstWhereOrNull((e) => e.name == paramName);
+            if (classField != null) {
+              fieldMacroKeys = await computeMacroKeys(
                 capability.filterClassConstructorParameterMetadata,
-                fieldMetadata.metadata,
+                classField.metadata,
                 capability,
               );
             }
           } else {
-            fieldMacroKeys = classFields.firstWhereOrNull((e) => e.name == fieldName)?.keys;
+            fieldMacroKeys = classFields.firstWhereOrNull((e) => e.name == paramName)?.keys;
           }
 
           if (fieldMacroKeys != null) {
@@ -367,12 +385,28 @@ mixin AnalyzeClass on BaseAnalyzer {
             }
           }
         } else {
-          final fieldMacroKeys = classFields?.firstWhereOrNull((e) => e.name == fieldName)?.keys;
+          final fieldMacroKeys = classFields?.firstWhereOrNull((e) => e.name == paramName)?.keys;
           macroKeys?.addAll(fieldMacroKeys ?? const []);
         }
 
+        Object? paramConstantValue;
+        MacroModifier? paramConstantModifier;
+        bool? paramConstantConversionToLiteral;
+
+        if (paramElem.computeConstantValue() case DartObject constantValue) {
+          final computed = await computeConstantInitializerValue(paramName, constantValue, capability);
+
+          if (computed != null) {
+            (
+              constantValue: paramConstantValue,
+              modifier: paramConstantModifier,
+              reqConversion: paramConstantConversionToLiteral,
+            ) = computed;
+          }
+        }
+
         final macroParam = MacroProperty(
-          name: fieldName,
+          name: paramName,
           type: type,
           typeInfo: typeInfo,
           classInfo: classInfo,
@@ -383,6 +417,9 @@ mixin AnalyzeClass on BaseAnalyzer {
             paramElem,
             isNullable: paramElem.type.nullabilitySuffix != NullabilitySuffix.none,
           ),
+          constantModifier: paramConstantModifier,
+          constantValue: paramConstantValue,
+          requireConversionToLiteral: paramConstantConversionToLiteral,
           keys: macroKeys,
         );
 
@@ -391,7 +428,65 @@ mixin AnalyzeClass on BaseAnalyzer {
         } else {
           constructorPosFields.add(macroParam);
         }
+
+        final fieldInitializer = _analyzeInitializer(paramElem, constructorDec);
+        if (fieldInitializer != null) {
+          constructorInitializer ??= {};
+
+          final fieldName = fieldInitializer.name ?? '';
+          final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+            fieldInitializer,
+            classTypeParams,
+            capability.filterClassMethodMetadata,
+            capability,
+          );
+
+          constructorInitializer[paramName] = MacroProperty(
+            name: fieldName,
+            type: type,
+            typeInfo: typeInfo,
+            typeArguments: typeArguments,
+            functionTypeInfo: fnInfo,
+            classInfo: classInfo,
+            deepEquality: deepEq,
+            constantValue: fieldInitializer.constantInitializer?.toSource(),
+          );
+        }
       }
+
+      // List<ConstructorInitializer>? constantFieldInitializer;
+      // try {
+      //   // TODO: find a way to get constantInitializers
+      //   constantFieldInitializer = (constructor as dynamic).constantInitializers;
+      //
+      //   // create constant initializer mapping
+      //   if (constantFieldInitializer != null) {
+      //     constructorInitializer = {};
+      //     for (final ci in constantFieldInitializer) {
+      //       if (ci is! ConstructorFieldInitializer) continue;
+      //
+      //       final fieldName = ci.fieldName.name;
+      //       final fieldElem = classFragment.element.fields.firstWhereOrNull((f) => f.name == fieldName);
+      //       final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      //         fieldElem,
+      //         classTypeParams,
+      //         capability.filterClassMethodMetadata,
+      //         capability,
+      //       );
+      //
+      //       constructorInitializer[fieldName] = MacroProperty(
+      //         name: fieldName,
+      //         type: type,
+      //         typeInfo: typeInfo,
+      //         typeArguments: typeArguments,
+      //         functionTypeInfo: fnInfo,
+      //         classInfo: classInfo,
+      //         deepEquality: deepEq,
+      //         constantValue: ci.expression.toSource(),
+      //       );
+      //     }
+      //   }
+      // } catch (_) {}
 
       constructors.add(
         MacroClassConstructor(
@@ -400,6 +495,7 @@ mixin AnalyzeClass on BaseAnalyzer {
           redirectFactory: constructor.element.redirectedConstructor?.name,
           positionalFields: constructorPosFields,
           namedFields: constructorNamedFields,
+          constantInitializers: constructorInitializer,
         ),
       );
     }
@@ -408,11 +504,60 @@ mixin AnalyzeClass on BaseAnalyzer {
     return (constructors, classTypeParams, false);
   }
 
-  (List<MacroMethod>?, bool) parseClassMethods(
+  Future<ConstructorDeclaration?> getConstructorDeclaration(ConstructorElement ctor) async {
+    final session = ctor.session ?? currentSession!;
+    final library = ctor.library;
+
+    final resolved = await session.getResolvedLibraryByElement(library);
+    if (resolved is! ResolvedLibraryResult) return null;
+
+    for (final unitResult in resolved.units) {
+      final cu = unitResult.unit;
+
+      for (final decl in cu.declarations) {
+        if (decl is ClassDeclaration) {
+          for (final member in decl.members) {
+            if (member is ConstructorDeclaration) {
+              if (member.declaredFragment?.element == ctor) {
+                return member;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  PropertyInducingElement? _analyzeInitializer(
+    FormalParameterElement param,
+    ConstructorDeclaration? constructor,
+  ) {
+    if (constructor == null) {
+      return null;
+    }
+
+    for (var initializer in constructor.initializers) {
+      if (initializer is ConstructorFieldInitializer) {
+        var p = initializer.expression.accept(InitializerExpressionVisitor());
+        if (p == param) {
+          var f = initializer.fieldName.element;
+          if (f is PropertyInducingElement) {
+            return f;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  Future<(List<MacroMethod>?, bool)> parseClassMethods(
     MacroCapability capability,
     ClassFragment classFragment,
     List<String>? classTypeParams,
-  ) {
+  ) async {
     if (!capability.classConstructors) {
       return const (null, false);
     }
@@ -463,9 +608,9 @@ mixin AnalyzeClass on BaseAnalyzer {
         continue;
       }
 
-      final macroKeys = computeMacroKeys(capability.filterClassMethodMetadata, method.metadata, capability);
+      final macroKeys = await computeMacroKeys(capability.filterClassMethodMetadata, method.metadata, capability);
 
-      final function = getFunctionInfo(
+      final function = await getFunctionInfo(
         methodElem,
         classTypeParams,
         capability: capability,
@@ -483,10 +628,10 @@ mixin AnalyzeClass on BaseAnalyzer {
     return (methods, false);
   }
 
-  void collectClassSubTypes(
+  Future<void> collectClassSubTypes(
     List<(List<MacroConfig>, ClassFragment)> pendingRequiredSubTypes,
     LibraryFragment libraryFragment,
-  ) {
+  ) async {
     for (final (capability, classFragment) in pendingRequiredSubTypes) {
       // get sub types
       final subTypes = findSubTypesOf(classFragment.element, libraryFragment);
@@ -495,7 +640,7 @@ mixin AnalyzeClass on BaseAnalyzer {
       // convert to macro declaration
       final classDeclaration = <MacroClassDeclaration>[];
       for (final classSubType in subTypes) {
-        final declaration = parseClass(classSubType, collectSubTypeConfig: capability);
+        final declaration = await parseClass(classSubType, collectSubTypeConfig: capability);
         if (declaration != null) {
           classDeclaration.add(declaration);
         }
@@ -553,9 +698,54 @@ mixin AnalyzeClass on BaseAnalyzer {
     return false;
   }
 
-  (String, String) _classDeclarationCachedKey(ClassFragment classFragment, MacroCapability capability) {
+  (String, String) _classDeclarationCachedKey(
+    ClassFragment classFragment,
+    MacroCapability capability, [
+    String? typeAliasName,
+  ]) {
+    final className = typeAliasName ?? classFragment.element.name;
     final uri = classFragment.element.library.uri.toString();
-    final id = '${classFragment.element.name}:${xxh32code('$capability${classFragment.element.name}$uri')}';
+    final id = '$className:${xxh32code('$capability$className$uri')}';
     return ('classDec:$id', id);
+  }
+}
+
+class InitializerExpressionVisitor extends SimpleAstVisitor<Element> {
+  @override
+  Element? visitSimpleIdentifier(SimpleIdentifier node) {
+    return node.element;
+  }
+
+  @override
+  Element? visitAssignedVariablePattern(AssignedVariablePattern node) {
+    return node.element;
+  }
+
+  @override
+  Element? visitParenthesizedExpression(ParenthesizedExpression node) {
+    return node.expression.accept(this);
+  }
+
+  @override
+  Element? visitNullAssertPattern(NullAssertPattern node) {
+    return node.pattern.accept(this);
+  }
+
+  @override
+  Element? visitNullCheckPattern(NullCheckPattern node) {
+    return node.pattern.accept(this);
+  }
+
+  @override
+  Element? visitBinaryExpression(BinaryExpression node) {
+    if (node.operator.lexeme == '??') {
+      var left = node.leftOperand.accept(this);
+      var right = node.rightOperand.accept(this);
+      if (left == null || right == null) {
+        return left ?? right;
+      }
+    }
+
+    return null;
   }
 }

@@ -268,3 +268,14 @@ extension FileExt on File {
     }
   }
 }
+
+extension UniqueList<T> on List<T> {
+  List<T> unique() {
+    return toSet().toList();
+  }
+
+  List<T> uniqueBy<K>(K Function(T) keyExtractor) {
+    final seen = <K>{};
+    return where((item) => seen.add(keyExtractor(item))).toList();
+  }
+}

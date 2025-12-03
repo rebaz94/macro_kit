@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
+import 'package:analyzer/dart/analysis/session.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:dart_style/dart_style.dart';
@@ -54,6 +56,7 @@ abstract class BaseAnalyzer implements MacroServer {
     includedPaths: [],
     resourceProvider: PhysicalResourceProvider.INSTANCE,
   );
+  AnalysisSession? currentSession;
 
   final Map<String, File> fileCaches = {};
 
@@ -61,6 +64,7 @@ abstract class BaseAnalyzer implements MacroServer {
   final Map<String, CountedCache> iterationCaches = {};
   final Set<String> mayContainsMacroCache = {};
   final List<PendingAnalyze> pendingAnalyze = [];
+  final StreamController<bool> pendingAnalyzeCompleted = StreamController.broadcast();
   String currentAnalyzingPath = '';
   bool isAnalyzingFile = false;
 
@@ -71,5 +75,5 @@ abstract class BaseAnalyzer implements MacroServer {
   int newId() => random.nextInt(100000);
 
   @internal
-  MacroClassDeclaration? parseClass(ClassFragment classFragment, {List<MacroConfig>? collectSubTypeConfig});
+  Future<MacroClassDeclaration?> parseClass(ClassFragment classFragment, {List<MacroConfig>? collectSubTypeConfig});
 }

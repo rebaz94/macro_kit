@@ -354,6 +354,7 @@ class DataClassMacro extends MacroGenerator {
         _generateToJson(
           state: state,
           buff: buff,
+          constructor: currentPrimaryConstructor,
           ctorName: primaryCtor,
           className: state.targetName,
           fields: fields,
@@ -366,6 +367,7 @@ class DataClassMacro extends MacroGenerator {
           state: state,
           buff: buff,
           className: state.targetName,
+          constructor: currentPrimaryConstructor,
           ctorName: primaryCtor,
           positionalFields: positionlFields,
           namedFields: namedFields,
@@ -380,6 +382,7 @@ class DataClassMacro extends MacroGenerator {
         state: state,
         buff: buff,
         className: state.targetName,
+        constructor: currentPrimaryConstructor,
         fields: fields,
         generics: typeParams,
       );
@@ -390,6 +393,7 @@ class DataClassMacro extends MacroGenerator {
       _generateToString(
         state: state,
         className: state.targetName,
+        constructor: currentPrimaryConstructor,
         buff: buff,
         fields: fields,
         generics: typeParams,
@@ -621,7 +625,7 @@ class DataClassMacro extends MacroGenerator {
             case TypeInfo.uri:
               return '($value as Map<String, dynamic>$nullable)$nullable.map((k, e) => MapEntry(Uri.parse(k), $mapElemValue))';
             case TypeInfo.enumData:
-              final key = elemType.cacheFirstKeyTo('JsonKey', JsonKeyConfig.fromMacroKey);
+              final key = elemType.cacheFirstKeyInto('JsonKey', JsonKeyConfig.fromMacroKey);
               return '($value as Map<String, dynamic>$nullable)$nullable.map((k, e) => MapEntry(MacroExt.decodeEnum(${elemType.type}.values, k, unknownValue: ${key?.unknownEnumValue}), $mapElemValue))';
             case TypeInfo.object:
               return '($value as Map<Object, dynamic>$nullable)$nullable.map((k, e) => MapEntry(k, $mapElemValue))';
@@ -680,7 +684,7 @@ class DataClassMacro extends MacroGenerator {
 
           return 'Uri.parse($value as String)';
         case TypeInfo.enumData:
-          final key = field.cacheFirstKeyTo('JsonKey', JsonKeyConfig.fromMacroKey);
+          final key = field.cacheFirstKeyInto('JsonKey', JsonKeyConfig.fromMacroKey);
           if (isNullable) {
             final genType = type.removedNullability;
             return 'MacroExt.decodeNullableEnum($genType.values, $value, unknownValue: ${key?.unknownEnumValue})';
@@ -728,15 +732,18 @@ class DataClassMacro extends MacroGenerator {
     var fieldRename = config.fieldRename ?? FieldRename.none;
 
     String fieldValue(MacroProperty field, [bool positional = false]) {
-      final key = field.cacheFirstKeyTo('JsonKey', JsonKeyConfig.fromMacroKey) ?? JsonKeyConfig.defaultKey;
+      final key = field.cacheFirstKeyInto('JsonKey', JsonKeyConfig.fromMacroKey) ?? JsonKeyConfig.defaultKey;
       final posOrNamedField = positional ? '    ' : '     ${field.name}:';
+      final defaultValue =
+          key.defaultValue ?? (field.constantValue != null ? MacroProperty.toLiteralValue(field) : null);
+      final hasDefaultValue = defaultValue != null;
 
       // if excluded from decoding
       if (key.includeFromJson == false) {
         // throw exception if no default value provided & not nullable since it we can't initiate the class
         // if nullable, set as default value,
-        if (key.defaultValue != null) {
-          return '$posOrNamedField ${key.defaultValue}';
+        if (hasDefaultValue) {
+          return '$posOrNamedField $defaultValue';
         } else if (field.isNullable) {
           return '$posOrNamedField null';
         } else {
@@ -757,21 +764,26 @@ class DataClassMacro extends MacroGenerator {
       // custom fromJson or fallback to builtin
       final String value;
       if (key.fromJson != null) {
-        if (!Utils.isValueTypeCanBeOfType(key.fromJsonReturnType ?? '', field.type)) {
+        final checkType = hasDefaultValue && !field.isNullable ? '${field.type}?' : field.type;
+        if (!Utils.isValueTypeCanBeOfType(key.fromJsonReturnType ?? '', checkType)) {
           throw MacroException(
             'The parameter `${field.name}` of type: `${field.type}` in `${state.targetName}` has incompatible fromJson function, '
             'the fromJson return must be type of: `${field.type}` but got: `${key.fromJsonReturnType ?? ''}`',
           );
         }
 
+        final fromJsonRetTypeNullable = key.fromJsonReturnType?.endsWith('?') == true;
         final asType = key.fromJsonArgType != null ? ' as ${key.fromJsonArgType}' : '';
-        value = '${field.isNullable ? '$jsonValue == null ? null : ' : ''}${'${key.fromJson}($jsonValue$asType)'}';
+        final fromJsonCallFallback = fromJsonRetTypeNullable && hasDefaultValue ? ' ?? $defaultValue' : '';
+        value =
+            '${field.isNullable ? '$jsonValue == null ? ${defaultValue ?? 'null'} : ' : ''}${'${key.fromJson}($jsonValue$asType)$fromJsonCallFallback'}';
       } else {
-        value = fieldCast(field, jsonValue);
+        final nullWithDefaultValue = hasDefaultValue ? field.toNullableType() : field;
+        value = fieldCast(nullWithDefaultValue, jsonValue);
       }
 
-      if (key.defaultValue != null && field.isNullable) {
-        return '$posOrNamedField $value ?? ${key.defaultValue}';
+      if (hasDefaultValue) {
+        return '$posOrNamedField $value ?? $defaultValue';
       }
       return '$posOrNamedField $value';
     }
@@ -788,7 +800,7 @@ class DataClassMacro extends MacroGenerator {
       ..write(positionalFields.map((e) => fieldValue(e, true)).join(',\n'))
       ..write(positionalFields.isNotEmpty ? ',\n' : '')
       ..write(namedFields.map(fieldValue).join(',\n'));
-    if (positionalFields.isNotEmpty || namedFields.isNotEmpty) {
+    if (namedFields.isNotEmpty) {
       buff.write(',\n');
     }
 
@@ -901,6 +913,7 @@ class DataClassMacro extends MacroGenerator {
     required StringBuffer buff,
     required String className,
     required String ctorName,
+    required MacroClassConstructor? constructor,
     required CombinedIterableView<MacroProperty> fields,
     required List<String> typeParams,
   }) {
@@ -1071,11 +1084,21 @@ class DataClassMacro extends MacroGenerator {
     var fieldRename = config.fieldRename ?? FieldRename.none;
 
     String? fieldValue(MacroProperty field) {
-      final key = field.cacheFirstKeyTo('JsonKey', JsonKeyConfig.fromMacroKey) ?? JsonKeyConfig.defaultKey;
+      final key = field.cacheFirstKeyInto('JsonKey', JsonKeyConfig.fromMacroKey) ?? JsonKeyConfig.defaultKey;
       if (key.includeToJson == false) return null;
 
       final tag = "'${key.name?.isNotEmpty == true ? Utils.escapeQuote(key.name!) : fieldRename.renameOf(field.name)}'";
       var isNullable = field.isNullable;
+
+      final fieldInitializer = constructor?.constantInitializers?[field.name];
+      final String fieldPropName;
+
+      if (fieldInitializer != null) {
+        fieldPropName = fieldInitializer.name;
+        isNullable = fieldInitializer.isNullable;
+      } else {
+        fieldPropName = field.name;
+      }
 
       // custom toJson or fallback to builtin
       final String value;
@@ -1088,10 +1111,10 @@ class DataClassMacro extends MacroGenerator {
           );
         }
 
-        value = '${key.toJson}(v.${field.name})';
+        value = '${key.toJson}(v.$fieldPropName)';
         isNullable = key.toJsonReturnNullable == null ? isNullable : key.toJsonReturnNullable == true;
       } else {
-        value = fieldEncode(field, 'v.${field.name}');
+        value = fieldEncode(field, 'v.$fieldPropName');
       }
 
       if (isNullable) {
@@ -1245,6 +1268,7 @@ class DataClassMacro extends MacroGenerator {
     required StringBuffer buff,
     required String className,
     required String ctorName,
+    required MacroClassConstructor? constructor,
     required List<MacroProperty> positionalFields,
     required List<MacroProperty> namedFields,
     required List<String> generics,
@@ -1256,8 +1280,17 @@ class DataClassMacro extends MacroGenerator {
       return '   $type ${field.name}';
     }
 
-    String? fieldParamCopy(String name, [bool positional = false]) {
-      return '      ${positional ? '' : '$name: '}$name ?? v.$name';
+    String? fieldParamCopy(MacroProperty field, [bool positional = false]) {
+      final fieldInitializer = constructor?.constantInitializers?[field.name];
+      final String fieldPropName;
+
+      if (fieldInitializer != null) {
+        fieldPropName = fieldInitializer.name;
+      } else {
+        fieldPropName = field.name;
+      }
+
+      return '      ${positional ? '' : '${field.name}: '}${field.name} ?? v.$fieldPropName';
     }
 
     final clsWithGenericParam = generics.isNotEmpty == true ? '$className<${generics.join(',')}>' : className;
@@ -1289,7 +1322,7 @@ class DataClassMacro extends MacroGenerator {
       )
       ..write('   return $className${ctorName.isNotEmpty ? '.' : ''}$ctorName(')
       ..write(positionalFields.isEmpty ? '' : '\n')
-      ..write(positionalFields.map((e) => fieldParamCopy(e.name, true)).join(',\n'));
+      ..write(positionalFields.map((field) => fieldParamCopy(field, true)).join(',\n'));
 
     if (positionalFields.isNotEmpty) {
       buff.write(',');
@@ -1298,7 +1331,7 @@ class DataClassMacro extends MacroGenerator {
     if (namedFields.isNotEmpty) {
       buff
         ..write('\n')
-        ..write(namedFields.map((e) => fieldParamCopy(e.name)).join(',\n'))
+        ..write(namedFields.map((e) => fieldParamCopy(e)).join(',\n'))
         ..write(',\n');
     } else {
       buff.write('\n');
@@ -1360,6 +1393,7 @@ class DataClassMacro extends MacroGenerator {
     required MacroState state,
     required StringBuffer buff,
     required String className,
+    required MacroClassConstructor? constructor,
     required CombinedIterableView<MacroProperty> fields,
     required List<String> generics,
   }) {
@@ -1383,10 +1417,19 @@ class DataClassMacro extends MacroGenerator {
     buff
       ..write(
         fields
-            .map((e) {
-              return e.deepEquality == true
-                  ? '     const DeepCollectionEquality().equals(other.${e.name}, v.${e.name})'
-                  : '     (identical(other.${e.name}, v.${e.name}) || other.${e.name} == v.${e.name})';
+            .map((field) {
+              final fieldInitializer = constructor?.constantInitializers?[field.name];
+              final String fieldPropName;
+
+              if (fieldInitializer != null) {
+                fieldPropName = fieldInitializer.name;
+              } else {
+                fieldPropName = field.name;
+              }
+
+              return field.deepEquality == true
+                  ? '     const DeepCollectionEquality().equals(other.$fieldPropName, v.$fieldPropName)'
+                  : '     (identical(other.$fieldPropName, v.$fieldPropName) || other.$fieldPropName == v.$fieldPropName)';
             })
             .join(' &&\n'),
       )
@@ -1406,7 +1449,20 @@ class DataClassMacro extends MacroGenerator {
         ..write(
           fields
               .map(
-                (e) => e.deepEquality == true ? 'const DeepCollectionEquality().hash(v.${e.name})' : 'v.${e.name}',
+                (field) {
+                  final fieldInitializer = constructor?.constantInitializers?[field.name];
+                  final String fieldPropName;
+
+                  if (fieldInitializer != null) {
+                    fieldPropName = fieldInitializer.name;
+                  } else {
+                    fieldPropName = field.name;
+                  }
+
+                  return field.deepEquality == true
+                      ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
+                      : 'v.$fieldPropName';
+                },
               )
               .join(', '),
         );
@@ -1428,7 +1484,20 @@ class DataClassMacro extends MacroGenerator {
         ..write(
           fields
               .map(
-                (e) => e.deepEquality == true ? 'const DeepCollectionEquality().hash(v.${e.name})' : 'v.${e.name}',
+                (field) {
+                  final fieldInitializer = constructor?.constantInitializers?[field.name];
+                  final String fieldPropName;
+
+                  if (fieldInitializer != null) {
+                    fieldPropName = fieldInitializer.name;
+                  } else {
+                    fieldPropName = field.name;
+                  }
+
+                  return field.deepEquality == true
+                      ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
+                      : 'v.$fieldPropName';
+                },
               )
               .join(', '),
         );
@@ -1445,6 +1514,7 @@ class DataClassMacro extends MacroGenerator {
     required MacroState state,
     required String className,
     required StringBuffer buff,
+    required MacroClassConstructor? constructor,
     required CombinedIterableView<MacroProperty> fields,
     required List<String> generics,
   }) {
@@ -1458,7 +1528,18 @@ class DataClassMacro extends MacroGenerator {
         fields.isNotEmpty ? '   final v = this as $clsWithGenericParam;\n' : '',
       )
       ..write(
-        "   return '$className$genericParamAsType{${fields.map((e) => '${e.name}: \${v.${e.name}}').join(', ')}}';\n",
+        "   return '$className$genericParamAsType{${fields.map((field) {
+          late final fieldInitializer = constructor?.constantInitializers?[field.name];
+          final String fieldPropName;
+
+          if (fieldInitializer != null) {
+            fieldPropName = fieldInitializer.name;
+          } else {
+            fieldPropName = field.name;
+          }
+
+          return '${field.name}: \${v.$fieldPropName}';
+        }).join(', ')}}';\n",
       )
       ..write(' }\n');
   }

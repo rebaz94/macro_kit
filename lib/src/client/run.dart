@@ -15,8 +15,8 @@ const bool _kDebugMode = !_kReleaseMode && !_kProfileMode;
 /// This function initializes the macro system, connects to the macro server,
 /// and optionally watches asset directories for changes to trigger regeneration.
 ///
-/// Returns immediately if disabled.
-Future<void> runMacro({
+/// Return the client id if successful or null if disabled.
+Future<int?> runMacro({
   /// Map of macro names to their initialization functions.
   ///
   /// Each key is a unique macro name, and each value is a function that
@@ -90,7 +90,7 @@ Future<void> runMacro({
   /// Default: `true` in debug mode, `false` in release mode
   bool enabled = _kDebugMode,
 }) async {
-  if (!enabled) return;
+  if (!enabled) return null;
 
   final logger = MacroLogger.createLogger(name: 'MacroManager', into: log, level: logLevel);
   final manager = MacroManager(
@@ -104,4 +104,5 @@ Future<void> runMacro({
   );
 
   manager.connect();
+  return manager.clientId;
 }

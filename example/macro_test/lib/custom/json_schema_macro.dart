@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_core.dart';
 
 export 'package:json_schema_builder/json_schema_builder.dart';
 

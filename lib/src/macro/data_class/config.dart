@@ -1,6 +1,5 @@
 import 'package:change_case/change_case.dart';
 import 'package:macro_kit/macro.dart';
-import 'package:macro_kit/src/analyzer/types_ext.dart';
 import 'package:meta/meta.dart';
 
 /// An annotation used to specify how a field is serialized.
@@ -140,81 +139,6 @@ class JsonKeyConfig {
 
   static const defaultKey = JsonKeyConfig();
 
-  static String toLiteralValue(Object? prop, {Map<String, List<MacroClassConstructor>>? types}) {
-    if (prop is MacroProperty) {
-      if (prop.requireConversionToLiteral == true) {
-        if (prop.typeInfo == TypeInfo.clazz) {
-          return clazzToLiteral(prop, types);
-        }
-      }
-
-      if (prop.typeInfo == TypeInfo.enumData) {
-        return prop.asStringConstantValue() ?? '';
-      }
-
-      return jsonLiteralAsDart(prop.constantValue);
-    }
-
-    return jsonLiteralAsDart(prop);
-  }
-
-  static String clazzToLiteral(MacroProperty prop, Map<String, List<MacroClassConstructor>>? types) {
-    final config = prop.constantValue;
-    if (config is! Map<String, dynamic>) return '';
-
-    types ??= {};
-    final constructors = types[prop.type] ?? prop.classInfo?.constructors ?? const [];
-    types[prop.type] = constructors;
-
-    final constantConstructor = config['__constructor__'] as String? ?? '';
-    var constructor = constructors.firstWhereOrNull((e) => e.constructorName == constantConstructor);
-    // if no constructor fallback to the first one with const(maybe fails at compile time)
-    constructor ??= constructors.firstWhereOrNull((e) => e.modifier.isGenerative || e.modifier.isConst);
-
-    // still null, return raw data as literal
-    if (constructor == null) {
-      return jsonLiteralAsDart(config);
-    }
-
-    final str = StringBuffer('const ${prop.type}(');
-    bool needComma = false;
-    for (final field in constructor.positionalFields) {
-      if (needComma) {
-        str.write(', ');
-      }
-      final value = config[field.name];
-      final literal = toLiteralValue(value, types: types);
-      str.write(literal);
-      needComma = true;
-    }
-
-    if (constructor.namedFields.isNotEmpty) {
-      if (constructor.positionalFields.isEmpty) {
-        str.write('{');
-      } else {
-        str.write(',{ ');
-      }
-    }
-
-    needComma = false;
-    for (final field in constructor.namedFields) {
-      if (needComma) {
-        str.write(', ');
-      }
-      final value = config[field.name];
-      final literal = toLiteralValue(value, types: types);
-      str.write('${field.name}: $literal');
-      needComma = true;
-    }
-
-    if (constructor.namedFields.isNotEmpty) {
-      str.write('}');
-    }
-
-    str.write(')');
-    return str.toString();
-  }
-
   static JsonKeyConfig fromMacroKey(MacroKey key) {
     final props = Map.fromEntries(key.properties.map((e) => MapEntry(e.name, e)));
 
@@ -277,7 +201,7 @@ class JsonKeyConfig {
     }
 
     return JsonKeyConfig(
-      defaultValue: props.containsKey('defaultValue') ? toLiteralValue(props['defaultValue']!) : null,
+      defaultValue: props.containsKey('defaultValue') ? MacroProperty.toLiteralValue(props['defaultValue']!) : null,
       fromJson: fromJson,
       fromJsonArgType: fromJsonArgType,
       fromJsonReturnType: fromJsonReturnType,

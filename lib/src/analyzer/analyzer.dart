@@ -1,9 +1,11 @@
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/element/element.dart';
 import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/analyze_class.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
+import 'package:macro_kit/src/analyzer/types_ext.dart';
 
 abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
   MacroAnalyzer({required super.logger});
@@ -29,7 +31,7 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
     analysisContext.changeFile(path);
 
     await analysisContext.applyPendingFileChanges();
-    final session = analysisContext.currentSession;
+    final session = currentSession = analysisContext.currentSession;
 
     final mayContainMacro = mayContainsMacroCache.contains(path);
     // check content of the file only when already if we don't know yet contain macro or not
@@ -54,11 +56,26 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
     // step:1 analyze the code
     var containsMacro = false;
     for (final declaration in analysisResult.unit.declarations) {
-      if (declaration is ClassDeclaration && declaration.declaredFragment != null) {
-        final macroClass = parseClass(declaration.declaredFragment!);
-        if (macroClass != null) {
-          containsMacro = true;
-        }
+      final decFrag = declaration.declaredFragment;
+      if (decFrag == null) continue;
+
+      MacroClassDeclaration? macroClass;
+      switch (declaration) {
+        case ClassDeclaration() when decFrag is ClassFragment:
+          macroClass = await parseClass(decFrag);
+        case GenericTypeAlias() when decFrag.element is TypeAliasElement:
+          final typeAliasElem = (decFrag.element as TypeAliasElement);
+          if (typeAliasElem.aliasedType.element?.firstFragment case ClassFragment classFrag) {
+            macroClass = await parseClass(
+              classFrag,
+              typeAliasAnnotation: decFrag.metadata.annotations,
+              typeAliasClassName: decFrag.name,
+            );
+          }
+      }
+
+      if (macroClass != null) {
+        containsMacro = true;
       }
     }
     if (!containsMacro) {
@@ -66,7 +83,7 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
     }
 
     // step:2 get pending class sub types
-    collectClassSubTypes(pendingClassRequiredSubTypes, analysisResult.libraryFragment);
+    await collectClassSubTypes(pendingClassRequiredSubTypes, analysisResult.libraryFragment);
 
     // step:3 get any class that used more than once from iteration cache
     //        and use it as shared class declaration to automatically assign prepared data by class id
@@ -74,10 +91,22 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
     for (final entry in iterationCaches.entries) {
       final key = entry.key;
       final value = entry.value;
-      final classVal = entry.value.value;
+      var classVal = entry.value.value;
       if (!key.startsWith('classDec') || value.count < 1 || classVal is! MacroClassDeclaration) continue;
 
+      if (classVal.configs.length > 1) {
+        classVal = classVal.copyWith(configs: classVal.configs.uniqueBy((k) => k.key.name));
+      }
+
       sharedClasses[classVal.classId] = classVal;
+    }
+
+    for (final entry in macroAnalyzeResult.entries) {
+      for (final (i, cls) in entry.value.classes.indexed) {
+        if (cls.configs.length <= 1) continue;
+
+        entry.value.classes[i] = cls.copyWith(configs: cls.configs.uniqueBy((v) => v.key.name));
+      }
     }
 
     // step:4 run macro
