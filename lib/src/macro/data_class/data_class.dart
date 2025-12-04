@@ -1437,7 +1437,8 @@ class DataClassMacro extends MacroGenerator {
       ..write(' }\n\n');
 
     /// generate hash
-    if (fields.isNotEmpty && fields.length <= 20) {
+    // Object.hash supports max 20 params, but we also include runtimeType, so max 19 fields
+    if (fields.isNotEmpty && fields.length <= 19) {
       buff
         ..write(' @override\n')
         ..write(' int get hashCode {\n')
