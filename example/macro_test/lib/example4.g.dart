@@ -264,7 +264,7 @@ mixin ApiResponseData<T> {
     };
   }
 
-  ApiResponse copyWith({
+  ApiResponse<T> copyWith({
     String? status,
     int? code,
     DateTime? timestamp,
@@ -272,7 +272,7 @@ mixin ApiResponseData<T> {
     T? data,
   }) {
     final v = this as ApiResponse<T>;
-    return ApiResponse(
+    return ApiResponse<T>(
       status: status ?? v.status,
       code: code ?? v.code,
       timestamp: timestamp ?? v.timestamp,
@@ -334,14 +334,14 @@ mixin PaginatedData<T> {
     };
   }
 
-  Paginated copyWith({
+  Paginated<T> copyWith({
     List<T>? items,
     int? totalCount,
     int? page,
     int? pageSize,
   }) {
     final v = this as Paginated<T>;
-    return Paginated(
+    return Paginated<T>(
       items: items ?? v.items,
       totalCount: totalCount ?? v.totalCount,
       page: page ?? v.page,
@@ -1670,7 +1670,7 @@ mixin RepoFullData {
     );
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson(Object? Function(Issue v) toJsonIssues) {
     final v = this as RepoFull;
     return <String, dynamic>{
       'repository': v.repository.toJson(),

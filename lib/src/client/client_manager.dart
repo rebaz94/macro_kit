@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:collection/collection.dart';
 import 'package:macro_kit/macro.dart';
-import 'package:macro_kit/src/analyzer/logger.dart';
-import 'package:macro_kit/src/analyzer/macro_server.dart';
-import 'package:macro_kit/src/analyzer/models.dart';
-import 'package:macro_kit/src/analyzer/watch_file_request.dart';
-import 'package:macro_kit/src/plugin/server_client.dart';
+import 'package:macro_kit/src/common/common.dart';
+import 'package:macro_kit/src/common/logger.dart';
+import 'package:macro_kit/src/common/models.dart';
+import 'package:macro_kit/src/common/watch_file_request.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart' as sync;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -40,8 +40,8 @@ class MacroManager {
   /// A cache of generator keyed by hash of the json that build MacroGenerator instance
   final Map<int, MacroGenerator> _generatorCaches = {};
   final _mapStrDynamicTypeArg = [
-    MacroProperty(name: '', type: 'String', typeInfo: TypeInfo.string),
-    MacroProperty(name: '', type: 'dynamic', typeInfo: TypeInfo.dynamic),
+    MacroProperty(name: '', importPrefix: '', type: 'String', typeInfo: TypeInfo.string, fieldInitializer: null),
+    MacroProperty(name: '', importPrefix: '', type: 'dynamic', typeInfo: TypeInfo.dynamic, fieldInitializer: null),
   ];
 
   ConnectionStatus _status = ConnectionStatus.disconnected;
@@ -229,6 +229,9 @@ class MacroManager {
             macro: macroConfig.key,
             remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
             targetType: TargetType.clazz,
+            importPrefix: declaration.importPrefix,
+            imports: message.imports,
+            libraryPaths: message.libraryPaths,
             targetName: declaration.className,
             modifier: declaration.modifier,
             isCombingGenerator: firstMacroApplied && isCombiningGenCode,
@@ -252,8 +255,8 @@ class MacroManager {
             await switch ((hasMultipleMetadata, cap.filterClassStaticFields, cap.filterClassInstanceFields)) {
               (_, false, false) => Future.value(),
               (false, _, _) || (_, true, true) => generator.onClassFields(state, fields),
-              (_, false, true) => generator.onClassFields(state, fields.where((e) => !e.modifier.isStatic).toList()),
-              (_, true, false) => generator.onClassFields(state, fields.where((e) => e.modifier.isStatic).toList()),
+              (_, false, true) => generator.onClassFields(state, fields.where((e) => !e.isStatic).toList()),
+              (_, true, false) => generator.onClassFields(state, fields.where((e) => e.isStatic).toList()),
             };
           }
 
@@ -347,10 +350,12 @@ class MacroManager {
           properties: [
             MacroProperty(
               name: 'config',
+              importPrefix: '',
               type: 'Map<String, dynamic>',
               typeInfo: TypeInfo.map,
               typeArguments: _mapStrDynamicTypeArg,
               constantValue: message.assetConfig,
+              fieldInitializer: null,
             ),
           ],
         ),
@@ -370,6 +375,9 @@ class MacroManager {
         macro: macroConfig.key,
         remainingMacro: const [],
         targetType: TargetType.asset,
+        importPrefix: '',
+        imports: message.imports,
+        libraryPaths: message.libraryPaths,
         targetName: declaration.name,
         modifier: MacroModifier(const {}),
         isCombingGenerator: false,

@@ -3,14 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart';
-import 'package:macro_kit/src/analyzer/logger.dart';
-import 'package:macro_kit/src/analyzer/macro_server.dart';
-import 'package:macro_kit/src/analyzer/models.dart';
-import 'package:macro_kit/src/analyzer/watch_file_request.dart';
+import 'package:macro_kit/src/common/common.dart';
+import 'package:macro_kit/src/common/logger.dart';
+import 'package:macro_kit/src/common/models.dart';
+import 'package:macro_kit/src/common/watch_file_request.dart';
 import 'package:path/path.dart' as p;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-enum ConnectionStatus { connecting, connected, disconnected }
 
 abstract class MacroServerListener {
   void reconnectToServer({bool forceStart = false});

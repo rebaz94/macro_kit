@@ -21,7 +21,7 @@ enum Brand { Toyota, Audi, BMW }
 class Car with CarData {
   final double miles;
 
-  @JsonKey(unknownEnumValue: Brand.Audi)
+  @JsonKey(unknownEnumValue: EnumValue(Brand.Audi))
   final Brand brand;
 
   const Car(int drivenKm, this.brand) : miles = drivenKm * 0.62;

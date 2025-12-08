@@ -124,6 +124,8 @@ class RunMacroMsg implements Message {
   RunMacroMsg({
     required this.id,
     required this.macroName,
+    required this.imports,
+    required this.libraryPaths,
     this.sharedClasses = const {},
     this.classes,
     this.assetDeclaration,
@@ -169,6 +171,10 @@ class RunMacroMsg implements Message {
     return RunMacroMsg(
       id: (json['id'] as num).toInt(),
       macroName: json['name'] as String,
+      imports: (json['imports'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as String)),
+      libraryPaths: (json['libraryPaths'] as Map<String, dynamic>).map(
+        (k, v) => MapEntry(num.parse(k).toInt(), v as String),
+      ),
       sharedClasses: sharedDec,
       classes: classesRes,
       assetDeclaration: json['asset'] != null
@@ -186,6 +192,13 @@ class RunMacroMsg implements Message {
 
   /// Name of the macro to run
   final String macroName;
+
+  /// Map of imports from the analyzed file, where the key is the import path
+  /// and the value is the import prefix (if any)
+  final Map<String, String> imports;
+
+  /// Map of library IDs to their full file paths for target declarations
+  final Map<int, String> libraryPaths;
 
   /// The shared classes by id which seen multiple times in analysis
   final Map<String, MacroClassDeclaration> sharedClasses;
@@ -216,6 +229,8 @@ class RunMacroMsg implements Message {
     return {
       'id': id,
       'name': macroName,
+      'imports': imports,
+      'libraryPaths': libraryPaths.map((k, v) => MapEntry(k.toString(), v)),
       if (sharedClasses.isNotEmpty) 'sharedClasses': sharedClasses.map((k, v) => MapEntry(k, v.toJson())),
       if (classes?.isNotEmpty == true) 'classes': classes!.map((e) => e.toJson()).toList(),
       if (assetDeclaration != null) 'asset': assetDeclaration!.toJson(),

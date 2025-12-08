@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:macro_kit/macro_core.dart';
+import 'package:macro_kit/macro.dart';
 
 export 'package:flutter/foundation.dart' show ValueNotifier;
 

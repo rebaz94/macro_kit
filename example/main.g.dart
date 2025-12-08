@@ -106,13 +106,32 @@ mixin AnimalData {
     };
   }
 
-  Animal copyWithBy({Cat Function(Cat value)? cat, Cow Function(Cow value)? cow, Dog Function(Dog value)? dog}) {
+  Animal copyWithBy({
+    Cat Function(Cat value)? cat,
+    Cow Function(Cow value)? cow,
+    Dog Function(Dog value)? dog,
+  }) {
     return switch (this) {
       Cat v => cat != null ? cat(v) : v.copyWith(),
       Cow v => cow != null ? cow(v) : v.copyWith(),
       Dog v => dog != null ? dog(v) : v.copyWith(),
       _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for Animal.'),
     };
+  }
+
+  @pragma('vm:prefer-inline')
+  Cat asCat() {
+    return this as Cat;
+  }
+
+  @pragma('vm:prefer-inline')
+  Cow asCow() {
+    return this as Cow;
+  }
+
+  @pragma('vm:prefer-inline')
+  Dog asDog() {
+    return this as Dog;
   }
 }
 
@@ -127,9 +146,9 @@ mixin CatData {
   Map<String, dynamic> toJson() {
     final v = this as Cat;
     return <String, dynamic>{
-      'type': 'Cat',
       'nickName': v.nickName,
       'name': v.name,
+      'type': 'Cat',
     };
   }
 
@@ -182,9 +201,9 @@ mixin DogData {
   Map<String, dynamic> toJson() {
     final v = this as Dog;
     return <String, dynamic>{
-      'type': 'its_dog',
       'big': v.big,
       'name': v.name,
+      'type': 'its_dog',
     };
   }
 
@@ -237,9 +256,9 @@ mixin CowData {
   Map<String, dynamic> toJson() {
     final v = this as Cow;
     return <String, dynamic>{
-      'type': 'bow',
       'big': v.big,
       'name': v.name,
+      'type': 'bow',
     };
   }
 

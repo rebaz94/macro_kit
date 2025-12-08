@@ -6,16 +6,16 @@ final class AssetPaths {
 
   static const butterfly = 'assets/butterfly.jpg';
 
-  static const _Images images = _Images._();
+  static const images = _Images._();
 }
 
 final class _Images {
   const _Images._();
 
-  static const flutterVal = 'assets/images/flutter.jpg';
+  static const _flutterVal = 'assets/images/flutter.jpg';
 
-  String get flutter => flutterVal;
-  static const dartVal = 'assets/images/dart.svg';
+  String get flutter => _flutterVal;
+  static const _dartVal = 'assets/images/dart.svg';
 
-  String get dart => dartVal;
+  String get dart => _dartVal;
 }

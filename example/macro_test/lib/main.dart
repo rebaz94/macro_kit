@@ -21,10 +21,7 @@ void main() async {
           macroName: 'AssetPathMacro',
           extension: '*',
           output: 'lib',
-          config: const AssetPathConfig(
-            extension: '*',
-            rename: FieldRename.camelCase,
-          ).toJson(),
+          config: const AssetPathConfig().toJson(),
         ),
       ],
     },

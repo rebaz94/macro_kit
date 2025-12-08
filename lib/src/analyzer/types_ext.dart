@@ -4,6 +4,8 @@ import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/src/analyzer/internal_models.dart';
+import 'package:macro_kit/src/core/core.dart';
 import 'package:source_helper/source_helper.dart' show escapeDartString;
 
 extension ExecutableElementExtension on ExecutableElement {
@@ -123,13 +125,38 @@ extension DartObjectExt on DartObject {
       );
     } else if (type.element?.kind == ElementKind.CLASS) {
       final classElement = type.element! as ClassElement;
+      final imports = getZoneAnalysisImports();
       final classConfig = <String, dynamic>{
-        '__constructor__': classElement.constructors.firstWhereOrNull((e) => e.isGenerative || e.isConst)?.name,
+        '__type__': classElement.firstFragment.element.name?.removedNullability ?? '',
+        '__import__': imports?[classElement] ?? '',
       };
 
+      // use constant constructor to reconstruct the type
+      if (constructorInvocation != null) {
+        final positionalArgs = <Object?>[];
+        final namedArgs = <String, Object?>{};
+        for (final (i, arg) in constructorInvocation!.positionalArguments.indexed) {
+          positionalArgs.add(arg.literalForObject('argPos$i', typeInformation));
+        }
+
+        for (final entry in constructorInvocation!.namedArguments.entries) {
+          namedArgs[entry.key] = entry.value.literalForObject(entry.key, typeInformation);
+        }
+
+        classConfig['__use_ctor__'] = constructorInvocation!.constructor.name;
+        classConfig['__pos_args__'] = positionalArgs;
+        classConfig['__named_args__'] = namedArgs;
+        return classConfig;
+      }
+
+      // fallback to get all value from class
+      classConfig['__ctor__'] = classElement.constructors
+          .where((e) => e.isGenerative || e.isConst)
+          .map((e) => '${e.name}:${e.formalParameters.length}')
+          .toList();
+
       for (final field in classElement.fields) {
-        // final jsonKeyElem = field.metadata.annotations.firstWhereOrNull((e) => e.element?.displayName == 'JsonKey');
-        // final jsonKey = jsonKeyElem?.computeConstantValue()?.peek('name')?.toStringValue();
+        if (field.isPrivate || field.isStatic || field.isExternal) continue;
 
         final fieldName = field.name ?? '';
         final obj = peek(fieldName);
@@ -138,7 +165,10 @@ extension DartObjectExt on DartObject {
           classElement.displayName,
         ]);
       }
+
       return classConfig;
+    } else if (type.element case EnumElement v) {
+      return '${v.name}.${variable!.name}';
     }
 
     badType = typeInformation.followedBy(['$this']).join(' > ');
@@ -199,7 +229,7 @@ String _jsonMapAsDart(Map value) {
       buffer.writeln(',');
     }
     buffer
-      ..write(escapeDartString(jsonLiteralAsDart(k)))
+      ..write(jsonLiteralAsDart(k))
       ..write(': ')
       ..write(jsonLiteralAsDart(v));
   });

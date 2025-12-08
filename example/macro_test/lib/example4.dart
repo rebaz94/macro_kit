@@ -288,7 +288,7 @@ class Permissions with PermissionsData {
 /// ----------------- Repository & related -----------------
 
 @dataClassMacro
-class Repository with RepoFullData {
+class Repository with RepositoryData {
   @JsonKey(name: 'id')
   final int id;
 

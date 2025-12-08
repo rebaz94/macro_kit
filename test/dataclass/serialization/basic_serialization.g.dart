@@ -2,6 +2,60 @@
 
 part of 'basic_serialization.dart';
 
+mixin SomeConstData {
+  static SomeConst fromJson(Map<String, dynamic> json) {
+    return SomeConst(
+      json['name'] as String,
+      value: (json['value'] as num).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as SomeConst;
+    return <String, dynamic>{
+      'name': v.name,
+      'value': v.value,
+    };
+  }
+
+  SomeConst copyWith({
+    String? name,
+    int? value,
+  }) {
+    final v = this as SomeConst;
+    return SomeConst(
+      name ?? v.name,
+      value: value ?? v.value,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as SomeConst;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is SomeConst &&
+            (identical(other.name, v.name) || other.name == v.name) &&
+            (identical(other.value, v.value) || other.value == v.value));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as SomeConst;
+    return Object.hash(
+      runtimeType,
+      v.name,
+      v.value,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as SomeConst;
+    return 'SomeConst{name: ${v.name}, value: ${v.value}}';
+  }
+}
+
 mixin AData {
   static A fromJson(Map<String, dynamic> json) {
     return A(
@@ -10,6 +64,18 @@ mixin AData {
       c: (json['c'] as num?)?.toDouble(),
       d: json['d'] as bool,
       e: MacroExt.decodeNullableEnum(B.values, json['e'], unknownValue: null),
+      f: json['f'] as String? ?? "a \\' name",
+      map:
+          (json['map'] as Map<String, dynamic>?)?.map((k, e) => MapEntry(k, (e as num).toInt())) ??
+          const {"a ^ ' name": 1},
+      set1: (json['set1'] as List<dynamic>?)?.map((e) => (e as num).toInt()).toSet() ?? const {1, 2, 3},
+      set2: (json['set2'] as List<dynamic>).map((e) => (e as num).toInt()).toSet(),
+      someConst: json['someConst'] == null
+          ? const SomeConst('hello', value: 3)
+          : SomeConstData.fromJson(json['someConst'] as Map<String, dynamic>),
+      someConst2: json['someConst2'] == null
+          ? const SomeConst('hello', value: 3)
+          : SomeConstData.fromJson(json['someConst2'] as Map<String, dynamic>),
     );
   }
 
@@ -21,6 +87,12 @@ mixin AData {
       'c': ?v.c,
       'd': v.d,
       'e': ?v.e?.name,
+      'f': ?v.f,
+      'map': v.map,
+      'set1': v.set1.map((e) => e).toList(),
+      'set2': v.set2.map((e) => e).toList(),
+      'someConst': v.someConst.toJson(),
+      'someConst2': ?v.someConst2?.toJson(),
     };
   }
 
@@ -30,6 +102,12 @@ mixin AData {
     double? c,
     bool? d,
     B? e,
+    String? f,
+    Map<String, int>? map,
+    Set<int>? set1,
+    Set<int>? set2,
+    SomeConst? someConst,
+    SomeConst? someConst2,
   }) {
     final v = this as A;
     return A(
@@ -38,6 +116,12 @@ mixin AData {
       c: c ?? v.c,
       d: d ?? v.d,
       e: e ?? v.e,
+      f: f ?? v.f,
+      map: map ?? v.map,
+      set1: set1 ?? v.set1,
+      set2: set2 ?? v.set2,
+      someConst: someConst ?? v.someConst,
+      someConst2: someConst2 ?? v.someConst2,
     );
   }
 
@@ -51,7 +135,13 @@ mixin AData {
             (identical(other.b, v.b) || other.b == v.b) &&
             (identical(other.c, v.c) || other.c == v.c) &&
             (identical(other.d, v.d) || other.d == v.d) &&
-            (identical(other.e, v.e) || other.e == v.e));
+            (identical(other.e, v.e) || other.e == v.e) &&
+            (identical(other.f, v.f) || other.f == v.f) &&
+            const DeepCollectionEquality().equals(other.map, v.map) &&
+            const DeepCollectionEquality().equals(other.set1, v.set1) &&
+            const DeepCollectionEquality().equals(other.set2, v.set2) &&
+            (identical(other.someConst, v.someConst) || other.someConst == v.someConst) &&
+            (identical(other.someConst2, v.someConst2) || other.someConst2 == v.someConst2));
   }
 
   @override
@@ -64,12 +154,121 @@ mixin AData {
       v.c,
       v.d,
       v.e,
+      v.f,
+      const DeepCollectionEquality().hash(v.map),
+      const DeepCollectionEquality().hash(v.set1),
+      const DeepCollectionEquality().hash(v.set2),
+      v.someConst,
+      v.someConst2,
     );
   }
 
   @override
   String toString() {
     final v = this as A;
-    return 'A{a: ${v.a}, b: ${v.b}, c: ${v.c}, d: ${v.d}, e: ${v.e}}';
+    return 'A{a: ${v.a}, b: ${v.b}, c: ${v.c}, d: ${v.d}, e: ${v.e}, f: ${v.f}, map: ${v.map}, set1: ${v.set1}, set2: ${v.set2}, someConst: ${v.someConst}, someConst2: ${v.someConst2}}';
+  }
+}
+
+mixin ClassAData {
+  static ClassA fromJson(Map<String, dynamic> json) {
+    return ClassA(
+      (json['someVariable'] as Map<String, dynamic>).map(
+        (k, e) => MapEntry(MacroExt.decodeEnum(EnumA.values, k, unknownValue: null), e as bool),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as ClassA;
+    return <String, dynamic>{
+      'someVariable': v.someVariable.map((k, e) => MapEntry(k.name, e)),
+    };
+  }
+
+  ClassA copyWith({
+    Map<EnumA, bool>? someVariable,
+  }) {
+    final v = this as ClassA;
+    return ClassA(
+      someVariable ?? v.someVariable,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as ClassA;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is ClassA &&
+            const DeepCollectionEquality().equals(other.someVariable, v.someVariable));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as ClassA;
+    return Object.hash(
+      runtimeType,
+      const DeepCollectionEquality().hash(v.someVariable),
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as ClassA;
+    return 'ClassA{someVariable: ${v.someVariable}}';
+  }
+}
+
+mixin ClassBData {
+  static ClassB fromJson(Map<String, dynamic> json) {
+    return ClassB(
+      (json['someVariable'] as Map<String, dynamic>).map(
+        (k, e) => MapEntry(
+          MacroExt.decodeEnum(EnumA.values, k, unknownValue: null),
+          MacroExt.decodeNullableEnum(EnumB.values, e, unknownValue: null),
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as ClassB;
+    return <String, dynamic>{
+      'someVariable': v.someVariable.map((k, e) => MapEntry(k.name, e?.name)),
+    };
+  }
+
+  ClassB copyWith({
+    Map<EnumA, EnumB?>? someVariable,
+  }) {
+    final v = this as ClassB;
+    return ClassB(
+      someVariable ?? v.someVariable,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as ClassB;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is ClassB &&
+            const DeepCollectionEquality().equals(other.someVariable, v.someVariable));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as ClassB;
+    return Object.hash(
+      runtimeType,
+      const DeepCollectionEquality().hash(v.someVariable),
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as ClassB;
+    return 'ClassB{someVariable: ${v.someVariable}}';
   }
 }

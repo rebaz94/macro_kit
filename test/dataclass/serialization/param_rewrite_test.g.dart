@@ -79,13 +79,13 @@ mixin BData {
   }
 
   B copyWith({
-    int? a,
     int? b,
+    int? a,
   }) {
     final v = this as B;
     return B(
-      a ?? v.b,
-      b ?? v.a,
+      b ?? v.b,
+      a ?? v.a,
     );
   }
 

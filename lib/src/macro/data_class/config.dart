@@ -1,4 +1,4 @@
-import 'package:change_case/change_case.dart';
+import 'package:collection/collection.dart';
 import 'package:macro_kit/macro.dart';
 import 'package:meta/meta.dart';
 
@@ -107,31 +107,61 @@ class JsonKey {
   /// Values returned by [toJson] should "round-trip" through [fromJson].
   final Function? toJson;
 
-  /// The value to use for an enum field when the value provided is not in the
-  /// source enum.
+  /// The default value(s) to use when an enum value is not recognized during deserialization.
   ///
-  /// Valid only on enum fields with a compatible enum value.
-  final Enum? unknownEnumValue;
+  /// Valid only on enum fields. Use [EnumValue(myEnum)] for a single enum type, or
+  /// [EnumValue.values([enum1, enum2])] when working with complex generic types containing
+  /// multiple different enum types (e.g., `Map<Enum1, Enum2>`). For multiple enums, the order
+  /// in the list should match the order they appear in the type definition.
+  final EnumValue? unknownEnumValue;
 
   /// Determine an nullable field must have a `required` keyword when generating a constructor
   /// note: this field is not been used until augment became stable
   final bool? asRequired;
 }
 
+/// Represents a default enum value or multiple enum values for handling unknown cases.
+///
+/// Use the default constructor [EnumValue()] for a single enum type.
+/// Use [EnumValue.values()] when working with complex generic types that contain
+/// multiple different enum types (e.g., `Map<Enum1, Enum2>`), where the order
+/// of enums in the list should match their order in the type definition.
+class EnumValue {
+  const EnumValue._(this.value) : values = null;
+
+  const EnumValue.__(this.values) : value = null;
+
+  /// Creates an enum value wrapper for a single enum.
+  const factory EnumValue(Enum value) = EnumValue._;
+
+  /// Creates an enum value wrapper for a single enum.
+  const factory EnumValue.value(Enum value) = EnumValue._;
+
+  /// Creates an enum value wrapper for multiple enums in complex generic types.
+  ///
+  /// The order of enums in the list should match the order they appear in the
+  /// type definition. For example, with `Map<Enum1, Enum2>`, provide
+  /// `[defaultEnum1, defaultEnum2]`.
+  const factory EnumValue.of(List<Enum> value) = EnumValue.__;
+
+  /// Single enum value for simple cases.
+  final Enum? value;
+
+  /// Multiple enum values for complex generic types with multiple enum parameters.
+  final List<Enum>? values;
+}
+
 @internal
 class JsonKeyConfig {
   const JsonKeyConfig({
     this.defaultValue,
-    this.fromJson,
-    this.fromJsonArgType,
-    this.fromJsonReturnType,
+    this.fromJsonProp,
     this.includeFromJson,
     this.includeIfNull,
     this.includeToJson,
     this.name,
-    this.readValue,
-    this.toJson,
-    this.toJsonArgType,
+    this.readValueProp,
+    this.toJsonProp,
     this.toJsonReturnNullable,
     this.unknownEnumValue,
     this.asRequired,
@@ -143,10 +173,9 @@ class JsonKeyConfig {
     final props = Map.fromEntries(key.properties.map((e) => MapEntry(e.name, e)));
 
     final fromJsonProp = props['fromJson'];
-    String? fromJson, fromJsonArgType, fromJsonReturnType;
 
     if (fromJsonProp != null) {
-      if (fromJsonProp.typeInfo != TypeInfo.function || !fromJsonProp.modifier.isStatic) {
+      if (fromJsonProp.typeInfo != TypeInfo.function || !fromJsonProp.isStatic) {
         throw MacroException(
           'The provided JsonKey.fromJson must be a static function but got: ${fromJsonProp.constantValue}',
         );
@@ -156,17 +185,13 @@ class JsonKeyConfig {
           'The provided JsonKey.fromJson must be a static function with one argument and return but got: ${fromJsonProp.constantValue}',
         );
       }
-      fromJson = fromJsonProp.asStringConstantValue();
-      fromJsonArgType = fromJsonProp.functionTypeInfo!.params.first.type;
-      fromJsonReturnType = fromJsonProp.functionTypeInfo!.returns.first.type;
     }
 
     final toJsonProp = props['toJson'];
-    String? toJson, toJsonArgType;
     bool? toJsonReturnNullable;
 
     if (toJsonProp != null) {
-      if (toJsonProp.typeInfo != TypeInfo.function || !toJsonProp.modifier.isStatic) {
+      if (toJsonProp.typeInfo != TypeInfo.function || !toJsonProp.isStatic) {
         throw MacroException(
           'The provided JsonKey.toJson must be a static function but got: ${toJsonProp.constantValue}',
         );
@@ -176,16 +201,15 @@ class JsonKeyConfig {
           'The provided JsonKey.toJson must be a static function with one argument and return but got: ${toJsonProp.constantValue}',
         );
       }
-      toJson = toJsonProp.asStringConstantValue();
-      toJsonArgType = toJsonProp.functionTypeInfo!.params.first.type;
+
       toJsonReturnNullable = toJsonProp.functionTypeInfo!.returns.first.modifier.isNullable ? true : null;
     }
 
     final readValueProp = props['readValue'];
-    String? readValue;
+    final unknownEnumValue = props['unknownEnumValue']?.constantValue;
 
     if (readValueProp != null) {
-      if (readValueProp.typeInfo != TypeInfo.function || !readValueProp.modifier.isStatic) {
+      if (readValueProp.typeInfo != TypeInfo.function || !readValueProp.isStatic) {
         throw MacroException(
           'The provided JsonKey.readValue must be a static function but got: ${readValueProp.constantValue}',
         );
@@ -197,112 +221,58 @@ class JsonKeyConfig {
           'The provided JsonKey.readValue must be a static function with two argument(Map obj, String key) and a return value but got: ${readValueProp.constantValue}',
         );
       }
-      readValue = readValueProp.asStringConstantValue();
     }
 
+    final defaultValue = props['defaultValue'];
+
     return JsonKeyConfig(
-      defaultValue: props.containsKey('defaultValue') ? MacroProperty.toLiteralValue(props['defaultValue']!) : null,
-      fromJson: fromJson,
-      fromJsonArgType: fromJsonArgType,
-      fromJsonReturnType: fromJsonReturnType,
+      defaultValue: defaultValue != null ? MacroProperty.toLiteralValue(defaultValue) : null,
+      fromJsonProp: fromJsonProp,
       includeFromJson: props['includeFromJson']?.asBoolConstantValue(),
       includeIfNull: props['includeIfNull']?.asBoolConstantValue(),
       includeToJson: props['includeToJson']?.asBoolConstantValue(),
       name: props['name']?.asStringConstantValue(),
-      readValue: readValue,
-      toJson: toJson,
-      toJsonArgType: toJsonArgType,
+      readValueProp: readValueProp,
+      toJsonProp: toJsonProp,
       toJsonReturnNullable: toJsonReturnNullable,
-      unknownEnumValue: props['unknownEnumValue']?.asStringConstantValue(),
+      unknownEnumValue: unknownEnumValue is Map
+          ? unknownEnumValuesFromJson(unknownEnumValue as Map<String, dynamic>)
+          : null,
       asRequired: props['asRequired']?.asBoolConstantValue(),
     );
   }
 
+  /// Parse encoded constant [EnumValue] type into a list
+  static List<String>? unknownEnumValuesFromJson(Map<String, dynamic> json) {
+    final value = json['value'] as String?;
+    if (value != null) {
+      return [value];
+    }
+
+    return (json['values'] as List?)?.map((e) => e as String).toList();
+  }
+
   final String? defaultValue;
-  final String? fromJson;
-  final String? fromJsonArgType;
-  final String? fromJsonReturnType;
+  final MacroProperty? fromJsonProp;
   final bool? includeFromJson;
   final bool? includeIfNull;
   final bool? includeToJson;
   final String? name;
-  final String? readValue;
-  final String? toJson;
-  final String? toJsonArgType;
+  final MacroProperty? readValueProp;
+  final MacroProperty? toJsonProp;
   final bool? toJsonReturnNullable;
-  final String? unknownEnumValue;
+  final List<String>? unknownEnumValue;
   final bool? asRequired;
 }
 
-/// Defines naming conventions for transforming field names.
-///
-/// Used to specify how field names should be transformed when generating
-/// code, particularly useful for converting between different naming conventions
-/// like snake_case, camelCase, PascalCase, etc.
-enum FieldRename {
-  /// Use the field name without changes.
-  ///
-  /// Example: `myFieldName` → `myFieldName`
-  none,
-
-  /// Converts a field name to camelCase.
-  ///
-  /// The first letter is lowercase, and subsequent words start with uppercase.
-  /// Example: `my_field_name` → `myFieldName`
-  camelCase,
-
-  /// Converts a field name to kebab-case.
-  ///
-  /// Words are separated by hyphens and all letters are lowercase.
-  /// Example: `myFieldName` → `my-field-name`
-  kebab,
-
-  /// Converts a field name to snake_case.
-  ///
-  /// Words are separated by underscores and all letters are lowercase.
-  /// Example: `myFieldName` → `my_field_name`
-  snake,
-
-  /// Converts a field name to PascalCase.
-  ///
-  /// The first letter and the first letter of each subsequent word are uppercase.
-  /// Example: `my_field_name` → `MyFieldName`
-  pascal,
-
-  /// Converts a field name to SCREAMING_SNAKE_CASE.
-  ///
-  /// Words are separated by underscores and all letters are uppercase.
-  /// Example: `myFieldName` → `MY_FIELD_NAME`
-  screamingSnake;
-
-  /// Transforms the given [name] according to this naming convention.
-  ///
-  /// Returns a new string with the [name] transformed based on the selected
-  /// [FieldRename] option.
-  ///
-  /// Example:
-  /// ```dart
-  /// FieldRename.snake.renameOf('myFieldName'); // Returns 'my_field_name'
-  /// FieldRename.pascal.renameOf('my_field_name'); // Returns 'MyFieldName'
-  /// ```
-  String renameOf(String name) {
-    return switch (this) {
-      FieldRename.none => name,
-      FieldRename.camelCase => name.toCamelCase(),
-      FieldRename.kebab => name.toKebabCase(),
-      FieldRename.snake => name.toSnakeCase(),
-      FieldRename.pascal => name.toPascalCase(),
-      FieldRename.screamingSnake => name.toSnakeCase().toUpperCase(),
-    };
-  }
-}
-
+@internal
 class DataClassMacroConfig {
   const DataClassMacroConfig({
     this.fieldRename,
     this.createFromJson,
     this.createToJson,
     this.createMapTo,
+    this.createAsCast,
     this.createEqual,
     this.createCopyWith,
     this.createToStringOverride,
@@ -319,6 +289,7 @@ class DataClassMacroConfig {
       createFromJson: json['create_from_json'] as bool?,
       createToJson: json['create_to_json'] as bool?,
       createMapTo: json['createMapTo'] as bool?,
+      createAsCast: json['createAsCast'] as bool?,
       createEqual: json['create_equal'] as bool?,
       createCopyWith: json['create_copy_with'] as bool?,
       createToStringOverride: json['create_to_string'] as bool?,
@@ -366,6 +337,9 @@ class DataClassMacroConfig {
 
   /// If `true` (the default), it implements map and mapOrNull method for sealed or abstract class
   final bool? createMapTo;
+
+  /// If `true` (the default), it implements as cast method for sealed or abstract class
+  final bool? createAsCast;
 
   /// If `true` (the default), it implements equality for all fields
   final bool? createEqual;

@@ -4,12 +4,14 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/analysis_context.dart';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
+import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
-import 'package:macro_kit/src/analyzer/logger.dart';
-import 'package:macro_kit/src/analyzer/models.dart';
+import 'package:macro_kit/src/common/common.dart';
+import 'package:macro_kit/src/common/logger.dart';
+import 'package:macro_kit/src/common/models.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart' as sync;
 import 'package:watcher/watcher.dart';
@@ -18,9 +20,6 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:yaml/yaml.dart';
 
 import 'base.dart';
-
-const macroPluginRequestFileName = 'macro_plugin_request';
-const macroClientRequestFileName = 'macro_client_request';
 
 typedef _PluginChannelInfo = ({WebSocketChannel ch, List<String> contexts});
 
@@ -61,8 +60,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   /// List of absolute asset directory mapping to each user macro
   final Map<String, Set<_AssetDirInfo>> _assetsDir = {};
 
-  /// A map of all loaded context with plugin configuration
-  final Set<MacroClientConfiguration> _macroClientConfigs = {};
+  /// A map of all loaded context with plugin configuration and state of
+  /// first rebuild is executed or not
+  final Map<String, (MacroClientConfiguration, bool)> _macroClientConfigs = {};
 
   /// List of requested code generation by request id
   final Map<int, Completer<RunMacroResultMsg>> _pendingOperations = {};
@@ -115,56 +115,73 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   Future<void> onContextChanged() async {
-    return lock.synchronized(() async {
-      final newContexts = Set<String>.of(_pluginChannels.values.map((e) => e.contexts).expand((e) => e)).toList();
-      if (const DeepCollectionEquality().equals(contexts, newContexts)) {
+    await Future.wait([
+      lock.synchronized(() async {
+        final newContexts = Set<String>.of(_pluginChannels.values.map((e) => e.contexts).expand((e) => e)).toList();
+        if (const DeepCollectionEquality().equals(contexts, newContexts)) {
+          _reloadMacroConfiguration(contexts);
+          return;
+        }
+
+        var old = contextCollection;
+        contextCollection = AnalysisContextCollection(
+          includedPaths: newContexts,
+          resourceProvider: PhysicalResourceProvider.INSTANCE,
+        );
+
+        // set new context, reload configuration and re-watch context
+        contexts = newContexts;
         _reloadMacroConfiguration(contexts);
-        return;
-      }
+        await _reWatchContexts(newContexts);
 
-      var old = contextCollection;
-      contextCollection = AnalysisContextCollection(
-        includedPaths: newContexts,
-        resourceProvider: PhysicalResourceProvider.INSTANCE,
-      );
-
-      // set new context, reload configuration and re-watch context
-      contexts = newContexts;
-      _reloadMacroConfiguration(contexts);
-      await _reWatchContexts(newContexts);
-
-      // remove after some delay, in case of processing source not completed while context changes
-      Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
-    });
+        // remove after some delay, in case of processing source not completed while context changes
+        Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
+      }),
+      // synchronize future call to be called before returning
+      Future.delayed(const Duration(milliseconds: 10)),
+    ]);
   }
 
   void _reloadMacroConfiguration(List<String> contexts) {
-    logger.info('reloading context configuration');
+    logger.info('Reloading context configuration');
+    final oldMacroClientConfigs = {..._macroClientConfigs};
     _macroClientConfigs.clear();
     _assetsDir.clear();
     fileCaches.clear();
 
-    // reload macro config defined in the project
+    /// reload macro config defined in the project
     for (final context in contexts) {
+      final autoRebuildExecuted = oldMacroClientConfigs[context]?.$2 == true;
+      MacroClientConfiguration config;
+
       try {
         final content = loadYamlNode(File(p.join(context, '.macro.yaml')).readAsStringSync());
-        if (content.value['config'] case YamlMap config) {
-          _macroClientConfigs.add(MacroClientConfiguration.fromYaml(context, config));
-        }
+        config = switch (content.value['config']) {
+          YamlMap map => MacroClientConfiguration.fromYaml(context, map),
+          _ => MacroClientConfiguration.withDefault(context),
+        };
       } on PathNotFoundException {
-        _macroClientConfigs.add(MacroClientConfiguration(context: context, rewriteGeneratedFileTo: ''));
+        config = MacroClientConfiguration.withDefault(context);
       } catch (e) {
         logger.error('Failed to read macro configuration for: $context');
+        config = MacroClientConfiguration.withDefault(context);
       }
+
+      _macroClientConfigs[context] = (config, autoRebuildExecuted);
     }
 
-    // reload asset macro configuration
-    // map each asset to absolute path with applied macros
+    /// reload asset macro configuration
+    _setupAssetMacroConfiguration();
+  }
+
+  void _setupAssetMacroConfiguration() {
+    /// map each asset to absolute path with applied macros
     final Set<String> outputsDir = {};
 
-    for (final channelAsset in _clientChannels.values) {
+    /// setup asset macro
+    for (final clientChannel in _clientChannels.values) {
       inner:
-      for (final entry in channelAsset.assetMacros.entries) {
+      for (final entry in clientChannel.assetMacros.entries) {
         final assetDirRelative = entry.key;
         final assetMacros = entry.value;
 
@@ -199,7 +216,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       }
     }
 
-    // remove any macro that generated output to same asset dir to prevent recursion
+    /// remove any macro that generated output to same asset dir to prevent recursion
     final inputDirs = _assetsDir.keys.toList();
     for (final inputDir in inputDirs) {
       if (outputsDir.contains(inputDir)) {
@@ -318,7 +335,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
     if (pendingAnalyze.isEmpty) {
       // broadcast no work(currently used only for force generation)
-      pendingAnalyzeCompleted.sink.add(true);
+      if (pendingAnalyzeCompleted.hasListener) {
+        pendingAnalyzeCompleted.sink.add(true);
+      }
       return;
     }
 
@@ -343,8 +362,11 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   @override
   MacroClientConfiguration getMacroConfigFor(String path) {
-    for (final config in _macroClientConfigs) {
-      if (p.isWithin(config.context, path)) return config;
+    for (final entry in _macroClientConfigs.entries) {
+      // check if path with the context of configuration
+      if (p.isWithin(entry.key, path)) {
+        return entry.value.$1;
+      }
     }
 
     return MacroClientConfiguration.defaultConfig;
@@ -384,16 +406,16 @@ class MacroAnalyzerServer extends MacroAnalyzer {
             }
 
             const excluded = [
-              '.dart_tool',
-              '.pub-cache',
-              '.idea',
-              '.vscode',
-              'build/intermediates',
-              '.symlinks/plugins',
-              'Intermediates.noindex',
-              'build/macos',
+              '.dart_tool', '.pub-cache', '.idea', '.vscode', 'build/intermediates', //
+              '.symlinks/plugins', 'Intermediates.noindex', 'build/macos', //
             ];
             contexts = contexts.where((path) => !excluded.any((word) => path.contains(word))).toList();
+
+            // remove configuration to trigger auto rebuild as plugin connected
+            // so any restart can cause to rebuild if configured
+            for (final context in contexts) {
+              _macroClientConfigs.remove(context);
+            }
 
             _pluginChannels[pluginId] = (ch: current.ch, contexts: contexts);
             onContextChanged();
@@ -402,7 +424,20 @@ class MacroAnalyzerServer extends MacroAnalyzer {
         }
       },
       onError: (err) => logger.error('WebSocket channel error occurred', err),
-      onDone: () {
+      onDone: () async {
+        final pluginInfo = _pluginChannels[pluginId];
+        if (pluginInfo == null) {
+          // Plugin already removed from tracking, trigger immediate context update
+          onContextChanged();
+          return;
+        }
+
+        // Wait 1 minute before fully removing the plugin context
+        // This grace period handles temporary crashes/restarts.
+        // If the plugin reconnects during this window with the same contexts, removing the old
+        // plugin ID and calling onContextChanged() won't trigger analysis reload since the
+        // contexts themselves remain unchanged and tracked.
+        await Future.delayed(const Duration(minutes: 1));
         _pluginChannels.remove(pluginId);
         onContextChanged();
       },
@@ -410,7 +445,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     _wsPluginSubs.add(sub);
   }
 
-  Iterable<WebSocketChannel> getChannelsForPath(String path) sync* {
+  Iterable<WebSocketChannel> getPluginChannelsByPath(String path) sync* {
     for (final entry in _pluginChannels.entries) {
       inner:
       for (final contextPath in entry.value.contexts) {
@@ -515,13 +550,11 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       (context, err) = getContext(contextPath);
       if (err != null) {
         _pluginChannels[firstPlugin.key] = firstPlugin.value;
-        return 'No analysis context found for: $contextPath after loading trying to load it';
+        return 'No analysis context found for: $contextPath after trying to load it';
       }
     } else if (context == null) {
       return 'Unexpected state: context must not null';
     }
-
-    context as AnalysisContext;
 
     final isRootContext = contexts.contains(contextPath);
     final List<String> files;
@@ -529,7 +562,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     if (!isRootContext && filterOnlyDirectory) {
       files = Directory(contextPath).listSync(recursive: true).whereType<File>().map((e) => e.path).toList();
     } else {
-      files = context.contextRoot.analyzedFiles().toList();
+      files = context!.contextRoot.analyzedFiles().toList();
     }
 
     for (final file in files) {
@@ -550,8 +583,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     return null;
   }
 
+  /// return first connected client channel id that has a [targetMacro]
   @override
-  int? getClientChannelFor(String targetMacro) {
+  int? getClientChannelIdByMacro(String targetMacro) {
     for (final entry in _clientChannels.entries) {
       for (final macroName in entry.value.macros) {
         if (macroName == targetMacro) {
@@ -593,22 +627,16 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     final config = getMacroConfigFor(path);
     final String relativeToSource;
 
-    if (config.rewriteGeneratedFileTo.isNotEmpty && config.context.length <= path.length) {
+    if (config.remapGeneratedFileTo.isNotEmpty && config.context.length <= path.length) {
       var relativePath = p.relative(path, from: config.context);
-      if (Platform.isWindows) {
-        if (relativePath.startsWith(r'lib\')) {
-          relativePath = relativePath.substring(4);
-        }
-      } else {
-        if (relativePath.startsWith('lib/')) {
-          relativePath = relativePath.substring(4);
-        }
+      if (relativePath.startsWith('lib/')) {
+        relativePath = relativePath.substring(4);
       }
 
-      final newPath = p.absolute(config.context, config.rewriteGeneratedFileTo, relativePath);
+      final newPath = p.absolute(config.context, config.remapGeneratedFileTo, relativePath);
 
       // Calculate relative path from generated file back to original source file
-      relativeToSource = p.relative(path, from: p.dirname(newPath));
+      relativeToSource = p.posix.relative(path, from: p.dirname(newPath));
 
       // Add generated suffix
       final dir = p.dirname(newPath);

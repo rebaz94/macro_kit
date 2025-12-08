@@ -1,12 +1,19 @@
 import 'dart:core';
 
+import 'package:change_case/change_case.dart';
+import 'package:collection/collection.dart';
 import 'package:dart_style/dart_style.dart';
-import 'package:hashlib/hashlib.dart';
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/src/analyzer/base_macro.dart';
+import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:macro_kit/src/core/extension.dart';
+import 'package:macro_kit/src/core/modifier.dart';
+import 'package:macro_kit/src/macro/data_class/helpers.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
+
+export 'package:macro_kit/src/analyzer/base_macro.dart';
 
 /// Macro used to attach metadata to a Dart declaration.
 ///
@@ -51,213 +58,6 @@ class Macro {
   }
 }
 
-/// A `MacroCapability` describes which elements of a class (constructors,
-/// fields, methods, metadata, and subtypes) should be collected and made
-/// available to the macro during generation.
-///
-/// Each flag enables a specific category of information.
-/// Some options only apply when their parent category is enabled
-/// (e.g., field filters only apply when [classFields] is `true`).
-///
-/// This allows each macro to precisely control the level of detail it needs,
-/// improving performance and avoiding unnecessary analysis work.
-class MacroCapability {
-  const MacroCapability({
-    this.classConstructors = false,
-    this.filterClassConstructorParameterMetadata = '',
-    this.mergeClassFieldWithConstructorParameter = false,
-    this.classFields = false,
-    this.filterClassInstanceFields = false,
-    this.filterClassStaticFields = false,
-    this.filterClassIgnoreSetterOnly = true,
-    this.filterClassFieldMetadata = '',
-    this.classMethods = false,
-    this.filterClassInstanceMethod = false,
-    this.filterClassStaticMethod = false,
-    this.filterMethods = '',
-    this.filterClassMethodMetadata = '',
-    this.collectClassSubTypes = false,
-    this.filterCollectSubTypes = '',
-  });
-
-  static MacroCapability fromJson(Map<String, dynamic> json) {
-    return MacroCapability(
-      classFields: (json['cf'] as bool?) ?? false,
-      filterClassInstanceFields: (json['fcif'] as bool?) ?? false,
-      filterClassStaticFields: (json['fcsf'] as bool?) ?? false,
-      filterClassIgnoreSetterOnly: (json['fciso'] as bool?) ?? false,
-      filterClassFieldMetadata: (json['fcfm'] as String?) ?? '',
-      classConstructors: (json['cc'] as bool?) ?? false,
-      filterClassConstructorParameterMetadata: (json['fccpm'] as String?) ?? '',
-      mergeClassFieldWithConstructorParameter: (json['mcfwcp'] as bool?) ?? false,
-      classMethods: (json['cm'] as bool?) ?? false,
-      filterClassInstanceMethod: (json['fcim'] as bool?) ?? false,
-      filterClassStaticMethod: (json['fcsm'] as bool?) ?? false,
-      filterMethods: (json['fm'] as String?) ?? '',
-      filterClassMethodMetadata: (json['fcmm'] as String?) ?? '',
-      collectClassSubTypes: (json['ccst'] as bool?) ?? false,
-      filterCollectSubTypes: (json['fccst'] as String?) ?? '',
-    );
-  }
-
-  /// Whether to retrieve all fields declared in the class.
-  final bool classFields;
-
-  /// Whether to include only instance fields.
-  ///
-  /// Only applies when [classFields] is `true`.
-  final bool filterClassInstanceFields;
-
-  /// Whether to include only static fields.
-  ///
-  /// Only applies when [classFields] is `true`.
-  final bool filterClassStaticFields;
-
-  /// Whether to include only property (getter, setter or variable declaration).
-  ///
-  /// Only applies when [classFields] is `true`.
-  final bool filterClassIgnoreSetterOnly;
-
-  /// Filter specified custom metadata defined on the field.
-  ///
-  /// To get all metadata, use '*' or filter by providing comma separated key 'JsonKey,CustomMetadata'
-  ///
-  /// Only applies when [classFields] is `true`.
-  final String filterClassFieldMetadata;
-
-  /// Whether to retrieve all constructors declared in the class.
-  final bool classConstructors;
-
-  /// Filter specified custom metadata defined on the constructor parameter.
-  ///
-  /// To get all metadata, use '*' or filter by providing comma separated key 'JsonKey,CustomMetadata'
-  ///
-  /// Only applies when [classConstructors] is `true`.
-  final String filterClassConstructorParameterMetadata;
-
-  /// Whether to merge metadata declared in the class field with
-  /// the parameter defined in the constructor.
-  ///
-  /// Only applies when [classConstructors] is true.
-  final bool mergeClassFieldWithConstructorParameter;
-
-  /// Whether to retrieve all methods declared in the class.
-  final bool classMethods;
-
-  /// Whether to include only instance methods.
-  ///
-  /// Only applies when [classMethods] is `true`.
-  final bool filterClassInstanceMethod;
-
-  /// Whether to include only static methods.
-  ///
-  /// Only applies when [classMethods] is `true`.
-  final bool filterClassStaticMethod;
-
-  /// Filters which methods should be included from the class.
-  ///
-  /// This works only when [classMethods] is `true`, and the instance/static
-  /// filtering (via [filterClassInstanceMethod] and [filterClassStaticMethod])
-  /// has already been applied.
-  ///
-  /// Use:
-  ///   * '*' to include all methods
-  ///   * a comma-separated list to include specific methods
-  ///     e.g. `'build,toJson'`
-  ///
-  /// The names must match the method identifiers in the class.
-  final String filterMethods;
-
-  /// Filter specified custom metadata defined on the constructor parameter.
-  ///
-  /// To get all metadata, use '*' or filter by providing comma separated key 'JsonKey,CustomMetadata'
-  ///
-  /// Only applies when [classConstructors] is `true`.
-  final String filterClassMethodMetadata;
-
-  /// Whether to include all subclasses (subtypes) of this class.
-  ///
-  /// When set to `true`, the generator will automatically discover and include
-  /// every class that extends this class. This is primarily used
-  /// for polymorphic code generation, where the base class needs to know all of
-  /// its concrete implementations.
-  ///
-  /// Only applies to abstract or sealed classes.
-  final bool collectClassSubTypes;
-
-  /// Determines **which kinds of classes are allowed to perform subtype
-  /// collection** when [collectClassSubTypes] is `true`.
-  ///
-  /// This filter applies to the *current class*, not the subtypes.
-  /// In other words: it decides whether this class is eligible for subtype
-  /// discovery based on whether it is `sealed`, `abstract`, or both.
-  ///
-  /// Supported values:
-  ///   - `"sealed"` — only sealed classes can collect subtypes
-  ///   - `"abstract"` — only abstract classes can collect subtypes
-  ///   - `"sealed,abstract"` — both sealed and abstract classes
-  ///   - `"*"` — any class may collect subtypes
-  final String filterCollectSubTypes;
-
-  MacroCapability combine(MacroCapability c) {
-    String combineFilter(String base, String other) {
-      if (base == '*' || other == '*') return '*';
-      if (base.isEmpty) return other;
-      if (other.isEmpty) return base;
-
-      return '$base,$other';
-    }
-
-    return MacroCapability(
-      classFields: c.classFields ? true : classFields,
-      filterClassInstanceFields: c.filterClassInstanceFields ? true : filterClassInstanceFields,
-      filterClassStaticFields: c.filterClassStaticFields ? true : filterClassStaticFields,
-      filterClassIgnoreSetterOnly: c.filterClassIgnoreSetterOnly ? true : filterClassIgnoreSetterOnly,
-      filterClassFieldMetadata: combineFilter(filterClassFieldMetadata, c.filterClassFieldMetadata),
-      classConstructors: c.classConstructors ? true : classConstructors,
-      filterClassConstructorParameterMetadata: combineFilter(
-        filterClassConstructorParameterMetadata,
-        c.filterClassConstructorParameterMetadata,
-      ),
-      mergeClassFieldWithConstructorParameter: c.mergeClassFieldWithConstructorParameter
-          ? true
-          : mergeClassFieldWithConstructorParameter,
-      classMethods: c.classMethods ? true : classMethods,
-      filterClassInstanceMethod: c.filterClassInstanceMethod ? true : filterClassInstanceMethod,
-      filterClassStaticMethod: c.filterClassStaticMethod ? true : filterClassStaticMethod,
-      filterMethods: combineFilter(filterMethods, c.filterMethods),
-      filterClassMethodMetadata: combineFilter(filterClassMethodMetadata, c.filterClassMethodMetadata),
-      collectClassSubTypes: c.collectClassSubTypes ? true : collectClassSubTypes,
-      filterCollectSubTypes: combineFilter(filterCollectSubTypes, c.filterCollectSubTypes),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      if (classFields) 'cf': true,
-      if (filterClassInstanceFields) 'fcif': true,
-      if (filterClassIgnoreSetterOnly) 'fciso': true,
-      if (filterClassStaticFields) 'fcsf': true,
-      if (filterClassFieldMetadata.isNotEmpty) 'fcfm': filterClassFieldMetadata,
-      if (classConstructors) 'cc': true,
-      if (filterClassConstructorParameterMetadata.isNotEmpty) 'fccpm': filterClassConstructorParameterMetadata,
-      if (mergeClassFieldWithConstructorParameter) 'mcfwcp': true,
-      if (classMethods) 'cm': true,
-      if (filterClassInstanceMethod) 'fcim': true,
-      if (filterClassStaticMethod) 'fcsm': true,
-      if (filterMethods.isNotEmpty) 'fm': filterMethods,
-      if (filterClassMethodMetadata.isNotEmpty) 'fcmm': filterClassMethodMetadata,
-      if (collectClassSubTypes) 'ccst': true,
-      if (filterCollectSubTypes.isNotEmpty) 'fccst': filterCollectSubTypes,
-    };
-  }
-
-  @override
-  String toString() {
-    return 'MacroCapability{classFields: $classFields, filterClassInstanceFields: $filterClassInstanceFields, filterClassStaticFields: $filterClassStaticFields, filterClassFieldMetadata: $filterClassFieldMetadata, classConstructors: $classConstructors, filterClassConstructorParameterMetadata: $filterClassConstructorParameterMetadata, mergeClassFieldWithConstructorParameter: $mergeClassFieldWithConstructorParameter, classMethods: $classMethods, filterClassInstanceMethod: $filterClassInstanceMethod, filterClassStaticMethod: $filterClassStaticMethod, filterMethods: $filterMethods, filterClassMethodMetadata: $filterClassMethodMetadata, collectClassSubTypes: $collectClassSubTypes, filterCollectSubTypes: $filterCollectSubTypes}';
-  }
-}
-
 /// Represents the configuration for a macro applied to a specific declaration.
 ///
 /// A `MacroConfig` contains:
@@ -297,7 +97,7 @@ class MacroConfig {
   final bool combine;
 
   @internal
-  late final int? configHash = xxh32code(toString());
+  late final int? configHash = generateHash(toString());
 
   Map<String, dynamic> toJson() {
     return {
@@ -381,7 +181,6 @@ class MacroClassConstructor {
     this.redirectFactory,
     required this.positionalFields,
     required this.namedFields,
-    required this.constantInitializers,
   });
 
   static MacroClassConstructor fromJson(Map<String, dynamic> json) {
@@ -393,11 +192,6 @@ class MacroClassConstructor {
       redirectFactory: json['rf'] as String?,
       positionalFields: MacroProperty._decodeUpdatableList((json['pf'] as List?) ?? const []),
       namedFields: MacroProperty._decodeUpdatableList((json['nf'] as List?) ?? const []),
-      constantInitializers: json['ci'] != null
-          ? (json['ci'] as Map<String, dynamic>).map(
-              (k, v) => MapEntry(k, MacroProperty.fromJson(v as Map<String, dynamic>)),
-            )
-          : null,
     );
   }
 
@@ -416,9 +210,6 @@ class MacroClassConstructor {
   /// Named field of the constructor
   final List<MacroProperty> namedFields;
 
-  /// A Key of field name to the dart constant expression
-  final Map<String, MacroProperty>? constantInitializers;
-
   /// Return true if has positional or named field
   bool get hasFields => positionalFields.isNotEmpty || namedFields.isNotEmpty;
 
@@ -429,19 +220,30 @@ class MacroClassConstructor {
       if (redirectFactory?.isNotEmpty == true) 'rf': redirectFactory,
       if (positionalFields.isNotEmpty) 'pf': positionalFields.map((e) => e.toJson()).toList(),
       if (namedFields.isNotEmpty) 'nf': namedFields.map((e) => e.toJson()).toList(),
-      if (constantInitializers?.isNotEmpty == true) 'ci': constantInitializers!.map((k, v) => MapEntry(k, v.toJson())),
     };
   }
 
   @override
   String toString() {
-    return 'MacroClassConstructor{constructorName: $constructorName, modifier: $modifier, redirectFactory: $redirectFactory, positionalFields: $positionalFields, namedFields: $namedFields, constantInitializers: $constantInitializers}';
+    return 'MacroClassConstructor{constructorName: $constructorName, modifier: $modifier, redirectFactory: $redirectFactory, positionalFields: $positionalFields, namedFields: $namedFields}';
   }
 }
 
+/// Represents a property or type declaration with comprehensive metadata.
+///
+/// This is a generic container class that holds different information depending on the
+/// [typeInfo]. For example:
+/// - For classes or enums: [classInfo] contains the declaration details
+/// - For functions: [functionTypeInfo] contains the function signature
+/// - For generics: [typeArguments] contains the type parameters
+/// - For constants: [constantValue] and [constantModifier] contain the value and its modifiers
+///
+/// This class is used to represent fields, parameters, return types, and type references
+/// throughout the macro system.
 class MacroProperty {
   MacroProperty({
     required this.name,
+    required this.importPrefix,
     required this.type,
     required this.typeInfo,
     this.deepEquality,
@@ -451,6 +253,7 @@ class MacroProperty {
     this.extraMetadata,
     this.modifier = const MacroModifier({}),
     this.keys,
+    this.fieldInitializer,
     this.constantValue,
     this.constantModifier,
     this.requireConversionToLiteral,
@@ -462,6 +265,7 @@ class MacroProperty {
 
     return MacroProperty(
       name: (json['n'] as String?) ?? '',
+      importPrefix: (json['ip'] as String?) ?? '',
       type: (json['t'] as String?) ?? '',
       typeInfo: typeInfo,
       deepEquality: json['dq'] as bool?,
@@ -477,6 +281,7 @@ class MacroProperty {
           ? const MacroModifier({})
           : MacroModifier((json['m'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
       keys: (json['k'] as List?)?.map((e) => MacroKey.fromJson(e as Map<String, dynamic>)).toList(),
+      fieldInitializer: json['fi'] == null ? null : MacroProperty.fromJson(json['fi'] as Map<String, dynamic>),
       constantValue: switch (constantValue) {
         _ when json['cvType'] == 'set' && constantValue is List => constantValue.toSet(),
         _ when json['cvType'] == 'macro_property' && constantValue is Map => MacroProperty.fromJson(
@@ -511,106 +316,73 @@ class MacroProperty {
     return results;
   }
 
-  static String toLiteralValue(Object? prop, {Map<String, List<MacroClassConstructor>>? types}) {
-    if (prop is MacroProperty) {
-      if (prop.requireConversionToLiteral == true) {
-        if (prop.typeInfo == TypeInfo.clazz) {
-          return clazzToLiteral(prop, types);
-        }
+  static String toLiteralValue(
+    Object? prop, {
+    Map<String, List<MacroClassConstructor>>? types,
+    bool insideConstant = false,
+  }) {
+    if (prop is! MacroProperty) {
+      if (prop is Map && prop.containsKey('__use_ctor__')) {
+        return clazzToLiteral(prop as Map<String, dynamic>, insideConstant: insideConstant);
       }
 
-      if (prop.typeInfo == TypeInfo.enumData) {
-        return prop.asStringConstantValue() ?? '';
-      }
-
-      return jsonLiteralAsDart(prop.constantValue);
+      return jsonLiteralAsDart(prop);
     }
 
-    return jsonLiteralAsDart(prop);
+    if (prop.requireConversionToLiteral == true) {
+      if (prop.constantValue is Map && (prop.constantValue as Map).containsKey('__use_ctor__')) {
+        return clazzToLiteral(prop.constantValue as Map<String, dynamic>, insideConstant: insideConstant);
+      }
+    }
+
+    if (prop.typeInfo == TypeInfo.enumData) {
+      return prop.asStringConstantValue() ?? '';
+    }
+
+    return jsonLiteralAsDart(prop.constantValue);
   }
 
-  static String clazzToLiteral(MacroProperty prop, Map<String, List<MacroClassConstructor>>? types) {
-    final config = prop.constantValue;
-    if (config is! Map<String, dynamic>) return '';
+  static String clazzToLiteral(Map<String, dynamic> config, {bool insideConstant = false}) {
+    final classTypeName = config['__type__'] as String;
+    final importPrefix = config['__import__'] as String;
+    final positionalArgs = config['__pos_args__'] as List<Object?>;
+    final namedArgs = config['__named_args__'] as Map<String, Object?>;
 
-    types ??= {};
-    final constructors = types[prop.type] ?? prop.classInfo?.constructors ?? const [];
-    types[prop.type] = constructors;
+    final str = StringBuffer('${insideConstant ? '' : 'const '}$importPrefix$classTypeName(');
+    insideConstant = true;
 
-    final constantConstructor = config['__constructor__'] as String? ?? '';
-    var constructor = constructors.firstWhereOrNull((e) => e.constructorName == constantConstructor);
-    // if no constructor fallback to the first one with const(maybe fails at compile time)
-    constructor ??= constructors.firstWhereOrNull((e) => e.modifier.isGenerative || e.modifier.isConst);
+    for (int i = 0; i < positionalArgs.length; i++) {
+      final argumentVal = positionalArgs[i];
+      if (i > 0) str.write(', ');
 
-    // still null, return raw data as literal
-    if (constructor == null) {
-      return jsonLiteralAsDart(config);
-    }
-
-    final str = StringBuffer('const ${prop.type}(');
-    bool needComma = false;
-    for (final field in constructor.positionalFields) {
-      if (needComma) {
-        str.write(', ');
-      }
-      final value = config[field.name];
-      final literal = toLiteralValue(value, types: types);
+      final literal = toLiteralValue(argumentVal, insideConstant: insideConstant);
       str.write(literal);
-      needComma = true;
     }
 
-    if (constructor.namedFields.isNotEmpty) {
-      if (constructor.positionalFields.isEmpty) {
-        str.write('{');
-      } else {
-        str.write(',{ ');
+    if (positionalArgs.isNotEmpty) {
+      str.write(', ');
+    }
+
+    for (final (i, entry) in namedArgs.entries.indexed) {
+      final name = entry.key;
+      final value = entry.value;
+
+      if (i > 0) str.write(', ');
+
+      if (value == null) {
+        str.write('$name: null');
+        continue;
       }
-    }
 
-    needComma = false;
-    for (final field in constructor.namedFields) {
-      if (needComma) {
-        str.write(', ');
-      }
-      final value = config[field.name];
-      final literal = toLiteralValue(value, types: types);
-      str.write('${field.name}: $literal');
-      needComma = true;
-    }
-
-    if (constructor.namedFields.isNotEmpty) {
-      str.write('}');
+      final literal = toLiteralValue(value, insideConstant: insideConstant);
+      str.write('$name: $literal');
     }
 
     str.write(')');
     return str.toString();
   }
 
-  final String name;
-  final String type;
-  final TypeInfo typeInfo;
-  final MacroClassDeclaration? classInfo;
-  final bool? deepEquality;
-  final List<MacroProperty>? typeArguments;
-  final MacroMethod? functionTypeInfo;
-  final Map<String, MacroProperty>? extraMetadata;
-  final MacroModifier modifier;
-  final List<MacroKey>? keys;
-  final Object? constantValue;
-  final MacroModifier? constantModifier;
-  final bool? requireConversionToLiteral;
-
-  String? get constantValueToDartLiteralIfNeeded {
-    if (requireConversionToLiteral == true) {
-      return jsonLiteralAsDart(constantValue);
-    } else if (constantValue case String v) {
-      return v;
-    }
-    return null;
-  }
-
-  bool get isNullable => modifier.isNullable;
-
+  /// Checks if the type is a dynamic Iterable (`Iterable`, `Iterable<dynamic>`, or `Iterable<Object?>`).
   static bool isDynamicIterable(String type) {
     return const [
       'Iterable<dynamic>',
@@ -619,6 +391,7 @@ class MacroProperty {
     ].contains(type.removedNullability);
   }
 
+  /// Checks if the type is a dynamic List (`List`, `List<dynamic>`, or `List<Object?>`).
   static bool isDynamicList(String type) {
     return const [
       'List<dynamic>',
@@ -627,6 +400,9 @@ class MacroProperty {
     ].contains(type.removedNullability);
   }
 
+  /// Checks if the List type can be encoded directly to JSON without transformation.
+  ///
+  /// Returns true for Lists of primitives and Maps with primitive values.
   static bool isListEncodeDirectlyToJson(String type) {
     return const [
       'List<int>',
@@ -642,6 +418,7 @@ class MacroProperty {
     ].contains(type.replaceAll('?', ''));
   }
 
+  /// Checks if the type is a dynamic Set (`Set`, `Set<dynamic>`, or `Set<Object?>`).
   static bool isDynamicSet(String type) {
     return const [
       'Set<dynamic>',
@@ -650,10 +427,14 @@ class MacroProperty {
     ].contains(type.removedNullability);
   }
 
+  /// Checks if the type is a dynamic Map (`Map` or `Map<String, dynamic>`).
   static bool isDynamicMap(String type) {
     return const ['Map', 'Map<String, dynamic>'].contains(type.removedNullability);
   }
 
+  /// Checks if the Map type can be encoded directly to JSON without transformation.
+  ///
+  /// Returns true for Maps with String keys and primitive or List values.
   static bool isMapEncodeDirectlyToJson(String type) {
     return const [
       'Map<String, int>',
@@ -669,21 +450,261 @@ class MacroProperty {
     ].contains(type.replaceAll('?', ''));
   }
 
+  /// Extracts the base type and type parameters from a generic type string.
+  ///
+  /// For example, `List<int>` returns (type: 'List', typeParams: ['int']).
+  /// Non-generic types return empty type parameters.
+  static ({String type, List<String> typeParams}) extractTypeArguments(String type) {
+    final t = type.removedNullability;
+
+    final start = t.indexOf('<');
+    if (start == -1) {
+      return (type: t, typeParams: const <String>[]);
+    }
+
+    final end = t.lastIndexOf('>');
+    if (end == -1) {
+      return (type: t, typeParams: const <String>[]);
+    }
+
+    return (
+      type: t.substring(0, start),
+      typeParams: (t.substring(start + 1, end)).split(',').map((e) => e.trim()).toList(),
+    );
+  }
+
+  /// Replaces type parameter names in type strings
+  /// Handles simple types, generic types, bounds, and complex nested generics
+  static String replaceTypeParameter(String typeString, Map<String, String> replacements) {
+    if (replacements.isEmpty) return typeString;
+
+    // Sort keys by length (descending) to handle longer names first
+    // This prevents "T1" from matching "T" prematurely
+    final sortedKeys = replacements.keys.toList()..sort((a, b) => b.length.compareTo(a.length));
+
+    String result = typeString;
+
+    for (final oldType in sortedKeys) {
+      final newType = replacements[oldType]!;
+
+      // Use word boundary pattern to match complete type names only
+      // (?!\w) ensures we don't match "Type" in "TypeParam" or "T" in "T1"
+      final pattern = RegExp(
+        r'(?<=^|<|\(|\[|,\s*|\s)' + // After start or delimiter
+            RegExp.escape(oldType) +
+            r'(?![\w])' + // NOT followed by word character (letter, digit, underscore)
+            r'(?=>|\)|\?|\]|,|\s|$)?', // Optionally followed by delimiter
+      );
+
+      result = result.replaceAll(pattern, newType);
+    }
+
+    return result;
+  }
+
+  static String getClassTypeParameter(List<MacroProperty> generics) {
+    if (generics.isEmpty) return '';
+
+    final s = StringBuffer('<');
+
+    for (int i = 0; i < generics.length; i++) {
+      final generic = generics[i];
+      if (i > 0) {
+        s.write(', ');
+      }
+
+      s.write(generic.name);
+    }
+
+    s.write('>');
+    return s.toString();
+  }
+
+  static String getClassTypeParameterWithBound(List<MacroProperty> generics) {
+    if (generics.isEmpty) return '';
+
+    final s = StringBuffer('<');
+    for (int i = 0; i < generics.length; i++) {
+      final generic = generics[i];
+      if (i > 0) {
+        s.write(', ');
+      }
+
+      s.write(generic.name);
+      if (generic.type.isNotEmpty) {
+        s.write(' extends ${generic.type}');
+      }
+    }
+
+    s.write('>');
+    return s.toString();
+  }
+
+  static String getClassTypeParameterWithPrioritizedBound(List<MacroProperty> generics) {
+    if (generics.isEmpty) return '';
+
+    // Group by name, keeping the one with bound if duplicates exist
+    final uniqueGenerics = <String, MacroProperty>{};
+
+    for (final currGeneric in generics) {
+      final existing = uniqueGenerics[currGeneric.name];
+      if (existing == null) {
+        uniqueGenerics[currGeneric.name] = currGeneric;
+      } else if (existing.constantValue == null && currGeneric.constantValue != null) {
+        // Replace unbounded with bounded version
+        uniqueGenerics[currGeneric.name] = currGeneric;
+      }
+      // If existing has bound, keep it (don't replace)
+    }
+
+    final s = StringBuffer('<');
+    for (final (i, generic) in uniqueGenerics.values.indexed) {
+      if (i > 0) {
+        s.write(', ');
+      }
+
+      s.write(generic.name);
+      if (generic.type.isNotEmpty) {
+        s.write(' extends ${generic.type}');
+      }
+    }
+
+    s.write('>');
+    return s.toString();
+  }
+
+  /// The name of the property or parameter.
+  final String name;
+
+  /// The import prefix used for this type (empty string if none).
+  final String importPrefix;
+
+  /// The dart type as a string (e.g., `String`, `List<int>`).
+  final String type;
+
+  /// Category of the type (e.g., class, enum, function, primitive).
+  final TypeInfo typeInfo;
+
+  /// Class declaration details when [typeInfo] is a class or enum type.
+  final MacroClassDeclaration? classInfo;
+
+  /// Whether deep equality should be used for this property.
+  final bool? deepEquality;
+
+  /// Type arguments for generic types (e.g., `T` in `List<T>`).
+  final List<MacroProperty>? typeArguments;
+
+  /// Function signature details when [typeInfo] is a function type.
+  final MacroMethod? functionTypeInfo;
+
+  /// Additional metadata annotations applied to this property.
+  final Map<String, MacroProperty>? extraMetadata;
+
+  /// Modifiers applied to this property (e.g., final, late, nullable).
+  final MacroModifier modifier;
+
+  /// Macro keys associated with this property.
+  final List<MacroKey>? keys;
+
+  /// Field initializer information for constructor parameters.
+  ///
+  /// Used when a constructor parameter initializes a different field name.
+  /// For example, when a constructor has parameter `x` but initializes a private field `_x`.
+  /// Contains the target field name, any constant value assigned, and the Dart code
+  /// representation of the initializer expression if present.
+  final MacroProperty? fieldInitializer;
+
+  /// The constant value if this property is a compile-time constant.
+  final Object? constantValue;
+
+  /// Modifiers specific to the constant value (e.g., static const).
+  final MacroModifier? constantModifier;
+
+  /// Whether the constant value requires conversion to Dart literal syntax.
+  final bool? requireConversionToLiteral;
+
+  MacroProperty copyWith({
+    String? name,
+    String? type,
+    MacroClassDeclaration? classInfo,
+    Object? constantValue,
+    MacroModifier? constantModifier,
+    bool? requireConversionToLiteral,
+  }) {
+    return MacroProperty(
+      name: name ?? this.name,
+      importPrefix: classInfo != null && importPrefix.isEmpty ? classInfo.importPrefix : importPrefix,
+      type: type ?? this.type,
+      typeInfo: typeInfo,
+      modifier: modifier,
+      typeArguments: typeArguments,
+      functionTypeInfo: functionTypeInfo,
+      classInfo: classInfo ?? this.classInfo,
+      deepEquality: deepEquality,
+      keys: keys,
+      fieldInitializer: fieldInitializer,
+      constantValue: constantValue ?? this.constantValue,
+      constantModifier: constantModifier ?? this.constantModifier,
+      requireConversionToLiteral: requireConversionToLiteral ?? this.requireConversionToLiteral,
+      extraMetadata: extraMetadata,
+    );
+  }
+
+  /// Update class type parameter
+  ///
+  /// this is only update name and type without deep update
+  MacroProperty updateClassTypeParameter(Map<String, String> replacements) {
+    return copyWith(
+      name: replaceTypeParameter(name, replacements),
+      type: replaceTypeParameter(type, replacements),
+    );
+  }
+
+  /// Converts the constant value to Dart literal syntax if needed, or returns it directly if it's a string.
+  ///
+  /// Returns the Dart code representation when [requireConversionToLiteral] is true,
+  /// returns the value directly if it's already a string, or null otherwise.
+  String? get constantValueToDartLiteralIfNeeded {
+    if (requireConversionToLiteral == true) {
+      return jsonLiteralAsDart(constantValue);
+    } else if (constantValue case String v) {
+      return v;
+    }
+    return null;
+  }
+
+  /// Return true if declaration is nullable
+  bool get isNullable => modifier.isNullable || type.endsWith('?');
+
+  /// Returns true if the declaration is static (based on either the modifier or constant modifier)
+  bool get isStatic => modifier.isStatic || constantModifier?.isStatic == true;
+
   Map<String, Object?>? _cacheKeysByKeyName;
 
+  /// Checks if this property is a `Map<String, dynamic>` type.
   bool get isMapStringDynamicType {
     if (typeInfo != TypeInfo.map) return false;
     if (typeArguments?.firstOrNull?.typeInfo != TypeInfo.string) return false;
-    if (typeArguments?.elementAtOrNull(1)?.typeInfo != TypeInfo.dynamic) return false;
+    if (typeArguments?.elementAtOrNull(1)?.typeInfo != TypeInfo.dynamic) {
+      return false;
+    }
     return true;
   }
 
-  /// Convert first key in [keys] into [T] and cache it for future use
-  T? cacheFirstKeyInto<T>(String keyName, T Function(MacroKey key) convertFn, {bool disableCache = false}) {
+  /// Finds the first key with [keyName], converts it using [convertFn], and caches the result.
+  ///
+  /// Returns the cached value if available, or null if the key doesn't exist.
+  /// Set [disableCache] to true to bypass caching.
+  T cacheFirstKeyInto<T>({
+    required String keyName,
+    required T Function(MacroKey key) convertFn,
+    required T defaultValue,
+    bool disableCache = false,
+  }) {
     var key = disableCache ? null : _cacheKeysByKeyName?[keyName];
     if (key is T) return key;
 
-    if (key == Null) return null;
+    if (key == Null) return defaultValue;
 
     final macroKey = keys?.firstWhereOrNull((e) => e.name == keyName);
     if (macroKey == null) {
@@ -691,7 +712,7 @@ class MacroProperty {
         _cacheKeysByKeyName ??= {};
         _cacheKeysByKeyName![keyName] = Null;
       }
-      return null;
+      return defaultValue;
     }
 
     final res = convertFn(macroKey);
@@ -702,6 +723,9 @@ class MacroProperty {
     return res;
   }
 
+  /// Converts the key at the specified [index] using [convertFn].
+  ///
+  /// Returns null if no key exists at the given index.
   T? keyOfTo<T>(T Function(MacroKey key) convertFn, {required int index}) {
     final key = keys?.elementAtOrNull(index);
     if (key == null) return null;
@@ -709,37 +733,33 @@ class MacroProperty {
     return convertFn(key);
   }
 
-  MacroProperty copyWith({MacroClassDeclaration? classInfo}) {
-    return MacroProperty(
-      name: name,
-      type: type,
-      typeInfo: typeInfo,
-      modifier: modifier,
-      typeArguments: typeArguments,
-      functionTypeInfo: functionTypeInfo,
-      classInfo: classInfo ?? this.classInfo,
-      deepEquality: deepEquality,
-      keys: keys,
-      constantValue: constantValue,
-      constantModifier: constantModifier,
-      requireConversionToLiteral: requireConversionToLiteral,
-      extraMetadata: extraMetadata,
-    );
-  }
+  /// Returns a nullable version of this property.
+  ///
+  /// If already nullable, returns this instance unchanged.
+  /// Otherwise, creates a new instance with nullable type and modifier.
+  MacroProperty toNullability({bool intoNullable = true}) {
+    if (intoNullable == isNullable) {
+      return this;
+    }
 
-  MacroProperty toNullableType() {
-    if (isNullable) return this;
+    final newType = switch ((intoNullable, type.endsWith('?'))) {
+      (true, false) => '$type?',
+      (false, true) => type.substring(0, type.length - 1),
+      _ => type,
+    };
 
     return MacroProperty(
       name: name,
-      type: type.endsWith('?') ? type : '$type?',
+      importPrefix: importPrefix,
+      type: newType,
       typeInfo: typeInfo,
-      modifier: MacroModifier({...modifier})..setIsNullable(true),
+      modifier: MacroModifier({...modifier})..setIsNullable(intoNullable),
       typeArguments: typeArguments,
       functionTypeInfo: functionTypeInfo,
       classInfo: classInfo,
       deepEquality: deepEquality,
       keys: keys,
+      fieldInitializer: fieldInitializer,
       constantValue: constantValue,
       constantModifier: constantModifier,
       requireConversionToLiteral: requireConversionToLiteral,
@@ -747,40 +767,170 @@ class MacroProperty {
     );
   }
 
+  /// Returns the constant value as a bool, or null if not a bool.
   bool? asBoolConstantValue() {
     if (constantValue case bool v) return v;
     return null;
   }
 
+  /// Returns the constant value as a String, or null if not a String.
   String? asStringConstantValue() {
     if (constantValue case String v) return v;
     return null;
   }
 
+  /// Returns the constant value as an int, or null if not an int.
   int? asIntConstantValue() {
     if (constantValue case int v) return v;
     return null;
   }
 
+  /// Returns the constant value as a double, or null if not a double.
   double? asDoubleConstantValue() {
     if (constantValue case double v) return v;
     return null;
   }
 
+  /// Returns the constant value as a num, or null if not a num.
   num? asNumConstantValue() {
     if (constantValue case num v) return v;
     return null;
   }
 
-  /// Represent a Dart Type from annotation
+  /// Returns the constant value as a MacroProperty representing a Dart Type from an annotation.
   MacroProperty? asTypeValue() {
     if (constantValue case MacroProperty v) return v;
     return null;
   }
 
+  /// Generates the full Dart type string with proper import prefix.
+  ///
+  /// The [dartCorePrefix] is prepended to dart:core types when no import prefix exists.
+  /// Handles generic types, collections, and function types appropriately.
+  String getDartType(String dartCorePrefix) {
+    switch (typeInfo) {
+      case TypeInfo.int:
+      case TypeInfo.double:
+      case TypeInfo.num:
+      case TypeInfo.string:
+      case TypeInfo.boolean:
+      case TypeInfo.datetime:
+      case TypeInfo.duration:
+      case TypeInfo.bigInt:
+      case TypeInfo.uri:
+      case TypeInfo.symbol:
+      case TypeInfo.nullType:
+      case TypeInfo.dynamic:
+      case TypeInfo.voidType:
+      case TypeInfo.type:
+        return importPrefix.isNotEmpty ? '$importPrefix$type' : '$dartCorePrefix$type';
+      case TypeInfo.object:
+        if (type == 'Enum') {
+          return importPrefix.isNotEmpty ? '$importPrefix$type' : '$dartCorePrefix$type';
+        }
+
+        return '$importPrefix$type';
+      case TypeInfo.clazz:
+      case TypeInfo.clazzAugmentation:
+      case TypeInfo.extension:
+      case TypeInfo.extensionType:
+      case TypeInfo.record:
+        return '$importPrefix$type';
+      case TypeInfo.enumData:
+        if (type == 'Enum') {
+          return importPrefix.isNotEmpty ? '$importPrefix$type' : '$dartCorePrefix$type';
+        }
+        return '$importPrefix$type';
+      case TypeInfo.iterable:
+      case TypeInfo.list:
+      case TypeInfo.set:
+      case TypeInfo.future:
+      case TypeInfo.stream:
+        final elemType = typeArguments?.firstOrNull;
+        final String elemTypeStr;
+        if (elemType != null) {
+          elemTypeStr = elemType.getDartType(dartCorePrefix);
+        } else {
+          elemTypeStr = '${dartCorePrefix}dynamic';
+        }
+
+        final classType = switch (typeInfo) {
+          TypeInfo.iterable => 'Iterable',
+          TypeInfo.set => 'Set',
+          TypeInfo.future => 'Future',
+          TypeInfo.stream => 'Stream',
+          _ => 'List',
+        };
+
+        final nullable = isNullable ? '?' : '';
+        return importPrefix.isNotEmpty
+            ? '$importPrefix$classType<$elemTypeStr>$nullable'
+            : '$dartCorePrefix$classType<$elemTypeStr>$nullable';
+      case TypeInfo.map:
+        final elemType = typeArguments?.firstOrNull;
+        final String elemTypeStr;
+        if (elemType != null) {
+          elemTypeStr = elemType.getDartType(dartCorePrefix);
+        } else {
+          elemTypeStr = '${dartCorePrefix}dynamic';
+        }
+
+        final elemValType = typeArguments?.elementAtOrNull(1);
+        final String elemValTypeStr;
+        if (elemValType != null) {
+          elemValTypeStr = elemValType.getDartType(dartCorePrefix);
+        } else {
+          elemValTypeStr = '${dartCorePrefix}dynamic';
+        }
+
+        const classType = 'Map';
+        final nullable = isNullable ? '?' : '';
+        return importPrefix.isNotEmpty
+            ? '$importPrefix$classType<$elemTypeStr, $elemValTypeStr>$nullable'
+            : '$dartCorePrefix$classType<$elemTypeStr, $elemValTypeStr>$nullable';
+      case TypeInfo.function:
+        // returning prefix import with Function like $c.Function(param..)
+        // will fails to compile when used in function argument
+        final fnInfo = functionTypeInfo;
+        if (fnInfo == null) {
+          // try to get from constant
+          final fnRef = asStringConstantValue() ?? '';
+          return importPrefix.isNotEmpty ? '$importPrefix$fnRef' : fnRef;
+        }
+
+        return '${fnInfo.getFunctionType(dartCorePrefix)}${isNullable ? '?' : ''}';
+      case TypeInfo.generic:
+        // TODO: ensure just returning directly is correct
+        return type;
+    }
+  }
+
+  /// Return the name of function with proper import
+  String getFunctionCallName() {
+    if (asStringConstantValue() case final fnNameRef?) {
+      return '$importPrefix$fnNameRef';
+    }
+    return '$importPrefix$name';
+  }
+
+  MacroProperty? getTopFieldInitializer() {
+    if (fieldInitializer == null) return null;
+
+    MacroProperty? currentInitializer = fieldInitializer;
+    while (true) {
+      if (currentInitializer?.fieldInitializer case final v?) {
+        currentInitializer = v;
+        continue;
+      }
+
+      return currentInitializer;
+    }
+  }
+
   Map<String, dynamic> toJson() {
     return {
       if (name.isNotEmpty) 'n': name,
+      if (importPrefix.isNotEmpty) 'ip': importPrefix,
       if (type.isNotEmpty) 't': type,
       'ti': typeInfo.id,
       if (deepEquality == true) 'dq': true,
@@ -790,6 +940,7 @@ class MacroProperty {
       if (extraMetadata?.isNotEmpty == true) 'em': extraMetadata!.map((k, v) => MapEntry(k, v.toJson())),
       if (modifier.isNotEmpty) 'm': modifier,
       if (keys?.isNotEmpty == true) 'k': keys!.map((e) => e.toJson()).toList(),
+      if (fieldInitializer != null) 'fi': fieldInitializer!.toJson(),
       if (constantValue case Set val) ...{
         'cv': val.toList(),
         'cvType': 'set',
@@ -805,7 +956,7 @@ class MacroProperty {
 
   @override
   String toString() {
-    return 'MacroProperty{name: $name, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, deepEquality: $deepEquality, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, constantValue: $constantValue, constantModifier: $constantModifier, requireConversionToLiteral: $requireConversionToLiteral}';
+    return 'MacroProperty{name: $name, importPrefix: $importPrefix, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, deepEquality: $deepEquality, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, fieldInitializer: $fieldInitializer, constantValue: $constantValue, constantModifier: $constantModifier, requireConversionToLiteral: $requireConversionToLiteral}';
   }
 }
 
@@ -851,186 +1002,16 @@ enum TypeInfo implements Identifiable<int> {
 
   bool get isClassLike {
     return switch (this) {
-      clazz || clazzAugmentation || extensionType => true,
+      clazz || clazzAugmentation || extension || extensionType => true,
       _ => false,
     };
   }
 }
 
-extension type const MacroModifier(Map<String, bool> value) implements Map<String, bool> {
-  static MacroModifier create({
-    bool isConst = false,
-    bool isFactory = false,
-    bool isGenerative = false,
-    bool isDefaultConstructor = false,
-    bool isFinal = false,
-    bool isLate = false,
-    bool isNullable = false,
-    bool isStatic = false,
-    bool isPrivate = false,
-    bool isExternal = false,
-    bool isAbstract = false,
-    bool isSealed = false,
-    bool isExhaustive = false,
-    // bool isExtendableOutside = false,
-    // bool isImplementableOutside = false,
-    // bool isMixableOutside = false,
-    bool isMixinClass = false,
-    bool isBase = false,
-    bool isInterface = false,
-    // bool isConstructable = false,
-    bool hasNonFinalField = false,
-    bool isCovariant = false,
-    bool isOperator = false,
-    bool isOverridden = false,
-    bool isAsynchronous = false,
-    bool isSynchronous = false,
-    bool isGenerator = false,
-    bool isAugmentation = false,
-    bool isExtensionMember = false,
-    bool isRequiredNamed = false,
-    bool isRequiredPositional = false,
-    bool isGetProperty = false,
-    bool isSetProperty = false,
-    bool hasInitializer = false,
-    bool hasDefaultValue = false,
-    bool isInitializingFormal = false,
-    bool fieldFormalParameter = false,
-    bool formalParameter = false,
-  }) {
-    return MacroModifier({
-      if (isConst) 'c': true,
-      if (isFactory) 'fa': true,
-      if (isGenerative) 'ga': true,
-      if (isDefaultConstructor) 'dc': true,
-      if (isFinal) 'f': true,
-      if (isLate) 'l': true,
-      if (isNullable) 'n': true,
-      if (isStatic) 's': true,
-      if (isPrivate) 'p': true,
-      if (isExternal) 'ex': true,
-      if (isAbstract) 'a': true,
-      if (isSealed) 'cs': true,
-      if (isExhaustive) 'ce': true,
-      // if (isExtendableOutside) 'eo': true,
-      // if (isImplementableOutside) 'io': true,
-      // if (isMixableOutside) 'mo': true,
-      if (isMixinClass) 'mc': true,
-      if (isBase) 'b': true,
-      if (isInterface) 'ci': true,
-      // if (isConstructable) 'cc': true,
-      if (hasNonFinalField) 'hnf': true,
-      if (isCovariant) 'co': true,
-      if (isAsynchronous) 'ab': true,
-      if (isSynchronous) 'sb': true,
-      if (isOperator) 'op': true,
-      if (isOverridden) 'o': true,
-      if (isGenerator) 'g': true,
-      if (isAugmentation) 'ag': true,
-      if (isExtensionMember) 'e': true,
-      if (isRequiredNamed) 'rn': true,
-      if (isRequiredPositional) 'rp': true,
-      if (isGetProperty) 'gp': true,
-      if (isSetProperty) 'sp': true,
-      if (hasInitializer) 'hi': true,
-      if (hasDefaultValue) 'hd': true,
-      if (isInitializingFormal) 'if': true,
-      if (fieldFormalParameter) 'ffp': true else if (formalParameter) 'fp': true,
-    });
-  }
-
-  void setIsNullable(bool isNull) {
-    this['n'] = isNull;
-  }
-
-  bool get isConst => value['c'] == true;
-
-  bool get isFactory => value['fa'] == true;
-
-  bool get isGenerative => value['ga'] == true;
-
-  bool get isDefaultConstructor => value['dc'] == true;
-
-  bool get isFinal => value['f'] == true;
-
-  bool get isLate => value['l'] == true;
-
-  bool get isNullable => value['n'] == true;
-
-  bool get isStatic => value['s'] == true;
-
-  bool get isPrivate => value['p'] == true;
-
-  bool get isPublic => !isPrivate;
-
-  bool get isExternal => value['ex'] == true;
-
-  bool get isAbstract => value['a'] == true;
-
-  bool get isSealed => value['sc'] == true;
-
-  bool get isExhaustive => value['ce'] == true;
-
-  // bool get isExtendableOutside => value['eo'] == true;
-  //
-  // bool get isImplementableOutside => value['io'] == true;
-  //
-  // bool get isMixableOutside => value['mo'] == true;
-
-  bool get isMixinClass => value['mc'] == true;
-
-  bool get isBase => value['b'] == true;
-
-  bool get isInterface => value['ci'] == true;
-
-  // bool get isConstructable => value['cc'] == true;
-
-  bool get hasNonFinalField => value['hnf'] == true;
-
-  bool get isCovariant => value['co'] == true;
-
-  /// Whether the body is marked as being asynchronous.
-  bool get isAsynchronous => value['ab'] == true;
-
-  /// Whether the body is marked as being synchronous.
-  bool get isSynchronous => value['sb'] == true;
-
-  bool get isOperator => value['op'] == true;
-
-  bool get isOverridden => value['o'] == true;
-
-  /// Whether the body is marked as being a generator.
-  bool get isGenerator => value['g'] == true;
-
-  /// Whether the element is an augmentation.
-  bool get isAugmentation => value['ag'] == true;
-
-  bool get isExtensionMember => value['e'] == true;
-
-  bool get isRequireNamed => value['rn'] == true;
-
-  bool get isRequirePositional => value['rp'] == true;
-
-  bool get isGetProperty => value['gp'] == true;
-
-  bool get isSetProperty => value['sp'] == true;
-
-  /// Whether the variable has an initializer at declaration.
-  bool get hasInitializer => value['hi'] == true;
-
-  /// Whether the parameter has a default value
-  bool get hasDefaultValue => value['hdv'] == true;
-
-  ///  Whether the parameter is an initializing formal parameter.
-  bool get isInitializingFormal => value['if'] == true;
-
-  /// Whether the parameter defined in constructor and as a field
-  bool get isFieldFormalParameter => value['ffp'] == true;
-
-  /// Whether the parameter defined in constructor only
-  bool get isFormalParameter => value['fp'] == true;
-}
-
+/// Represents a method declaration
+///
+/// This class contains information about a method including its name, type parameters,
+/// parameters, return types, and any applied modifiers or macro keys.
 class MacroMethod {
   const MacroMethod({
     required this.name,
@@ -1044,7 +1025,8 @@ class MacroMethod {
   static MacroMethod fromJson(Map<String, dynamic> json) {
     return MacroMethod(
       name: json['n'] as String? ?? '',
-      typeParams: (json['tp'] as List?)?.map((e) => e as String).toList() ?? const [],
+      typeParams:
+          (json['tp'] as List?)?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
       params: MacroProperty._decodeUpdatableList(json['p'] as List),
       returns: MacroProperty._decodeUpdatableList(json['r'] as List),
       modifier: json['m'] == null
@@ -1054,17 +1036,67 @@ class MacroMethod {
     );
   }
 
+  /// The name of the method.
   final String name;
-  final List<String> typeParams;
+
+  /// Type parameters (generics) of the method, if any.
+  final List<MacroProperty> typeParams;
+
+  /// The parameters accepted by this method.
   final List<MacroProperty> params;
+
+  /// The return types of this method
   final List<MacroProperty> returns;
+
+  /// Modifiers applied to this method (e.g., static, async, abstract).
   final MacroModifier modifier;
+
+  /// Optional macro keys associated with this method.
   final List<MacroKey>? keys;
+
+  String getFunctionType(String dartCorePrefix) {
+    final str = StringBuffer();
+    if (returns.firstOrNull case final v?) {
+      str.write(v.getDartType(dartCorePrefix));
+      str.write(' ');
+    }
+
+    str.write('Function${MacroProperty.getClassTypeParameterWithBound(typeParams)}(');
+
+    final posParams = <MacroProperty>[];
+    final namedParams = <MacroProperty>[];
+    for (final param in params) {
+      (param.modifier.isNamed ? namedParams : posParams).add(param);
+    }
+
+    // Positional parameters
+    for (int i = 0; i < posParams.length; i++) {
+      if (i > 0) str.write(', ');
+      final p = posParams[i];
+      str.write('${p.getDartType(dartCorePrefix)} ${p.name}');
+    }
+
+    // Named parameters
+    if (namedParams.isNotEmpty) {
+      if (posParams.isNotEmpty) str.write(', ');
+      str.write('{');
+      for (int i = 0; i < namedParams.length; i++) {
+        if (i > 0) str.write(', ');
+        final p = namedParams[i];
+        if (p.modifier.isRequireNamed) str.write('required ');
+        str.write('${p.getDartType(dartCorePrefix)} ${p.name}');
+      }
+      str.write('}');
+    }
+
+    str.write(')');
+    return str.toString();
+  }
 
   Map<String, dynamic> toJson() {
     return {
       if (name.isNotEmpty) 'n': name,
-      if (typeParams.isNotEmpty) 'tp': typeParams,
+      if (typeParams.isNotEmpty) 'tp': typeParams.map((e) => e.toJson()).toList(),
       if (params.isNotEmpty) 'p': params.map((e) => e.toJson()).toList(),
       'r': returns.map((e) => e.toJson()).toList(),
       if (modifier.value.isNotEmpty) 'm': modifier,
@@ -1074,14 +1106,20 @@ class MacroMethod {
 
   @override
   String toString() {
-    return 'MacroFunction{name: $name, typeParams: $typeParams, params: $params, returns: $returns, modifier: $modifier, keys: $keys}';
+    return 'MacroMethod{name: $name, typeParams: $typeParams, params: $params, returns: $returns, modifier: $modifier, keys: $keys}';
   }
 }
 
+/// Represents a class declaration with its metadata, members, and macro configurations.
+///
+/// This class contains comprehensive information about a Dart class including its
+/// modifiers, fields, constructors, methods, and any applied macro configurations.
 class MacroClassDeclaration {
   const MacroClassDeclaration({
+    required this.libraryId,
     required this.classId,
     required this.configs,
+    required this.importPrefix,
     required this.className,
     required this.modifier,
     required this.classTypeParameters,
@@ -1092,16 +1130,24 @@ class MacroClassDeclaration {
     this.ready = true,
   });
 
+  /// Creates a pending declaration with unresolved members.
+  ///
+  /// Used during the initial analysis phase when the full class structure
+  /// is not yet available or being resolved.
   factory MacroClassDeclaration.pendingDeclaration({
+    required int libraryId,
     required String classId,
+    required String importPrefix,
     required String className,
     required List<MacroConfig> configs,
     required MacroModifier modifier,
-    required List<String>? classTypeParameters,
+    required List<MacroProperty>? classTypeParameters,
     required List<MacroClassDeclaration>? subTypes,
   }) {
     return MacroClassDeclaration(
+      libraryId: libraryId,
       classId: classId,
+      importPrefix: importPrefix,
       configs: configs,
       className: className,
       modifier: modifier,
@@ -1115,6 +1161,7 @@ class MacroClassDeclaration {
   }
 
   static MacroClassDeclaration fromJson(Map<String, dynamic> json) {
+    final libraryId = (json['lid'] as num).toInt();
     final classId = json['cid'] as String;
     final configs = (json['cf'] as List).map((e) => MacroConfig.fromJson(e as Map<String, dynamic>)).toList();
     final ready = (json['rs'] as bool?) ?? true;
@@ -1139,13 +1186,17 @@ class MacroClassDeclaration {
     }
 
     return MacroClassDeclaration(
+      libraryId: libraryId,
       classId: classId,
       configs: configs,
+      importPrefix: (json['ip'] as String?) ?? '',
       className: json['cn'] as String,
       modifier: json['cm'] == null
           ? const MacroModifier({})
           : MacroModifier((json['cm'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
-      classTypeParameters: (json['tp'] as List?)?.map((e) => e as String).toList(),
+      classTypeParameters: (json['tp'] as List?)
+          ?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>))
+          .toList(),
       classFields: classFields,
       constructors: (json['c'] as List?)
           ?.map((e) => MacroClassConstructor.fromJson(e as Map<String, dynamic>))
@@ -1156,21 +1207,52 @@ class MacroClassDeclaration {
     );
   }
 
+  /// The ID of the library where this class is declared.
+  ///
+  /// Use this ID to retrieve the full path of the declaration's source file.
+  final int libraryId;
+
+  /// Unique identifier for this class declaration.
   final String classId;
+
+  /// List of macro configurations applied to this class.
   final List<MacroConfig> configs;
+
+  /// The import prefix used when importing this class (empty string if none).
+  final String importPrefix;
+
+  /// The name of the class.
   final String className;
+
+  /// Modifiers applied to this class (e.g., abstract, sealed, static).
   final MacroModifier modifier;
-  final List<String>? classTypeParameters;
+
+  /// Type parameters (generics) of the class, if any.
+  final List<MacroProperty>? classTypeParameters;
+
+  /// Fields declared in this class.
   final List<MacroProperty>? classFields;
+
+  /// Constructors defined in this class.
   final List<MacroClassConstructor>? constructors;
+
+  /// Methods defined in this class.
   final List<MacroMethod>? methods;
+
+  /// Subtypes that extend or implement this class (for sealed classes).
   final List<MacroClassDeclaration>? subTypes;
+
+  /// Indicates whether all types referenced by this class have been resolved.
+  ///
+  /// When `false`, the class has unresolved type references that are still being processed.
   final bool ready;
 
-  MacroClassDeclaration copyWith({String? classId, List<MacroConfig>? configs, bool? ready}) {
+  MacroClassDeclaration copyWith({int? libraryId, String? classId, List<MacroConfig>? configs, bool? ready}) {
     return MacroClassDeclaration(
+      libraryId: libraryId ?? this.libraryId,
       classId: classId ?? this.classId,
       configs: configs ?? this.configs,
+      importPrefix: importPrefix,
       className: className,
       modifier: modifier,
       classTypeParameters: classTypeParameters,
@@ -1184,13 +1266,15 @@ class MacroClassDeclaration {
 
   Map<String, dynamic> toJson() {
     return {
+      'lid': libraryId,
       'cid': classId,
       'cf': configs.map((e) => e.toJson()).toList(),
+      if (importPrefix.isNotEmpty) 'ip': importPrefix,
       'cn': className,
       if (ready == false) 'rs': false,
       if (ready) ...{
         if (modifier.value.isNotEmpty) 'cm': modifier.value,
-        if (classTypeParameters?.isNotEmpty == true) 'tp': classTypeParameters,
+        if (classTypeParameters?.isNotEmpty == true) 'tp': classTypeParameters!.map((e) => e.toJson()).toList(),
         if (classFields?.isNotEmpty == true) 'f': classFields!.map((e) => e.toJson()).toList(),
         if (constructors?.isNotEmpty == true) 'c': constructors!.map((e) => e.toJson()).toList(),
         if (methods?.isNotEmpty == true) 'm': methods!.map((e) => e.toJson()).toList(),
@@ -1201,7 +1285,7 @@ class MacroClassDeclaration {
 
   @override
   String toString() {
-    return 'MacroClassDeclaration{classId: $classId, configs: $configs, className: $className, modifier: $modifier, classTypeParameters: $classTypeParameters, classFields: $classFields, constructors: $constructors, methods: $methods, subTypes: $subTypes}';
+    return 'MacroClassDeclaration{libraryId: $libraryId, classId: $classId, configs: $configs, importPrefix: $importPrefix, className: $className, modifier: $modifier, classTypeParameters: $classTypeParameters, classFields: $classFields, constructors: $constructors, methods: $methods, subTypes: $subTypes, ready: $ready}';
   }
 }
 
@@ -1265,6 +1349,69 @@ class MacroAssetDeclaration {
   @override
   String toString() {
     return 'MacroAssetDeclaration{path: $path, type: $type}';
+  }
+}
+
+/// Defines naming conventions for transforming field names.
+///
+/// Used to specify how field names should be transformed when generating
+/// code, particularly useful for converting between different naming conventions
+/// like snake_case, camelCase, PascalCase, etc.
+enum FieldRename {
+  /// Use the field name without changes.
+  ///
+  /// Example: `myFieldName` → `myFieldName`
+  none,
+
+  /// Converts a field name to camelCase.
+  ///
+  /// The first letter is lowercase, and subsequent words start with uppercase.
+  /// Example: `my_field_name` → `myFieldName`
+  camelCase,
+
+  /// Converts a field name to kebab-case.
+  ///
+  /// Words are separated by hyphens and all letters are lowercase.
+  /// Example: `myFieldName` → `my-field-name`
+  kebab,
+
+  /// Converts a field name to snake_case.
+  ///
+  /// Words are separated by underscores and all letters are lowercase.
+  /// Example: `myFieldName` → `my_field_name`
+  snake,
+
+  /// Converts a field name to PascalCase.
+  ///
+  /// The first letter and the first letter of each subsequent word are uppercase.
+  /// Example: `my_field_name` → `MyFieldName`
+  pascal,
+
+  /// Converts a field name to SCREAMING_SNAKE_CASE.
+  ///
+  /// Words are separated by underscores and all letters are uppercase.
+  /// Example: `myFieldName` → `MY_FIELD_NAME`
+  screamingSnake;
+
+  /// Transforms the given [name] according to this naming convention.
+  ///
+  /// Returns a new string with the [name] transformed based on the selected
+  /// [FieldRename] option.
+  ///
+  /// Example:
+  /// ```dart
+  /// FieldRename.snake.renameOf('myFieldName'); // Returns 'my_field_name'
+  /// FieldRename.pascal.renameOf('my_field_name'); // Returns 'MyFieldName'
+  /// ```
+  String renameOf(String name) {
+    return switch (this) {
+      FieldRename.none => name,
+      FieldRename.camelCase => name.toCamelCase(),
+      FieldRename.kebab => name.toKebabCase(),
+      FieldRename.snake => name.toSnakeCase(),
+      FieldRename.pascal => name.toPascalCase(),
+      FieldRename.screamingSnake => name.toSnakeCase().toUpperCase(),
+    };
   }
 }
 
@@ -1365,7 +1512,7 @@ enum AssetChangeType {
   remove,
 }
 
-enum TargetType { clazz, asset }
+enum TargetType { clazz, enumType, asset }
 
 class AssetState {
   AssetState({
@@ -1390,12 +1537,116 @@ class AssetState {
   final String absoluteBaseOutputPath;
 }
 
+/// Provides contextual information and utilities for macro code generation.
+///
+/// [MacroState] is passed to all macro lifecycle methods, providing access to the
+/// annotated class's structure, metadata, imports, and code generation utilities.
+/// Use it to inspect the target declaration, share data between lifecycle methods,
+/// and report generated code back to the build system.
+///
+/// ## Target Information
+///
+/// Access information about the annotated declaration:
+/// - [targetName] - Name of the annotated element (class name, variable name, etc.)
+/// - [targetType] - Type of target ([TargetType.clazz], [TargetType.asset], etc.)
+/// - [modifier] - Declaration modifiers (abstract, sealed, final, const, etc.)
+/// - [importPrefix] - Import prefix for the target (e.g., `'my_lib.'`)
+/// - [macro] - The macro annotation configuration as [MacroKey]
+/// - [remainingMacro] - Other macros that will execute after the current one
+///
+/// ## Import Management
+///
+/// The [imports] map contains all imports from the analyzed file, mapping import
+/// paths to their prefixes. Use this to generate properly prefixed type references:
+///
+/// ```dart
+/// final dartCorePrefix = state.imports["import dart:core"] ?? '';
+/// buff.write('${dartCorePrefix}List<${dartCorePrefix}String>');
+/// ```
+///
+/// The [libraryPaths] map provides file paths for library IDs, useful for resolving
+/// declaration locations.
+///
+/// ## State Storage
+///
+/// Share data between lifecycle methods using the internal storage:
+///
+/// - [set] - Store any value by string key
+/// - [get] - Retrieve required value (asserts type, fails if missing)
+/// - [getOrNull] - Retrieve optional value (returns null if missing)
+/// - [getBool] - Retrieve boolean with default fallback
+/// - [getBoolOrNull] - Retrieve nullable boolean with default fallback
+///
+/// Example:
+/// ```dart
+/// // In onClassFields
+/// state.set('fields', fields);
+///
+/// // In onGenerate
+/// final fields = state.get<List<MacroProperty>>('fields');
+/// ```
+///
+/// ## Class Declaration Lookup
+///
+/// Use [getClassById] to retrieve class declarations by their unique ID. This is
+/// useful for resolving type information and analyzing related classes.
+///
+/// ## Code Generation and Reporting
+///
+/// ### Generated Code
+///
+/// Report generated code using [reportGenerated]:
+/// ```dart
+/// state.reportGenerated(
+///   generatedCode,
+///   canBeCombined: true, // Default: allow combining with other macros
+/// );
+/// ```
+///
+/// **Combinable Code** (`canBeCombined: true`): Multiple macros can merge their
+/// output into a single mixin/class. Access via [generated].
+///
+/// **Non-Combinable Code** (`canBeCombined: false`): Code that must be written
+/// separately (e.g., multiple class declarations, conflicting implementations).
+/// Access via [generatedNonCombinable].
+///
+/// Check [isCombingGenerator] before generating class/mixin wrappers. When `true`,
+/// only output method bodies without class/mixin declarations.
+///
+/// ### Generated Files
+///
+/// For asset macros that produce separate files, use [reportGeneratedFile] to
+/// register output file paths. Access via [generatedFilePaths].
+///
+/// ### Code Formatting
+///
+/// For asset macros, use [formatCode] to format generated Dart code:
+/// ```dart
+/// final formatted = MacroState.formatCode(generatedCode);
+/// ```
+///
+/// Note: Regular macros have automatic formatting applied by the Dart macro system.
+/// Only use [dartFormatter] for asset macro if you generate dart code.
+///
+/// ## Asset Macro Support
+///
+/// ## Error Handling
+///
+/// Throw [MacroException] with descriptive messages for invalid configurations:
+/// ```dart
+/// if (state.targetType != TargetType.clazz) {
+///   throw MacroException('This macro can only be applied to classes');
+/// }
+/// ```
 class MacroState {
   MacroState({
     required this.macro,
     required this.remainingMacro,
     required this.targetType,
     required this.targetName,
+    required this.importPrefix,
+    required this.imports,
+    required this.libraryPaths,
     required this.modifier,
     required this.isCombingGenerator,
     required this.suffixName,
@@ -1415,6 +1666,18 @@ class MacroState {
 
   /// The name of the target element (class, asset or variable name,...)
   final String targetName;
+
+  /// The prefixed import for specified target.
+  ///
+  /// for example it `my_lib.`
+  final String importPrefix;
+
+  /// Map of imports from the analyzed file, where the key is the import path
+  /// and the value is the import prefix (if any)
+  final Map<String, String> imports;
+
+  /// Map of library IDs to their full file paths for target declarations
+  final Map<int, String> libraryPaths;
 
   /// The modifier flags containing information about target declaration
   final MacroModifier modifier;
@@ -1535,65 +1798,146 @@ class MacroState {
   }
 }
 
-abstract class BaseMacroGenerator {
-  const BaseMacroGenerator();
-
-  String get suffixName;
-
-  /// called first time for each class with macro annotation
-  Future<void> init(MacroState state);
-
-  /// Called for a class target which have a type parameter(generic)
-  Future<void> onClassTypeParameter(MacroState state, List<String> typeParameters);
-
-  /// called when macro has class fields capability.
-  /// you can use these fields and generate constructor, when augment feature released
-  /// or use the [onClassConstructors] to know the field defined as positional or named.
-  Future<void> onClassFields(MacroState state, List<MacroProperty> classFields);
-
-  /// called with all available constructor of the class when macro has class constructor capability
-  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> classConstructor);
-
-  /// called with all available method of the class when macro has class method capability
-  Future<void> onClassMethods(MacroState state, List<MacroMethod> executable);
-
-  /// called with all class declaration that's a subtype of target class
-  Future<void> onClassSubTypes(MacroState state, List<MacroClassDeclaration> subTypes) async {}
-
-  /// called when a monitored asset file is created, modified, or deleted in configured asset directories
-  Future<void> onAsset(MacroState state, MacroAssetDeclaration asset);
-
-  /// called at last step to generate the code
-  Future<void> onGenerate(MacroState state);
-}
-
+/// Base class for implementing macro code generation.
+///
+/// A macro is a development-only code generator that analyzes annotated classes in real-time
+/// and produces additional Dart code instantly. Macros run during development (with hot-reload
+/// support) but are excluded from production builds.
+///
+/// ## How Macros Work
+///
+/// When a class is annotated with `@Macro(YourMacro())`, the build system:
+/// 1. Instantiates your macro generator
+/// 2. Invokes lifecycle methods with information about the annotated class
+/// 3. Calls [onGenerate] to produce the final code
+/// 4. Integrates generated code with the original class
+///
+/// ## Macro Types
+///
+/// **Regular Macros**: Analyze class structure (fields, methods, constructors) to
+/// generate code. Used for serialization, equality, immutability patterns, and
+/// other class-based code generation.
+///
+/// **Asset Macros**: Monitor file system paths and regenerate code when assets
+/// change. Used for generating code from external resources like JSON schemas,
+/// OpenAPI specs, or configuration files.
+///
+/// ## Capability Declaration
+///
+/// Declare required capabilities via the [capability] parameter. The macro receives
+/// callbacks only for requested capabilities, optimizing performance by avoiding
+/// unnecessary analysis:
+///
+/// - [MacroCapability.classFields] → [onClassFields] invoked with field declarations
+/// - [MacroCapability.classConstructors] → [onClassConstructors] invoked with constructors
+/// - [MacroCapability.classMethods] → [onClassMethods] invoked with methods
+/// - [MacroCapability.collectClassSubTypes] → [onClassSubTypes] invoked with subtypes
+///
+/// Use capability filters (e.g., [MacroCapability.filterClassInstanceFields],
+/// [MacroCapability.filterClassFieldMetadata]) to narrow the collected data to
+/// only what your macro needs.
+///
+/// ## Metadata and Configuration
+///
+/// Macros read configuration from annotation classes applied to the target class
+/// and its members. Define annotation classes with configuration properties, then
+/// access them through [MacroProperty] instances in lifecycle callbacks. Use
+/// [MacroProperty.cacheFirstKeyInto] to parse annotation data into typed
+/// configuration objects.
+///
+/// Example: A field annotated with `@JsonKey(name: 'user_id')` provides metadata
+/// that the macro can use to customize JSON serialization field names.
+///
+/// ## Code Combination
+///
+/// Multiple macros targeting the same class can combine their output into a single
+/// generated file. When [MacroState.isCombingGenerator] is `true`, generate only
+/// method bodies without class/mixin wrappers. If your macro cannot combine with
+/// others, call [MacroState.reportGenerated] with `canBeCombined: false`.
+///
+/// When multiple macros are applied, their capabilities merge and each macro
+/// receives only the data matching its declared capability.
+///
+/// ## Execution Lifecycle
+///
+/// Lifecycle methods execute in this order:
+///
+/// 1. [init] - Initialize macro state for the annotated class
+/// 2. [onClassTypeParameter] - Process generic type parameters
+/// 3. [onClassFields] - Process field declarations
+/// 4. [onClassConstructors] - Process constructors
+/// 5. [onClassMethods] - Process methods
+/// 6. [onClassSubTypes] - Process subtype declarations
+/// 7. [onAsset] - Handle monitored asset changes (asset macros only)
+/// 8. [onGenerate] - Generate final code output and report via [MacroState.reportGenerated]
+///
+///
+/// ## Implementation Requirements
+///
+/// - Override [suffixName] with a unique suffix for generated class names
+/// - Implement [onGenerate] to produce code output
+/// - Override lifecycle methods corresponding to declared capabilities
+/// - Use [MacroState] to access class information, manage imports, and report output
+/// - Handle errors by throwing [MacroException] with descriptive messages
+///
+/// See [DataClassMacro] for a comprehensive implementation example demonstrating
+/// serialization, equality, and polymorphic type handling.
 abstract class MacroGenerator implements BaseMacroGenerator {
   const MacroGenerator({required this.capability});
 
+  /// The capability describes which elements of a class (constructors,
+  /// fields, methods, metadata, and subtypes) should be collected and made
+  /// available to the macro during generation.
+  ///
+  /// see [MacroCapability] for more information.
   final MacroCapability capability;
 
+  /// Suffix to be appended to generated class names (e.g., `User` → `User$suffixName`).
+  ///
+  /// Required when multiple macros generate code for the same class. Use a unique
+  /// suffix to avoid conflicts. If combining with other macros isn't supported,
+  /// call [MacroState.reportGenerated] with canBeCombined as false.
+  @override
+  String get suffixName;
+
+  /// Called once per annotated class to initialize the macro state.
   @override
   Future<void> init(MacroState state) async {}
 
+  /// Called when the target class has type parameters.
   @override
-  Future<void> onClassTypeParameter(MacroState state, List<String> typeParameters) async {}
+  Future<void> onClassTypeParameter(MacroState state, List<MacroProperty> typeParameters) async {}
 
+  /// Called with all fields of the target class.
+  ///
+  /// Use to generate constructors or analyze field metadata. See [onClassConstructors]
+  /// to determine whether fields are positional or named parameters.
   @override
   Future<void> onClassFields(MacroState state, List<MacroProperty> classFields) async {}
 
+  /// Called with all constructors of the target class.
   @override
   Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> classConstructor) async {}
 
+  /// Called with all methods of the target class.
   @override
   Future<void> onClassMethods(MacroState state, List<MacroMethod> names) async {}
 
+  /// Called with all subtypes of the target class in the library
   @override
   Future<void> onClassSubTypes(MacroState state, List<MacroClassDeclaration> subTypes) async {}
 
+  /// Called when a monitored asset file changes in configured directories.
+  ///
+  /// Triggers on create, modify, or delete events.
   @override
   Future<void> onAsset(MacroState state, MacroAssetDeclaration asset) async {}
 
-  /// Return whether a class have a method with specified [name] or in metadata support
+  /// Called last to generate the final code output.
+  @override
+  Future<void> onGenerate(MacroState state);
+
+  /// Return whether a class have a method with specified [methodName] or in metadata support
   /// generating this capability to the class.
   ///
   /// the configuration for that feature must be boolean value and it consider
@@ -1601,7 +1945,7 @@ abstract class MacroGenerator implements BaseMacroGenerator {
   (bool, MacroMethod?) hasMethodOf({
     required MacroClassDeclaration? declaration,
     required String macroName,
-    required String name,
+    required String methodName,
     required String configName,
     bool? staticFunction,
   }) {
@@ -1609,7 +1953,7 @@ abstract class MacroGenerator implements BaseMacroGenerator {
 
     // fast path: check toJson method
     final method = declaration.methods?.firstWhereOrNull(
-      (e) => e.name == name && (staticFunction == null || staticFunction == e.modifier.isStatic),
+      (e) => e.name == methodName && (staticFunction == null || staticFunction == e.modifier.isStatic),
     );
     if (method != null) {
       return (true, method);
@@ -1625,18 +1969,6 @@ abstract class MacroGenerator implements BaseMacroGenerator {
     }
 
     return (false, null);
-  }
-
-  String computeClassTypeParamWithBound(List<String> generics) {
-    final value = generics
-        .mapIndexed((i, e) {
-          // final extend = genericsExtends![i];
-          // return extend != '' ? '$e extends $extend' : e;
-          return e;
-        })
-        .join(',');
-
-    return '<$value>';
   }
 }
 

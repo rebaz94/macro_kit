@@ -1,10 +1,25 @@
+import 'dart:async';
+
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
-import 'package:macro_kit/macro.dart';
+import 'package:collection/collection.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
+import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:macro_kit/src/core/core.dart';
+import 'package:macro_kit/src/core/modifier.dart';
+
+typedef TypeInfoResult = ({
+  String importPrefix,
+  MacroClassDeclaration? classInfo,
+  bool? deepEq,
+  MacroMethod? fnInfo,
+  String type,
+  List<MacroProperty>? typeArguments,
+  TypeInfo typeInfo,
+});
 
 extension Types on BaseAnalyzer {
   bool isValidAnnotation(
@@ -48,16 +63,17 @@ extension Types on BaseAnalyzer {
     }
 
     final capability = MacroCapability(
-      classConstructors: cap.peek('classConstructors')?.toBoolValue() ?? false,
-      filterClassConstructorParameterMetadata:
-          cap.peek('filterClassConstructorParameterMetadata')?.toStringValue() ?? '',
-      mergeClassFieldWithConstructorParameter:
-          cap.peek('mergeClassFieldWithConstructorParameter')?.toBoolValue() ?? false,
       classFields: cap.peek('classFields')?.toBoolValue() ?? false,
       filterClassInstanceFields: cap.peek('filterClassInstanceFields')?.toBoolValue() ?? false,
       filterClassStaticFields: cap.peek('filterClassStaticFields')?.toBoolValue() ?? false,
       filterClassIgnoreSetterOnly: cap.peek('filterClassIgnoreSetterOnly')?.toBoolValue() ?? true,
       filterClassFieldMetadata: cap.peek('filterClassFieldMetadata')?.toStringValue() ?? '',
+      classConstructors: cap.peek('classConstructors')?.toBoolValue() ?? false,
+      filterClassConstructorParameterMetadata:
+          cap.peek('filterClassConstructorParameterMetadata')?.toStringValue() ?? '',
+      mergeClassFieldWithConstructorParameter:
+          cap.peek('mergeClassFieldWithConstructorParameter')?.toBoolValue() ?? false,
+      inspectFieldInitializer: cap.peek('inspectFieldInitializer')?.toBoolValue() ?? false,
       classMethods: cap.peek('classMethods')?.toBoolValue() ?? false,
       filterClassInstanceMethod: cap.peek('filterClassInstanceMethod')?.toBoolValue() ?? false,
       filterClassStaticMethod: cap.peek('filterClassStaticMethod')?.toBoolValue() ?? false,
@@ -74,7 +90,7 @@ extension Types on BaseAnalyzer {
       final fieldValue = generator.peek(fieldName);
       if (fieldValue == null) continue;
 
-      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
         fieldValue.type,
         const [],
         '',
@@ -85,12 +101,14 @@ extension Types on BaseAnalyzer {
       props.add(
         MacroProperty(
           name: fieldName,
+          importPrefix: importPrefix,
           type: type,
           typeInfo: typeInfo,
           typeArguments: typeArguments,
           classInfo: classInfo,
           deepEquality: deepEq,
           functionTypeInfo: fnInfo,
+          fieldInitializer: null,
           constantModifier: modifier,
           constantValue: constantValue,
           requireConversionToLiteral: reqConversion ? true : null,
@@ -112,16 +130,14 @@ extension Types on BaseAnalyzer {
   ) async {
     List<MacroKey>? macroKeys;
     if (filter == '*') {
-      macroKeys = (await Future.wait(
-        metadata.annotations.map((e) => computeMacroKey(e, capability)),
-      )).nonNulls.toList();
+      final keys = metadata.annotations.map((e) => computeMacroKey(e, capability));
+      macroKeys = (await Future.wait(keys)).nonNulls.toList();
     } else if (filter.isNotEmpty) {
       final targetKeys = filter.split(',');
-      macroKeys = (await Future.wait(
-        metadata.annotations
-            .where((elem) => targetKeys.contains(elem.element?.displayName))
-            .map((e) => computeMacroKey(e, capability)),
-      )).nonNulls.toList();
+      final keys = metadata.annotations
+          .where((elem) => targetKeys.contains(elem.element?.displayName))
+          .map((e) => computeMacroKey(e, capability));
+      macroKeys = (await Future.wait(keys)).nonNulls.toList();
     }
 
     return macroKeys;
@@ -143,7 +159,7 @@ extension Types on BaseAnalyzer {
       final fieldValue = value.peek(fieldName);
       if (fieldValue == null) continue;
 
-      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
         fieldValue.type,
         const [],
         '',
@@ -154,12 +170,14 @@ extension Types on BaseAnalyzer {
       props.add(
         MacroProperty(
           name: fieldName,
+          importPrefix: importPrefix,
           type: type,
           typeInfo: typeInfo,
           typeArguments: typeArguments,
           classInfo: classInfo,
           deepEquality: deepEq,
           functionTypeInfo: fnInfo,
+          fieldInitializer: null,
           constantValue: constantValue,
           constantModifier: modifier,
           requireConversionToLiteral: reqConversion ? true : null,
@@ -204,7 +222,7 @@ extension Types on BaseAnalyzer {
     }
     // check maybe its Type
     else if (fieldValue.toTypeValue() case DartType typeValue) {
-      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
         typeValue,
         [],
         '',
@@ -213,13 +231,15 @@ extension Types on BaseAnalyzer {
 
       final typeProp = MacroProperty(
         name: '',
+        importPrefix: importPrefix,
         type: type,
         typeInfo: typeInfo,
         functionTypeInfo: fnInfo,
         deepEquality: deepEq,
         classInfo: classInfo,
         typeArguments: typeArguments,
-        modifier: getModifierInfoFrom(typeValue),
+        modifier: MacroModifier.getModifierInfoFrom(typeValue),
+        fieldInitializer: null,
       );
       return (constantValue: typeProp, reqConversion: false, modifier: typeProp.modifier);
     }
@@ -236,13 +256,20 @@ extension Types on BaseAnalyzer {
         // final result = 'const ${fieldValue.constructorInvocation!.constructor.qualifiedName}()';
         // library developer should use type information to build a literal dart constant value
         // we encode it, so that can be transferred between process
+        final object = runZoneGuarded(
+          fn: () => fieldValue.literalForObject(fieldName, []),
+          values: {#imports: importPrefixByElements},
+        );
         return (
-          constantValue: fieldValue.literalForObject(fieldName, []),
+          constantValue: object,
           reqConversion: true,
           modifier: MacroModifier.create(isConst: true),
         );
       } else {
-        final object = fieldValue.literalForObject(fieldName, []);
+        final object = runZoneGuarded(
+          fn: () => fieldValue.literalForObject(fieldName, []),
+          values: {#imports: importPrefixByElements},
+        );
         if (object != null) {
           return (constantValue: object, reqConversion: true, modifier: MacroModifier.create(isConst: true));
         }
@@ -252,19 +279,9 @@ extension Types on BaseAnalyzer {
     }
   }
 
-  Future<
-    ({
-      MacroClassDeclaration? classInfo,
-      bool? deepEq,
-      MacroMethod? fnInfo,
-      String type,
-      List<MacroProperty>? typeArguments,
-      TypeInfo typeInfo,
-    })
-  >
-  getTypeInfoFrom(
+  Future<TypeInfoResult> getTypeInfoFrom(
     Object? /*Element?|DartType*/ elem,
-    List<String> genericParams,
+    List<MacroProperty> genericParams,
     String filterMethodMetadata,
     MacroCapability capability,
   ) async {
@@ -273,6 +290,7 @@ extension Types on BaseAnalyzer {
       FormalParameterElement() => elem.type,
       PropertyInducingElement() => elem.type,
       MethodElement() => elem.type,
+      FunctionType() => elem,
       DartType() => elem,
       _ => () {
         if (elem != null) {
@@ -283,6 +301,7 @@ extension Types on BaseAnalyzer {
     };
     if (type == null) {
       return (
+        importPrefix: '',
         type: 'dynamic',
         typeInfo: TypeInfo.dynamic,
         typeArguments: null,
@@ -293,6 +312,7 @@ extension Types on BaseAnalyzer {
     }
 
     final dartType = type.toString();
+    final importPrefix = importPrefixByElements[type.element] ?? importPrefixByElements[elem] ?? '';
 
     var typeInfo = TypeInfo.dynamic;
     List<MacroProperty>? macroTypeArguments;
@@ -396,7 +416,10 @@ extension Types on BaseAnalyzer {
       Future<TypeInfo> fallbackCase() async {
         String forName;
         (typeInfo, forName) = switch (typeElem?.kind) {
-          _ when genericParams.contains(typeElemName) => const (TypeInfo.generic, 'generic'),
+          _ when genericParams.firstWhereOrNull((e) => e.name == typeElemName) != null => const (
+            TypeInfo.generic,
+            'generic',
+          ),
           ElementKind.CLASS => const (TypeInfo.clazz, 'class'),
           ElementKind.CLASS_AUGMENTATION => const (TypeInfo.clazzAugmentation, 'class_augmentation'),
           ElementKind.EXTENSION => const (TypeInfo.extension, 'extension'),
@@ -418,6 +441,8 @@ extension Types on BaseAnalyzer {
         if (typeInfo == TypeInfo.clazz && typeElem is ClassElement) {
           final classFragment = typeElem.firstFragment;
           classInfo = await parseClass(classFragment);
+        } else if (typeInfo == TypeInfo.enumData && typeElem is EnumElement) {
+          classInfo = await parseEnum(typeElem.firstFragment, fallbackCapability: capability);
         }
         // TODO: do we need to inspect augment class?
 
@@ -454,6 +479,7 @@ extension Types on BaseAnalyzer {
     }
 
     return (
+      importPrefix: importPrefix,
       type: dartType,
       typeInfo: typeInfo,
       typeArguments: macroTypeArguments,
@@ -465,7 +491,7 @@ extension Types on BaseAnalyzer {
 
   Future<MacroMethod> getFunctionInfo(
     Object? method,
-    List<String> genericParams, {
+    List<MacroProperty> genericParams, {
     required MacroCapability capability,
     required String filterMethodMetadata,
     required List<MacroKey>? macroKeys,
@@ -493,9 +519,11 @@ extension Types on BaseAnalyzer {
         params: const [],
         returns: [
           MacroProperty(
+            importPrefix: '',
             name: '',
             type: 'void',
             typeInfo: TypeInfo.voidType,
+            fieldInitializer: null,
           ),
         ],
         modifier: const MacroModifier({}),
@@ -503,12 +531,12 @@ extension Types on BaseAnalyzer {
       );
     }
 
-    final typeParams = fnType.typeParameters.map((e) => e.name ?? '').toList();
+    final typeParams = await parseTypeParameter(capability, fnType.typeParameters);
     final params = <MacroProperty>[];
 
     // parameters
     for (final param in fnType.formalParameters) {
-      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
         param,
         CombinedListView([typeParams, genericParams]),
         filterMethodMetadata,
@@ -520,30 +548,48 @@ extension Types on BaseAnalyzer {
       params.add(
         MacroProperty(
           name: param.name ?? '',
+          importPrefix: importPrefix,
           type: type,
           typeInfo: typeInfo,
           deepEquality: deepEq,
           typeArguments: typeArguments,
           classInfo: classInfo,
           functionTypeInfo: fnInfo,
-          modifier: getModifierInfoFrom(
+          modifier: MacroModifier.getModifierInfoFrom(
             param,
             isNullable: param.type.nullabilitySuffix != NullabilitySuffix.none,
           ),
           keys: macroKeys,
+          fieldInitializer: null,
         ),
       );
     }
 
-    // returns
-    final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+    // return type
+    final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
       returnType,
       CombinedListView([typeParams, genericParams]),
       filterMethodMetadata,
       capability,
     );
+    final returnTypeProp = MacroProperty(
+      name: '',
+      importPrefix: importPrefix,
+      type: type,
+      typeInfo: typeInfo,
+      deepEquality: deepEq,
+      classInfo: classInfo,
+      functionTypeInfo: fnInfo,
+      typeArguments: typeArguments,
+      modifier: MacroModifier.getModifierInfoFrom(
+        returnType!,
+        isNullable: returnType.nullabilitySuffix != NullabilitySuffix.none,
+      ),
+      fieldInitializer: null,
+    );
 
-    final fnModifier = getModifierInfoFrom(
+    // fn modifier
+    final fnModifier = MacroModifier.getModifierInfoFrom(
       method!,
       isNullable: fnType.nullabilitySuffix != NullabilitySuffix.none,
       isAsynchronous: isAsynchronous,
@@ -556,21 +602,7 @@ extension Types on BaseAnalyzer {
       name: methodName ?? '',
       typeParams: typeParams,
       params: params,
-      returns: [
-        MacroProperty(
-          name: '',
-          type: type,
-          typeInfo: typeInfo,
-          deepEquality: deepEq,
-          classInfo: classInfo,
-          functionTypeInfo: fnInfo,
-          typeArguments: typeArguments,
-          modifier: getModifierInfoFrom(
-            returnType!,
-            isNullable: returnType.nullabilitySuffix != NullabilitySuffix.none,
-          ),
-        ),
-      ],
+      returns: [returnTypeProp],
       modifier: fnModifier,
       keys: macroKeys,
     );
@@ -595,14 +627,14 @@ extension Types on BaseAnalyzer {
 
   Future<List<MacroProperty>> createMacroTypeArguments(
     List<DartType> types,
-    List<String> genericParams,
+    List<MacroProperty> genericParams,
     MacroCapability capability,
     String filterMethodMetadata, {
     int? mustTake,
   }) async {
     final macroTypeArguments = <MacroProperty>[];
     for (final genericType in (mustTake == null ? types : types.take(mustTake))) {
-      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
         genericType,
         genericParams,
         filterMethodMetadata,
@@ -611,19 +643,21 @@ extension Types on BaseAnalyzer {
       macroTypeArguments.add(
         MacroProperty(
           name: '',
+          importPrefix: importPrefix,
           type: type,
           typeInfo: typeInfo,
           deepEquality: deepEq,
           classInfo: classInfo,
           typeArguments: typeArguments,
           functionTypeInfo: fnInfo,
+          fieldInitializer: null,
         ),
       );
     }
 
     if (mustTake != null) {
       for (int i = macroTypeArguments.length; i < mustTake; i++) {
-        final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+        final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
           null,
           genericParams,
           filterMethodMetadata,
@@ -633,12 +667,14 @@ extension Types on BaseAnalyzer {
         macroTypeArguments.add(
           MacroProperty(
             name: '',
+            importPrefix: importPrefix,
             type: type,
             typeInfo: typeInfo,
             deepEquality: deepEq,
             classInfo: classInfo,
             typeArguments: typeArguments,
             functionTypeInfo: fnInfo,
+            fieldInitializer: null,
           ),
         );
       }
@@ -649,7 +685,7 @@ extension Types on BaseAnalyzer {
 
   Future<MacroProperty?> inspectStaticFromJson(
     DartType type,
-    List<String> genericParams,
+    List<MacroProperty> genericParams,
     String filterMethodMetadata,
     MacroCapability capability,
   ) async {
@@ -662,7 +698,7 @@ extension Types on BaseAnalyzer {
         return null;
       }
 
-      final (:type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
         firstParam.type,
         genericParams,
         filterMethodMetadata,
@@ -670,164 +706,17 @@ extension Types on BaseAnalyzer {
       );
       return MacroProperty(
         name: '',
+        importPrefix: importPrefix,
         type: type,
         typeInfo: typeInfo,
         deepEquality: deepEq,
         classInfo: classInfo,
         functionTypeInfo: fnInfo,
         typeArguments: typeArguments,
+        fieldInitializer: null,
       );
     }
 
     return null;
-  }
-
-  MacroModifier getModifierInfoFrom(
-    Object elem, {
-    bool isNullable = false,
-    bool isAsynchronous = false,
-    bool isSynchronous = false,
-    bool isGenerator = false,
-    bool isAugmentation = false,
-  }) {
-    return switch (elem) {
-      FieldElement() => MacroModifier.create(
-        isConst: elem.isConst,
-        isFinal: elem.isFinal,
-        isLate: elem.isLate,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-        isExternal: elem.isExternal,
-        isAbstract: elem.isAbstract,
-        isCovariant: elem.isCovariant,
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isGetProperty: elem.getter != null,
-        isSetProperty: elem.setter != null,
-        hasInitializer: elem.hasInitializer,
-      ),
-      FieldFormalParameterElement() => MacroModifier.create(
-        isConst: elem.isConst,
-        isFinal: elem.isFinal,
-        isLate: elem.isLate,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-        isCovariant: elem.isCovariant,
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isRequiredNamed: elem.isRequiredNamed,
-        isRequiredPositional: elem.isRequiredPositional,
-        hasDefaultValue: elem.hasDefaultValue,
-        isInitializingFormal: elem.isInitializingFormal,
-        fieldFormalParameter: true,
-      ),
-      FormalParameterElement() => MacroModifier.create(
-        isConst: elem.isConst,
-        isFinal: elem.isFinal,
-        isLate: elem.isLate,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-        isCovariant: elem.isCovariant,
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isRequiredNamed: elem.isRequiredNamed,
-        isRequiredPositional: elem.isRequiredPositional,
-        hasDefaultValue: elem.hasDefaultValue,
-        isInitializingFormal: elem.isInitializingFormal,
-        formalParameter: true,
-      ),
-      LocalVariableElement() => MacroModifier.create(
-        isConst: elem.isConst,
-        isFinal: elem.isFinal,
-        isLate: elem.isLate,
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-        hasInitializer: elem.constantInitializer != null,
-      ),
-      TopLevelVariableElement() => MacroModifier.create(
-        isConst: elem.isConst,
-        isFinal: elem.isFinal,
-        isLate: elem.isLate,
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-        isExternal: elem.isExternal,
-        isGetProperty: elem.getter != null,
-        isSetProperty: elem.setter != null,
-        hasInitializer: elem.hasInitializer,
-      ),
-      VariableElement() => MacroModifier.create(
-        isConst: elem.isConst,
-        isFinal: elem.isFinal,
-        isLate: elem.isLate,
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-      ),
-      MethodElement() => MacroModifier.create(
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-        isExternal: elem.isExternal,
-        isAbstract: elem.isAbstract,
-        isOperator: elem.isOperator,
-        isExtensionMember: elem.isExtensionTypeMember,
-      ),
-      ConstructorElement() => MacroModifier.create(
-        isConst: elem.isConst,
-        isFactory: elem.isFactory,
-        isGenerative: elem.isGenerative,
-        isDefaultConstructor: elem.isDefaultConstructor,
-        isAugmentation: isAugmentation,
-        isPrivate: elem.isPrivate,
-        isExternal: elem.isExternal,
-      ),
-      ExecutableElement() => MacroModifier.create(
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isNullable: isNullable,
-        isStatic: elem.isStatic,
-        isPrivate: elem.isPrivate,
-        isExternal: elem.isExternal,
-        isAbstract: elem.isAbstract,
-        isExtensionMember: elem.isExtensionTypeMember,
-      ),
-      DartType() => MacroModifier.create(
-        isAsynchronous: isAsynchronous,
-        isSynchronous: isSynchronous,
-        isGenerator: isGenerator,
-        isAugmentation: isAugmentation,
-        isNullable: isNullable,
-      ),
-      _ => throw UnimplementedError('Getting modifier from: ${elem.runtimeType} is not implemented'),
-    };
   }
 }

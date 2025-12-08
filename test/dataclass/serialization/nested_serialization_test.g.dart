@@ -6,7 +6,7 @@ mixin CarData {
   static Car fromJson(Map<String, dynamic> json) {
     return Car(
       (json['drivenKm'] as num).toInt(),
-      MacroExt.decodeEnum(Brand.values, json['brand'], unknownValue: Brand.Audi),
+      MacroExt.decodeEnum(Brand.values, json['brand'], unknownValue: null),
     );
   }
 

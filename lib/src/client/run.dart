@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:logging/logging.dart';
-import 'package:macro_kit/src/analyzer/logger.dart';
 import 'package:macro_kit/src/client/client_manager.dart';
-import 'package:macro_kit/src/core/core.dart';
+import 'package:macro_kit/src/common/logger.dart';
+import 'package:macro_kit/src/core/core.dart' show AssetMacroInfo;
 
 // copied from flutter
 const bool _kReleaseMode = bool.fromEnvironment('dart.vm.product');
@@ -92,11 +92,11 @@ Future<int?> runMacro({
 }) async {
   if (!enabled) return null;
 
+  final isAndroid = Platform.isAndroid || Platform.isFuchsia;
   final logger = MacroLogger.createLogger(name: 'MacroManager', into: log, level: logLevel);
   final manager = MacroManager(
     logger: logger,
-    serverAddress:
-        serverAddress ?? (Platform.isAndroid || Platform.isFuchsia ? 'http://10.0.2.2:3232' : 'http://localhost:3232'),
+    serverAddress: serverAddress ?? 'http://${isAndroid ? '10.0.2.2' : 'localhost'}:3232',
     macros: macros,
     autoReconnect: autoReconnect,
     generateTimeout: generateTimeout,

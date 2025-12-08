@@ -1,3 +1,14 @@
+## 0.1.0
+
+- Import and library information for macro class declarations
+- Import resolution for inspected types
+- Field initializer inspection capability
+- Enhanced data class macro with generics, default values, super formal parameters, and inheritance
+  support
+- Asset macro path generation on Windows
+- Documentation coverage
+- Add more test cases
+
 ## 0.0.12
 
 - remove returning `MacroManager` in `runMacro` function

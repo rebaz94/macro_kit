@@ -46,12 +46,25 @@ mixin AnimalData {
     };
   }
 
-  Animal copyWithBy({Cat Function(Cat value)? cat, Dog Function(Dog value)? dog}) {
+  Animal copyWithBy({
+    Cat Function(Cat value)? cat,
+    Dog Function(Dog value)? dog,
+  }) {
     return switch (this) {
       Cat v => cat != null ? cat(v) : v.copyWith(),
       Dog v => dog != null ? dog(v) : v.copyWith(),
       _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for Animal.'),
     };
+  }
+
+  @pragma('vm:prefer-inline')
+  Cat asCat() {
+    return this as Cat;
+  }
+
+  @pragma('vm:prefer-inline')
+  Dog asDog() {
+    return this as Dog;
   }
 
   static Schema get schema {
@@ -95,9 +108,9 @@ mixin CatData {
   Map<String, dynamic> toJson() {
     final v = this as Cat;
     return <String, dynamic>{
-      'type': 'Cat',
       'name': v.name,
       'nickName': v.nickName,
+      'type': 'Cat',
     };
   }
 

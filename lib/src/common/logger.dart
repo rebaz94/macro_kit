@@ -1,26 +1,7 @@
 import 'dart:io';
 
 import 'package:logging/logging.dart';
-
-String get homeDir {
-  if (Platform.isMacOS) {
-    final home = Platform.environment['HOME'] ?? '~';
-    if (!home.contains('Library/Containers')) {
-      return home;
-    }
-
-    final user = Platform.environment['USER'];
-    return user != null ? '/Users/$user' : home;
-  }
-
-  final envKey = Platform.operatingSystem == 'windows' ? 'APPDATA' : 'HOME';
-  final envValue = Platform.environment[envKey];
-  return envValue ?? '~';
-}
-
-String get macroDirectory {
-  return '$homeDir/.dartServer/.plugin_manager/macro';
-}
+import 'package:macro_kit/src/common/common.dart';
 
 class MacroLogger {
   MacroLogger._(String name) : logger = Logger.detached(name);

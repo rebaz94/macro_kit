@@ -3,11 +3,17 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/analyze_class.dart';
+import 'package:macro_kit/src/analyzer/analyze_class_ctor.dart';
+import 'package:macro_kit/src/analyzer/analyze_class_field.dart';
+import 'package:macro_kit/src/analyzer/analyze_class_method.dart';
+import 'package:macro_kit/src/analyzer/analyze_enum.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
+import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
 
-abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
+abstract class MacroAnalyzer extends BaseAnalyzer
+    with AnalyzeClass, AnalyzeClassField, AnalyzeClassCtor, AnalyzeClassMethod, AnalyzeEnum, Generator {
   MacroAnalyzer({required super.logger});
 
   Future<void> processDartSource(String path) async {
@@ -18,6 +24,8 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
     } catch (e, s) {
       logger.error('Processing code failed', e, s);
     } finally {
+      importPrefixByElements.clear();
+      imports.clear();
       macroAnalyzeResult.clear();
       pendingClassRequiredSubTypes.clear();
       currentAnalyzingPath = '';
@@ -53,7 +61,22 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
       throw MacroException('Failed to resolve path: $path, got: $analysisResult');
     }
 
-    // step:1 analyze the code
+    // step:1 track element that used prefixed import
+    for (var i in analysisResult.libraryFragment.libraryImports) {
+      final importDirective = i.toString();
+      String importPrefix = '';
+
+      if (i.prefix?.name case String prefix) {
+        importPrefix = '$prefix.';
+        for (final e in i.namespace.definedNames2.entries) {
+          importPrefixByElements[e.value] = importPrefix;
+        }
+      }
+
+      imports[importDirective] = importPrefix;
+    }
+
+    // step:2 analyze the code
     var containsMacro = false;
     for (final declaration in analysisResult.unit.declarations) {
       final decFrag = declaration.declaredFragment;
@@ -82,10 +105,14 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
       mayContainsMacroCache.remove(path);
     }
 
-    // step:2 get pending class sub types
-    await collectClassSubTypes(pendingClassRequiredSubTypes, analysisResult.libraryFragment);
+    // step:3 get pending class sub types
+    await collectClassSubTypes(
+      pendingClassRequiredSubTypes,
+      analysisResult.libraryFragment,
+      macroAnalyzeResult,
+    );
 
-    // step:3 get any class that used more than once from iteration cache
+    // step:4 get any class that used more than once from iteration cache
     //        and use it as shared class declaration to automatically assign prepared data by class id
     final sharedClasses = <String, MacroClassDeclaration>{};
     for (final entry in iterationCaches.entries) {
@@ -94,6 +121,7 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
       var classVal = entry.value.value;
       if (!key.startsWith('classDec') || value.count < 1 || classVal is! MacroClassDeclaration) continue;
 
+      // remove duplicate macro, keep the first one
       if (classVal.configs.length > 1) {
         classVal = classVal.copyWith(configs: classVal.configs.uniqueBy((k) => k.key.name));
       }
@@ -101,17 +129,44 @@ abstract class MacroAnalyzer extends BaseAnalyzer with AnalyzeClass, Generator {
       sharedClasses[classVal.classId] = classVal;
     }
 
-    for (final entry in macroAnalyzeResult.entries) {
-      for (final (i, cls) in entry.value.classes.indexed) {
-        if (cls.configs.length <= 1) continue;
+    // only generate for declaration in this library
+    final generateForLibrary = analysisResult.libraryElement.uri.toString();
+    final generateForLibraryId = generateHash(generateForLibrary);
 
-        entry.value.classes[i] = cls.copyWith(configs: cls.configs.uniqueBy((v) => v.key.name));
+    // step:5 remove duplicate macro, keep the first one and filter out external macro declaration
+    for (final entry in macroAnalyzeResult.entries) {
+      final newClasses = <MacroClassDeclaration>[];
+      for (var clazz in entry.value.classes) {
+        List<MacroConfig>? newConfigs;
+        if (clazz.configs.length > 1) {
+          newConfigs = clazz.configs.uniqueBy((v) => v.key.name);
+        }
+
+        if (newConfigs != null) {
+          clazz = clazz.copyWith(configs: newConfigs);
+        }
+
+        if (clazz.libraryId != generateForLibraryId) {
+          // ensure class still exist in shared classes
+          if (!sharedClasses.containsKey(clazz.classId)) {
+            sharedClasses[clazz.classId] = clazz;
+          }
+
+          // filter out from generation
+          continue;
+        }
+
+        newClasses.add(clazz);
       }
+
+      entry.value.classes = newClasses;
     }
 
-    // step:4 run macro
+    // step:6 run macro
     await executeMacro(
       path: path,
+      imports: imports,
+      libraryPaths: libraryPathById,
       result: macroAnalyzeResult,
       sharedClasses: sharedClasses,
     );

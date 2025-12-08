@@ -3,13 +3,15 @@ import 'dart:io';
 import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
-import 'package:macro_kit/src/analyzer/models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:macro_kit/src/common/models.dart';
 
 mixin Generator on BaseAnalyzer {
   /// group parsed macro code and run user code generation
   Future<void> executeMacro({
     required String path,
+    required Map<String, String> imports,
+    required Map<int, String> libraryPaths,
     required Map<String, AnalyzeResult> result,
     required Map<String, MacroClassDeclaration> sharedClasses,
   }) async {
@@ -24,6 +26,8 @@ mixin Generator on BaseAnalyzer {
         runConfigs[macroName] = RunMacroMsg(
           id: newId(),
           macroName: macroName,
+          imports: imports,
+          libraryPaths: libraryPaths,
           sharedClasses: sharedClasses,
           classes: analyzeRes.classes,
         );
@@ -51,13 +55,13 @@ part of '$relativePartFilePath';
     for (final runConfigEntry in runConfigs.entries) {
       final macroName = runConfigEntry.key;
       final msg = runConfigEntry.value;
-      var clientChannelId = getClientChannelFor(macroName);
+      var clientChannelId = getClientChannelIdByMacro(macroName);
 
       if (clientChannelId == null) {
         requestClientToConnect();
         await Future.delayed(const Duration(seconds: 3));
 
-        clientChannelId = getClientChannelFor(macroName);
+        clientChannelId = getClientChannelIdByMacro(macroName);
         if (clientChannelId == null) {
           logger.error('No Macro generator found for: $macroName');
           onClientError(-1, 'No Macro generator found for: $macroName');
@@ -110,6 +114,8 @@ part of '$relativePartFilePath';
           (assetMacro) => RunMacroMsg(
             id: newId(),
             macroName: assetMacro.macro.macroName,
+            imports: imports,
+            libraryPaths: libraryPathById,
             assetDeclaration: MacroAssetDeclaration(path: path, type: changeType),
             assetConfig: assetMacro.macro.config,
             assetBasePath: assetMacro.relativeBasePath,
@@ -122,13 +128,13 @@ part of '$relativePartFilePath';
     // step:2 run the macro generator
     // final generatedFiles = <String>[];
     for (final msg in runConfigs) {
-      var clientChannelId = getClientChannelFor(msg.macroName);
+      var clientChannelId = getClientChannelIdByMacro(msg.macroName);
 
       if (clientChannelId == null) {
         requestClientToConnect();
         await Future.delayed(const Duration(seconds: 3));
 
-        clientChannelId = getClientChannelFor(msg.macroName);
+        clientChannelId = getClientChannelIdByMacro(msg.macroName);
         if (clientChannelId == null) {
           logger.error('No Macro generator found for: ${msg.macroName}');
           onClientError(-1, 'No Macro generator found for: ${msg.macroName}');

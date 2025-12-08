@@ -7,7 +7,8 @@ import 'package:analyzer/file_system/file_system.dart';
 import 'package:analyzer_plugin/plugin/plugin.dart';
 import 'package:analyzer_plugin/protocol/protocol_generated.dart';
 import 'package:collection/collection.dart';
-import 'package:macro_kit/src/analyzer/logger.dart';
+import 'package:macro_kit/src/common/common.dart';
+import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/plugin/server_client.dart';
 import 'package:synchronized/synchronized.dart' as sync;
 
