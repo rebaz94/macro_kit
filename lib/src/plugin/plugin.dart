@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:analyzer/dart/analysis/analysis_context.dart';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/file_system/file_system.dart';
+// ignore: implementation_imports
+import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:analyzer_plugin/plugin/plugin.dart';
 import 'package:analyzer_plugin/protocol/protocol_generated.dart';
 import 'package:collection/collection.dart';
@@ -83,6 +85,12 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
 
   @override
   String get version => '1.40.0';
+
+  @override
+  ByteStore createByteStore() {
+    // we don't need since, it not used
+    return MemoryCachingByteStore(NullByteStore(), 1024 * 1024 * 1);
+  }
 
   @override
   Future<AnalysisHandleWatchEventsResult> handleAnalysisHandleWatchEvents(

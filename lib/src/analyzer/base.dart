@@ -6,6 +6,8 @@ import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/session.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
+// ignore: implementation_imports
+import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:macro_kit/macro.dart';
 import 'package:macro_kit/src/analyzer/hash.dart';
@@ -51,11 +53,13 @@ abstract class BaseAnalyzer implements MacroServer {
     trailingCommas: TrailingCommas.preserve,
   );
 
+  late final ByteStore byteStore = MemoryCachingByteStore(NullByteStore(), 1024 * 1024 * 256);
   List<String> contexts = <String>[];
   AnalysisContextCollection contextCollection = AnalysisContextCollection(
     includedPaths: [],
     resourceProvider: PhysicalResourceProvider.INSTANCE,
   );
+
   AnalysisSession? currentSession;
 
   final Map<String, File> fileCaches = {};

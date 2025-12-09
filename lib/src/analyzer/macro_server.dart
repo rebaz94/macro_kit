@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context.dart';
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
+// ignore: implementation_imports
+import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:macro_kit/macro.dart';
@@ -124,8 +125,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
         }
 
         var old = contextCollection;
-        contextCollection = AnalysisContextCollection(
+        contextCollection = AnalysisContextCollectionImpl(
           includedPaths: newContexts,
+          byteStore: byteStore,
           resourceProvider: PhysicalResourceProvider.INSTANCE,
         );
 

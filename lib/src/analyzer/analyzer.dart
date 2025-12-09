@@ -29,7 +29,9 @@ abstract class MacroAnalyzer extends BaseAnalyzer
       macroAnalyzeResult.clear();
       pendingClassRequiredSubTypes.clear();
       currentAnalyzingPath = '';
-      logger.info('Completed in ${s.elapsedMilliseconds.toString()} ms');
+      logger.info(
+        'Completed in ${(s.elapsedMilliseconds > 1000 ? '${s.elapsed.inSeconds}s' : '${s.elapsedMilliseconds}ms')}',
+      );
     }
   }
 
