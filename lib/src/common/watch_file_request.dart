@@ -10,9 +10,9 @@ class WatchFileRequest {
 
   final String fileName;
   final String inDirectory;
-  StreamSubscription<WatchEvent>? sub;
+  StreamSubscription<WatchEvent>? _sub;
 
-  Future<void> listen({
+  void listen({
     required void Function(ChangeType fileSystemEventType, String data) onChanged,
     void Function(Object? error, StackTrace? stackTrace)? onError,
     void Function()? onClosed,
@@ -20,7 +20,7 @@ class WatchFileRequest {
     final file = File(p.join(inDirectory, fileName));
     final watcher = Watcher(inDirectory);
 
-    sub = watcher.events.listen(
+    _sub = watcher.events.listen(
       (event) {
         if (event.path != file.path) return;
 
@@ -37,7 +37,7 @@ class WatchFileRequest {
   }
 
   void close() {
-    sub?.cancel();
-    sub = null;
+    _sub?.cancel();
+    _sub = null;
   }
 }

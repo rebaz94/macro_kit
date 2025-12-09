@@ -11,14 +11,13 @@ import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
 import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:watcher/watcher.dart';
 
 abstract class MacroAnalyzer extends BaseAnalyzer
     with AnalyzeClass, AnalyzeClassField, AnalyzeClassCtor, AnalyzeClassMethod, AnalyzeEnum, Generator {
   MacroAnalyzer({required super.logger});
 
   Future<void> processDartSource(String path) async {
-    final s = Stopwatch()..start();
-
     try {
       await _analyzeCodeAndRun(path);
     } catch (e, s) {
@@ -29,9 +28,8 @@ abstract class MacroAnalyzer extends BaseAnalyzer
       macroAnalyzeResult.clear();
       pendingClassRequiredSubTypes.clear();
       currentAnalyzingPath = '';
-      logger.info(
-        'Completed in ${(s.elapsedMilliseconds > 1000 ? '${s.elapsed.inSeconds}s' : '${s.elapsedMilliseconds}ms')}',
-      );
+      final time = stopWatch.elapsedMilliseconds;
+      logger.info('Completed in ${time > 1000 ? '${time ~/ 1000}s' : '${time}ms'}');
     }
   }
 
@@ -174,16 +172,24 @@ abstract class MacroAnalyzer extends BaseAnalyzer
     );
   }
 
-  Future<void> processAssetSource(String path, List<AnalyzingAsset> assetMacros, AssetChangeType type) async {
-    final s = Stopwatch()..start();
+  Future<void> processAssetSource(String path, List<AnalyzingAsset> assetMacros, ChangeType type) async {
+    stopWatch
+      ..reset()
+      ..start();
 
     try {
-      await executeAssetMacro(path: path, changeType: type, macros: assetMacros);
+      final assetChangeType = switch (type) {
+        ChangeType.ADD => AssetChangeType.add,
+        ChangeType.MODIFY => AssetChangeType.modify,
+        ChangeType.REMOVE => AssetChangeType.remove,
+        _ => AssetChangeType.modify,
+      };
+      await executeAssetMacro(path: path, changeType: assetChangeType, macros: assetMacros);
     } catch (e, s) {
       logger.error('Processing asset failed', e, s);
     } finally {
       currentAnalyzingPath = '';
-      logger.info('Completed in ${s.elapsedMilliseconds.toString()} ms');
+      logger.info('Completed in ${stopWatch.elapsedMilliseconds.toString()} ms');
     }
   }
 }

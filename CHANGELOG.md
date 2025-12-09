@@ -1,3 +1,7 @@
+## 0.1.4
+
+- Improve watch context and remove duplicate event
+
 ## 0.1.3
 
 - fix import from **macro.dart** to **macro_kit.dart**

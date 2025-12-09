@@ -18,7 +18,6 @@ import 'package:synchronized/synchronized.dart' as sync;
 import 'package:watcher/watcher.dart';
 import 'package:web_socket_channel/status.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:yaml/yaml.dart';
 
 import 'base.dart';
 
@@ -122,6 +121,13 @@ class MacroAnalyzerServer extends MacroAnalyzer {
         final newContexts = Set<String>.of(_pluginChannels.values.map((e) => e.contexts).expand((e) => e)).toList();
         if (const DeepCollectionEquality().equals(contexts, newContexts)) {
           _reloadMacroConfiguration(contexts);
+          final assetContexts = _setupAssetMacroConfiguration();
+          await _reWatchContexts(
+            CombinedListView([
+              contexts.map((c) => p.join(c, 'lib')).toList(),
+              assetContexts,
+            ]),
+          );
           return;
         }
 
@@ -135,7 +141,14 @@ class MacroAnalyzerServer extends MacroAnalyzer {
         // set new context, reload configuration and re-watch context
         contexts = newContexts;
         _reloadMacroConfiguration(contexts);
-        await _reWatchContexts(newContexts);
+
+        final assetContexts = _setupAssetMacroConfiguration();
+        await _reWatchContexts(
+          CombinedListView([
+            contexts.map((c) => p.join(c, 'lib')).toList(),
+            assetContexts,
+          ]),
+        );
 
         // remove after some delay, in case of processing source not completed while context changes
         Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
@@ -155,47 +168,15 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     /// reload macro config defined in the project
     for (final context in contexts) {
       final autoRebuildExecuted = oldMacroClientConfigs[context]?.$2 == true;
-      MacroClientConfiguration config;
-      String packageName;
-
-      try {
-        final pubspecContent = loadYamlNode(File(p.join(context, 'pubspec.yaml')).readAsStringSync());
-        packageName = switch (pubspecContent.value['name']) {
-          String v => v,
-          _ => '',
-        };
-      } catch (e) {
-        logger.error(
-          'Unable to read package name from pubspec.yaml for context: $context. '
-          'Using full context path as package name fallback.',
-        );
-        packageName = context;
-      }
-
-      config = _loadMacroConfig(context, packageName);
+      final packageName = loadContextPackageName(context);
+      final config = loadMacroConfig(context, packageName);
       _macroClientConfigs[context] = (config, autoRebuildExecuted);
     }
-
-    /// reload asset macro configuration
-    _setupAssetMacroConfiguration();
   }
 
-  MacroClientConfiguration _loadMacroConfig(String context, String packageName) {
-    try {
-      final content = loadYamlNode(File(p.join(context, '.macro.yaml')).readAsStringSync());
-      return switch (content.value['config']) {
-        YamlMap map => MacroClientConfiguration.fromYaml(context, packageName, map),
-        _ => MacroClientConfiguration.withDefault(context, packageName),
-      };
-    } on PathNotFoundException {
-      return MacroClientConfiguration.withDefault(context, packageName);
-    } catch (e) {
-      logger.error('Failed to read macro configuration for: $context');
-      return MacroClientConfiguration.withDefault(context, packageName);
-    }
-  }
-
-  void _setupAssetMacroConfiguration() {
+  /// setup asset macro and return a list of absolute asset directory
+  /// that required to watch
+  List<String> _setupAssetMacroConfiguration() {
     /// map each asset to absolute path with applied macros
     final Set<String> outputsDir = {};
 
@@ -249,6 +230,8 @@ class MacroAnalyzerServer extends MacroAnalyzer {
         );
       }
     }
+
+    return _assetsDir.keys.toList();
   }
 
   Future<void> _reWatchContexts(List<String> contexts) async {
@@ -275,7 +258,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
   }
 
-  void _onWatchFileError(Object? error) {
+  void _onWatchFileError(Object error, StackTrace _) {
     logger.error('File watch encountered an error', error);
   }
 
@@ -284,6 +267,15 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   void _onFileChanged(String path, ChangeType changeType, {bool startProcessing = true}) {
+    const minimumThreshold = 30;
+    if (lastAnalyzingPath == path && lastChangeType == changeType && minimumThreshold > getDiffFromLastExecution()) {
+      // duplicate event, ignore it
+      return;
+    }
+
+    lastAnalyzingPath = path;
+    lastChangeType = changeType;
+
     final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
     if (assetMacros == null && (p.extension(path, 2) != '.dart')) {
       logger.fine('Ignored: $path');
@@ -297,14 +289,10 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
     if (currentAnalyzingPath == '' || currentAnalyzingPath == path) {
       // its first time or file changed during current analyzing, so we have to run it again
-      final type = switch (changeType) {
-        ChangeType.ADD => AssetChangeType.add,
-        ChangeType.MODIFY => AssetChangeType.modify,
-        ChangeType.REMOVE => AssetChangeType.remove,
-        _ => AssetChangeType.modify,
-      };
-      pendingAnalyze.add((path: path, asset: assetMacros, type: type));
-    } else if (pendingAnalyze.firstWhereOrNull((e) => e.path == path) != null) {
+      pendingAnalyze[(path: path, type: changeType, force: true)] = assetMacros == null
+          ? defaultNullPendingAnalyzeValue
+          : (asset: assetMacros);
+    } else if (pendingAnalyze.containsKey((path: path, type: changeType, force: false))) {
       // its already in pending list, so no duplicate, next time it process it
       return;
     }
@@ -363,13 +351,14 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     isAnalyzingFile = true;
-    final currentAnalyze = pendingAnalyze.removeAt(0);
+    final key = pendingAnalyze.keys.first;
+    final currentAnalyze = pendingAnalyze.remove(key)!;
 
     try {
       if (currentAnalyze.asset != null) {
-        await processAssetSource(currentAnalyze.path, currentAnalyze.asset!, currentAnalyze.type);
+        await processAssetSource(key.path, currentAnalyze.asset!, key.type);
       } else {
-        await processDartSource(currentAnalyze.path);
+        await processDartSource(key.path);
       }
     } catch (e, s) {
       logger.error('Failed to parse source code', e, s);
@@ -524,7 +513,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
               for (final pkgName in msg.package.names) {
                 if (!pkgName.contains('/') && !pkgName.contains('\\')) continue;
 
-                final config = _loadMacroConfig(pkgName, pkgName);
+                final config = loadMacroConfig(pkgName, pkgName);
                 if (!config.autoRebuildOnConnect && !config.alwaysRebuildOnConnect) continue;
 
                 autoRebuildConfigs.add(config);
@@ -582,7 +571,18 @@ class MacroAnalyzerServer extends MacroAnalyzer {
         if (add) {
           final pluginInfo = _pluginChannels.entries.firstOrNull;
           if (pluginInfo != null) {
-            final newContexts = configs.map((e) => e.context).toList();
+            final newContexts = <String>[];
+            for (final config in configs) {
+              // manually add context as dynamic, this will trigger for any file in the context
+              // the onContextChanged only watch for context/lib directory
+              if (!_subs.containsKey(config.context)) {
+                final newWatcher = Watcher(config.context);
+                _subs[config.context] = newWatcher.events.listen(_onWatchFileChanged, onError: _onWatchFileError);
+              }
+
+              newContexts.add(config.context);
+            }
+
             pluginInfo.value.contexts.addAll(newContexts);
             logger.info('Dynamically added new context for testing: ${newContexts.join(', ')}');
             await onContextChanged();

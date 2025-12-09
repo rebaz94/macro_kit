@@ -14,6 +14,10 @@ import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
+import 'package:meta/meta.dart';
+import 'package:path/path.dart' as p;
+import 'package:watcher/watcher.dart';
+import 'package:yaml/yaml.dart';
 
 abstract class MacroServer {
   void requestPluginToConnect();
@@ -33,7 +37,8 @@ abstract class MacroServer {
   void onClientError(int channelId, String message, [Object? err, StackTrace? trace]);
 }
 
-typedef PendingAnalyze = ({String path, List<AnalyzingAsset>? asset, AssetChangeType type});
+typedef PendingPath = ({String path, ChangeType type, bool force});
+typedef PendingAnalyze = ({List<AnalyzingAsset>? asset});
 
 typedef AnalyzingAsset = ({
   AssetMacroInfo macro,
@@ -68,9 +73,13 @@ abstract class BaseAnalyzer implements MacroServer {
   final Map<String, CountedCache> iterationCaches = {};
 
   final Set<String> mayContainsMacroCache = {};
-  final List<PendingAnalyze> pendingAnalyze = [];
+  final Map<PendingPath, PendingAnalyze> pendingAnalyze = {};
   final StreamController<bool> pendingAnalyzeCompleted = StreamController.broadcast();
+  final PendingAnalyze defaultNullPendingAnalyzeValue = (asset: null);
+  final Stopwatch stopWatch = Stopwatch();
   String currentAnalyzingPath = '';
+  String lastAnalyzingPath = '';
+  ChangeType lastChangeType = ChangeType.MODIFY;
   bool isAnalyzingFile = false;
 
   /// Contain hash of library uri path to uri of the file
@@ -83,6 +92,17 @@ abstract class BaseAnalyzer implements MacroServer {
   /// --- internal state of required of sub types, reset per [processDartSource] call
   Map<String, AnalyzeResult> macroAnalyzeResult = {};
   List<(List<MacroConfig>, ClassFragment)> pendingClassRequiredSubTypes = [];
+
+  @internal
+  int lastTime = DateTime.now().millisecondsSinceEpoch;
+
+  @pragma('vm:prefer-inline')
+  int getDiffFromLastExecution() {
+    final newTime = DateTime.now().millisecondsSinceEpoch;
+    final res = newTime - lastTime;
+    lastTime = newTime;
+    return res;
+  }
 
   int newId() => random.nextInt(100000);
 
@@ -99,6 +119,39 @@ abstract class BaseAnalyzer implements MacroServer {
   void clearInProgressClassFieldsFor(Fragment fragment) {
     final key = 'inProgress:${'${fragment.element.name}:${fragment.element.library?.uri.toString()}'}';
     iterationCaches.remove(key);
+  }
+
+  @pragma('vm:prefer-inline')
+  String loadContextPackageName(String context) {
+    try {
+      final pubspecContent = loadYamlNode(File(p.join(context, 'pubspec.yaml')).readAsStringSync());
+      return switch (pubspecContent.value['name']) {
+        String v => v,
+        _ => '',
+      };
+    } catch (e) {
+      logger.error(
+        'Unable to read package name from pubspec.yaml for context: $context. '
+        'Using full context path as package name fallback.',
+      );
+      return context;
+    }
+  }
+
+  @pragma('vm:prefer-inline')
+  MacroClientConfiguration loadMacroConfig(String context, String packageName) {
+    try {
+      final content = loadYamlNode(File(p.join(context, '.macro.yaml')).readAsStringSync());
+      return switch (content.value['config']) {
+        YamlMap map => MacroClientConfiguration.fromYaml(context, packageName, map),
+        _ => MacroClientConfiguration.withDefault(context, packageName),
+      };
+    } on PathNotFoundException {
+      return MacroClientConfiguration.withDefault(context, packageName);
+    } catch (e) {
+      logger.error('Failed to read macro configuration for: $context');
+      return MacroClientConfiguration.withDefault(context, packageName);
+    }
   }
 
   Future<MacroClassDeclaration?> parseClass(
