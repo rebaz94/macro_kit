@@ -194,6 +194,7 @@ import 'package:macro_kit/macro_kit.dart';
 
 void main() async {
   await runMacro(
+    package: PackageInfo('your_package_name'),
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
       'AssetPathMacro': AssetPathMacro.initialize,
@@ -212,15 +213,33 @@ void main() async {
 }
 ```
 
-### Run from CLI
+### Run the macro
+
+**From CLI:**
 
 ```bash
 dart run macro.dart
 ```
 
-### Run from IDE
+**From IDE:**
+Simply open `macro.dart` and run it directly.
 
-Simply open `macro.dart` in your IDE and run it directly using the run button or keyboard shortcut.
+### Auto-rebuild configuration
+
+To wait for regeneration to complete, call `waitUntilRebuildCompleted` after `runMacro`.
+
+Enable auto-rebuild in `.macro.yaml`:
+
+```yaml
+config:
+  auto_rebuild_on_connect: true
+  # always_rebuild_on_connect: true  # Rebuild on every reconnection
+```
+
+### Dynamic context loading
+
+For tests or dynamic analysis contexts, pass an absolute path instead of a package name to load and
+regenerate code for that location.
 
 ## ⚠️ Current Limitations
 
