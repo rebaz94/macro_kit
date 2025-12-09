@@ -1798,6 +1798,13 @@ class MacroState {
   }
 }
 
+enum GeneratedType {
+  mixin,
+  clazz,
+  abstractClass,
+  extendsClass,
+}
+
 /// Base class for implementing macro code generation.
 ///
 /// A macro is a development-only code generator that analyzes annotated classes in real-time
@@ -1899,6 +1906,18 @@ abstract class MacroGenerator implements BaseMacroGenerator {
   /// call [MacroState.reportGenerated] with canBeCombined as false.
   @override
   String get suffixName;
+
+  /// The type of code this macro generates.
+  ///
+  /// Used to determine compatibility when multiple macros are applied to the same class.
+  ///
+  /// Choose based on your generated code structure:
+  /// - [GeneratedType.mixin] if generating `mixin ClassNameSuffixName`
+  /// - [GeneratedType.clazz] if generating `class ClassNameSuffixName`
+  /// - [GeneratedType.abstractClass] if generating `abstract class ClassNameSuffixName`
+  /// - [GeneratedType.extendsClass] if generating `class ClassNameSuffixName extends Base`
+  @override
+  GeneratedType get generatedType;
 
   /// Called once per annotated class to initialize the macro state.
   @override

@@ -132,6 +132,9 @@ class JsonSchemaMacro extends MacroGenerator {
   String get suffixName => 'Schema';
 
   @override
+  GeneratedType get generatedType => GeneratedType.mixin;
+
+  @override
   Future<void> init(MacroState state) async {
     if (state.targetType != TargetType.clazz) {
       throw MacroException(

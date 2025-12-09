@@ -125,6 +125,9 @@ class DataClassMacro extends MacroGenerator {
   String get suffixName => 'Data';
 
   @override
+  GeneratedType get generatedType => GeneratedType.mixin;
+
+  @override
   Future<void> init(MacroState state) async {
     if (state.targetType != TargetType.clazz) {
       throw MacroException('DataClassMacro can only be applied on class but applied on: ${state.targetType}');
@@ -201,7 +204,7 @@ class DataClassMacro extends MacroGenerator {
 
     final buff = StringBuffer();
     if (!state.isCombingGenerator) {
-      buff.write('mixin ${state.targetName}Data');
+      buff.write('mixin ${state.targetName}${state.suffixName}');
       if (typeParams.isNotEmpty) {
         buff.write(MacroProperty.getClassTypeParameterWithBound(typeParams));
       }

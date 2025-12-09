@@ -239,6 +239,8 @@ abstract class BaseMacroGenerator {
 
   String get suffixName;
 
+  GeneratedType get generatedType;
+
   Future<void> init(MacroState state);
 
   Future<void> onClassTypeParameter(MacroState state, List<MacroProperty> typeParameters);

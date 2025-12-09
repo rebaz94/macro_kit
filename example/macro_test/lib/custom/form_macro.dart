@@ -38,6 +38,9 @@ class FormMacro extends MacroGenerator {
   String get suffixName => 'Form';
 
   @override
+  GeneratedType get generatedType => GeneratedType.mixin;
+
+  @override
   Future<void> init(MacroState state) async {
     if (state.targetType != TargetType.clazz) {
       throw MacroException('FormMacro can only be applied on class but applied on: ${state.targetType}');

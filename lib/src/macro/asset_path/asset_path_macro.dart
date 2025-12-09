@@ -94,6 +94,9 @@ class AssetPathMacro extends MacroGenerator {
   String get suffixName => '';
 
   @override
+  GeneratedType get generatedType => GeneratedType.clazz;
+
+  @override
   Future<void> onAsset(MacroState state, MacroAssetDeclaration asset) async {
     final assetState = state.assetState;
     if (assetState == null) return;

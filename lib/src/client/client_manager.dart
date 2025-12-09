@@ -231,10 +231,11 @@ class MacroManager {
     try {
       for (final declaration in message.classes ?? const <MacroClassDeclaration>[]) {
         final hasMultipleMetadata = declaration.configs.length > 1;
-        final isCombiningGenCode = hasMultipleMetadata && declaration.configs.first.combine == true;
-        String? suffixName;
+        final isCombiningGenCodeMode = hasMultipleMetadata && declaration.configs.first.combine == true;
+        String? combinedSuffixName;
         bool firstMacroApplied = false;
         StringBuffer? generatedNonCombinable;
+        GeneratedType lastGeneratedType = GeneratedType.mixin;
 
         for (final (index, macroConfig) in declaration.configs.indexed) {
           // initialize or reuse generator
@@ -246,9 +247,20 @@ class MacroManager {
 
           // if combing generated code & first macro not applied yet, set the suffix and use that for all macro,
           // otherwise its if not combing or value is set, it fallback to MacroGenerator.suffixName
-          if (isCombiningGenCode && !firstMacroApplied) {
-            suffixName = generator.suffixName;
+          if (isCombiningGenCodeMode && !firstMacroApplied) {
+            combinedSuffixName = generator.suffixName;
           }
+
+          // get current generator type
+          final currentGeneratedType = generator.generatedType;
+
+          // combine mode only if first macro applied and its same type as before
+          final isCombingGenerator =
+              firstMacroApplied &&
+              isCombiningGenCodeMode && //
+              lastGeneratedType == currentGeneratedType;
+
+          lastGeneratedType = currentGeneratedType;
 
           // run the macro
           final state = MacroState(
@@ -260,8 +272,10 @@ class MacroManager {
             libraryPaths: message.libraryPaths,
             targetName: declaration.className,
             modifier: declaration.modifier,
-            isCombingGenerator: firstMacroApplied && isCombiningGenCode,
-            suffixName: suffixName ?? generator.suffixName,
+            isCombingGenerator: isCombingGenerator,
+            suffixName: isCombingGenerator || (isCombiningGenCodeMode && !firstMacroApplied)
+                ? combinedSuffixName ?? generator.suffixName
+                : generator.suffixName,
             classesById: message.sharedClasses,
             assetState: null,
           );
@@ -308,9 +322,9 @@ class MacroManager {
           await generator.onGenerate(state);
           String generatedCode = state.generated;
 
-          if (isCombiningGenCode) {
+          if (isCombiningGenCodeMode) {
             if (!firstMacroApplied) {
-              // Remove the last closing bracket when combining with previous macros
+              // Remove the last closing bracket when combining with next macros
               final lastBracket = generatedCode.lastIndexOf('}');
               if (lastBracket != -1) {
                 generatedCode = '${generatedCode.substring(0, lastBracket)}\n';
@@ -319,7 +333,13 @@ class MacroManager {
           }
 
           if (generatedCode.isNotEmpty) {
-            generated
+            // if in combining mode but isCombingGenerator = false, due to different in macro generatedType
+            // then add the generated code to non combinable
+
+            final shouldUseCombined = !isCombiningGenCodeMode || !firstMacroApplied || isCombingGenerator;
+            final buffer = shouldUseCombined ? generated : (generatedNonCombinable ??= StringBuffer());
+
+            buffer
               ..write('\n')
               ..write(generatedCode)
               ..write('\n');
@@ -337,7 +357,7 @@ class MacroManager {
         }
 
         // add end bracket
-        if (isCombiningGenCode) {
+        if (isCombiningGenCodeMode) {
           generated.write('\n}\n');
         }
 
