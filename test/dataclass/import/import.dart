@@ -1,6 +1,6 @@
 import 'dart:core' as $c;
 
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:test/test.dart';
 
 import 'other/food.dart' as f;

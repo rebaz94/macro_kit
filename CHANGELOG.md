@@ -1,3 +1,11 @@
+## 0.1.3
+
+- fix import from **macro.dart** to **macro_kit.dart**
+
+## 0.1.2
+
+- add generatedType to differentiate macro-generated code for proper combining
+
 ## 0.1.1
 
 - Fixed version constraint

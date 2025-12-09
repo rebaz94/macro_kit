@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';

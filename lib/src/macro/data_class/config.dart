@@ -1,5 +1,5 @@
 import 'package:collection/collection.dart';
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:meta/meta.dart';
 
 /// An annotation used to specify how a field is serialized.

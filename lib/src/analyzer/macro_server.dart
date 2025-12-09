@@ -7,7 +7,7 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/common/common.dart';

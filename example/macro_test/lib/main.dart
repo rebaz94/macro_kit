@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_test/custom/form_macro.dart';
 import 'package:macro_test/custom/json_schema_macro.dart';
 

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:change_case/change_case.dart';
 import 'package:collection/collection.dart';
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/macro/data_class/config.dart';

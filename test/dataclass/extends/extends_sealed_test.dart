@@ -1,4 +1,4 @@
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:test/test.dart';
 
 part 'extends_sealed_test.g.dart';

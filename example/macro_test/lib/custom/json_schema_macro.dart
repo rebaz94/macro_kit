@@ -2,7 +2,7 @@ import 'dart:async';
 
 // ignore: depend_on_referenced_packages
 import 'package:collection/collection.dart';
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 
 export 'package:json_schema_builder/json_schema_builder.dart';
 

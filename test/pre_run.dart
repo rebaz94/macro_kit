@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 
 void main() async {
   await runMacro(

@@ -1,4 +1,4 @@
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:test/test.dart';
 
 part 'param_rewrite_test.g.dart';

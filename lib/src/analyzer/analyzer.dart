@@ -1,7 +1,7 @@
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyze_class.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_ctor.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_field.dart';

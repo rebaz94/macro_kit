@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:macro_kit/macro.dart';
+import 'package:macro_kit/macro_kit.dart';
 import 'package:test/test.dart';
 
 part 'named_ctor_serialization_test.g.dart';
