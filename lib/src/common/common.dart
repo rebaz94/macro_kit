@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 const macroPluginRequestFileName = 'macro_plugin_request';
 const macroClientRequestFileName = 'macro_client_request';
 
@@ -20,7 +22,16 @@ String get homeDir {
 }
 
 String get macroDirectory {
-  return '$homeDir/.dartServer/.plugin_manager/macro';
+  return p.join(homeDir, '.dartServer/.plugin_manager/macro');
 }
+
+/// The dart binary from the current sdk.
+final dartBinary = p.join(sdkBin, 'dart');
+
+/// The path to the sdk bin directory on the current platform.
+final sdkBin = p.join(sdkPath, 'bin');
+
+/// The path to the sdk on the current platform.
+final sdkPath = p.dirname(p.dirname(Platform.resolvedExecutable));
 
 enum ConnectionStatus { connecting, connected, disconnected }

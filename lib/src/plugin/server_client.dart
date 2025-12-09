@@ -10,7 +10,6 @@ import 'package:macro_kit/src/common/watch_file_request.dart';
 import 'package:path/path.dart' as p;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-
 abstract class MacroServerListener {
   void reconnectToServer({bool forceStart = false});
 
@@ -101,11 +100,16 @@ class MacroServerClient {
   }
 
   Future<bool> startMacroServer() async {
-    final home = Platform.environment['HOME'] ?? '~';
+    final home = homeDir;
     var path = Platform.environment['PATH'] ?? '';
-    path += ':$home/fvm/default/bin:$home/fvm/default/.pub-cache/bin:$home/.pub-cache/bin';
+    final addToPath = [
+      'fvm/default/bin',
+      'fvm/default/.pub-cache/bin',
+      '.pub-cache/bin',
+    ].map((e) => p.join(home, e)).join(':');
+    path += ':$sdkBin:$addToPath';
 
-    logger.fine('system path: $path');
+    logger.info('System path: $path');
 
     try {
       const args = ['macro'];
