@@ -55,6 +55,12 @@ part of '$relativePartFilePath';
     for (final runConfigEntry in runConfigs.entries) {
       final macroName = runConfigEntry.key;
       final msg = runConfigEntry.value;
+
+      // ignore message with empty class to not generate empty file
+      if (msg.classes == null || msg.classes!.isEmpty) {
+        continue;
+      }
+
       var clientChannelId = getClientChannelIdByMacro(macroName);
 
       if (clientChannelId == null) {
