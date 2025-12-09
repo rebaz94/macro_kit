@@ -5,9 +5,13 @@
 - Field initializer inspection capability
 - Enhanced data class macro with generics, default values, super formal parameters, and inheritance
   support
-- Asset macro path generation on Windows
-- Documentation coverage
-- Add more test cases
+- Fixed asset macro path generation on Windows
+- Use internal analysis API to provide memory store
+- Better preparation of system paths for macro server startup
+- Skip files containing only empty class declarations
+- Added API for regeneration when connecting to server
+- Improved documentation coverage
+- Expanded test suite
 
 ## 0.0.12
 

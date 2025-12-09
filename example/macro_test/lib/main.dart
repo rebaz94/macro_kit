@@ -9,6 +9,7 @@ part 'main.g.dart';
 
 void main() async {
   await runMacro(
+    package: PackageInfo('macro_test'),
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
       'JsonSchemaMacro': JsonSchemaMacro.initialize,

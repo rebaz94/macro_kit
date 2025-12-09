@@ -4,6 +4,7 @@ part 'main.g.dart';
 
 void main() async {
   await runMacro(
+    package: PackageInfo('example'),
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
     },

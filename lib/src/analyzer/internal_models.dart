@@ -28,20 +28,29 @@ class AnalyzeResult {
 @internal
 class MacroClientConfiguration {
   MacroClientConfiguration({
+    required this.packageName,
     required this.context,
     required this.remapGeneratedFileTo,
     required this.autoRebuildOnConnect,
+    required this.alwaysRebuildOnConnect,
   });
 
-  factory MacroClientConfiguration.withDefault(String context) {
-    return MacroClientConfiguration(context: context, remapGeneratedFileTo: '', autoRebuildOnConnect: false);
+  factory MacroClientConfiguration.withDefault(String context, String packageName) {
+    return MacroClientConfiguration(
+      context: context,
+      packageName: packageName,
+      remapGeneratedFileTo: '',
+      autoRebuildOnConnect: false,
+      alwaysRebuildOnConnect: false,
+    );
   }
 
-  static MacroClientConfiguration fromYaml(String context, YamlMap map) {
+  static MacroClientConfiguration fromYaml(String context, String packageName, YamlMap map) {
     final rewrite = (map['remap_generated_file_to'] as String?) ?? '';
 
     return MacroClientConfiguration(
       context: context,
+      packageName: packageName,
       remapGeneratedFileTo: switch (rewrite) {
         _ when rewrite.startsWith('./') => rewrite.substring(2),
         _ when rewrite.startsWith('.') => rewrite.substring(1),
@@ -49,17 +58,23 @@ class MacroClientConfiguration {
         _ => rewrite,
       },
       autoRebuildOnConnect: (map['auto_rebuild_on_connect'] as bool?) ?? false,
+      alwaysRebuildOnConnect: (map['always_rebuild_on_connect'] as bool?) ?? false,
     );
   }
 
   static MacroClientConfiguration defaultConfig = MacroClientConfiguration(
+    packageName: '',
     context: '',
     remapGeneratedFileTo: '',
     autoRebuildOnConnect: false,
+    alwaysRebuildOnConnect: false,
   );
 
   /// The associated project context
   final String context;
+
+  /// The name of the package from pubspec.yaml
+  final String packageName;
 
   /// Remap the generated file location to a custom directory
   ///
@@ -78,28 +93,40 @@ class MacroClientConfiguration {
   /// Defaults to `false`.
   final bool autoRebuildOnConnect;
 
+  /// Whether to ignore cache for current plugin session and always re-run generation
+  /// when new client connect to macro server
+  final bool alwaysRebuildOnConnect;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is MacroClientConfiguration &&
           runtimeType == other.runtimeType &&
           context == other.context &&
+          packageName == other.packageName &&
           remapGeneratedFileTo == other.remapGeneratedFileTo &&
-          autoRebuildOnConnect == other.autoRebuildOnConnect;
+          autoRebuildOnConnect == other.autoRebuildOnConnect &&
+          alwaysRebuildOnConnect == other.alwaysRebuildOnConnect;
 
   @override
-  int get hashCode => context.hashCode ^ remapGeneratedFileTo.hashCode ^ autoRebuildOnConnect.hashCode;
+  int get hashCode =>
+      context.hashCode ^
+      packageName.hashCode ^
+      remapGeneratedFileTo.hashCode ^
+      autoRebuildOnConnect.hashCode ^
+      alwaysRebuildOnConnect.hashCode;
 
   Map<String, dynamic> toJson() {
     return {
       if (remapGeneratedFileTo.isNotEmpty) 'remap_generated_file_to': remapGeneratedFileTo,
       if (autoRebuildOnConnect) 'auto_rebuild_on_connect': autoRebuildOnConnect,
+      if (alwaysRebuildOnConnect) 'always_rebuild_on_connect': alwaysRebuildOnConnect,
     };
   }
 
   @override
   String toString() {
-    return 'MacroClientConfiguration{context: $context, remapGeneratedFileTo: $remapGeneratedFileTo, autoRebuildOnConnect: $autoRebuildOnConnect}';
+    return 'MacroClientConfiguration{context: $context, packageName: $packageName, remapGeneratedFileTo: $remapGeneratedFileTo, autoRebuildOnConnect: $autoRebuildOnConnect, alwaysRebuildOnConnect: $alwaysRebuildOnConnect}';
   }
 }
 

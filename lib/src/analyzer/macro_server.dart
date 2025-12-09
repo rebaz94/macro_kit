@@ -49,6 +49,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }();
 
   final sync.Lock lock = sync.Lock();
+  final sync.Lock rebuildLock = sync.Lock();
   final Map<String, StreamSubscription<WatchEvent>> _subs = {};
   final Map<int, _PluginChannelInfo> _pluginChannels = {};
   final List<StreamSubscription> _wsPluginSubs = [];
@@ -145,7 +146,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   void _reloadMacroConfiguration(List<String> contexts) {
-    logger.info('Reloading context configuration');
+    logger.fine('Reloading context configuration');
     final oldMacroClientConfigs = {..._macroClientConfigs};
     _macroClientConfigs.clear();
     _assetsDir.clear();
@@ -155,25 +156,43 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     for (final context in contexts) {
       final autoRebuildExecuted = oldMacroClientConfigs[context]?.$2 == true;
       MacroClientConfiguration config;
+      String packageName;
 
       try {
-        final content = loadYamlNode(File(p.join(context, '.macro.yaml')).readAsStringSync());
-        config = switch (content.value['config']) {
-          YamlMap map => MacroClientConfiguration.fromYaml(context, map),
-          _ => MacroClientConfiguration.withDefault(context),
+        final pubspecContent = loadYamlNode(File(p.join(context, 'pubspec.yaml')).readAsStringSync());
+        packageName = switch (pubspecContent.value['name']) {
+          String v => v,
+          _ => '',
         };
-      } on PathNotFoundException {
-        config = MacroClientConfiguration.withDefault(context);
       } catch (e) {
-        logger.error('Failed to read macro configuration for: $context');
-        config = MacroClientConfiguration.withDefault(context);
+        logger.error(
+          'Unable to read package name from pubspec.yaml for context: $context. '
+          'Using full context path as package name fallback.',
+        );
+        packageName = context;
       }
 
+      config = _loadMacroConfig(context, packageName);
       _macroClientConfigs[context] = (config, autoRebuildExecuted);
     }
 
     /// reload asset macro configuration
     _setupAssetMacroConfiguration();
+  }
+
+  MacroClientConfiguration _loadMacroConfig(String context, String packageName) {
+    try {
+      final content = loadYamlNode(File(p.join(context, '.macro.yaml')).readAsStringSync());
+      return switch (content.value['config']) {
+        YamlMap map => MacroClientConfiguration.fromYaml(context, packageName, map),
+        _ => MacroClientConfiguration.withDefault(context, packageName),
+      };
+    } on PathNotFoundException {
+      return MacroClientConfiguration.withDefault(context, packageName);
+    } catch (e) {
+      logger.error('Failed to read macro configuration for: $context');
+      return MacroClientConfiguration.withDefault(context, packageName);
+    }
   }
 
   void _setupAssetMacroConfiguration() {
@@ -247,7 +266,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     await Future.wait(futures);
-    logger.info('Watching Analysis context: ${contexts.join(', ')}');
+    logger.info('Watching analysis context: \n${contexts.join(', ')}');
 
     final toRemove = _subs.keys.where((p) => !contexts.contains(p)).toList();
     for (final path in toRemove) {
@@ -464,7 +483,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
     StreamSubscription? sub;
     sub = webSocket.stream.listen(
-      (data) {
+      (data) async {
         final (message, err, stackTrace) = decodeMessage(data);
         if (err != null) {
           logger.error('Failed to decode message from client', err, stackTrace);
@@ -482,7 +501,42 @@ class MacroAnalyzerServer extends MacroAnalyzer {
             );
             clientId = msg.id;
 
-            onContextChanged();
+            final clientPkgNames = msg.package.names;
+            var autoRebuildConfigs = <MacroClientConfiguration>[];
+            bool hasPackageContext = false;
+
+            for (final entry in _macroClientConfigs.entries) {
+              final (config, autoRebuildExecuted) = entry.value;
+              if (clientPkgNames.contains(config.packageName) || clientPkgNames.contains(config.context)) {
+                hasPackageContext = true;
+                if ((!config.autoRebuildOnConnect || autoRebuildExecuted) && !config.alwaysRebuildOnConnect) {
+                  continue;
+                }
+
+                autoRebuildConfigs.add(config);
+              }
+            }
+
+            // if not loaded, check if package name is a path,
+            // if true: load it dynamically, probably used in test
+            if (!hasPackageContext) {
+              autoRebuildConfigs.clear();
+              for (final pkgName in msg.package.names) {
+                if (!pkgName.contains('/') && !pkgName.contains('\\')) continue;
+
+                final config = _loadMacroConfig(pkgName, pkgName);
+                if (!config.autoRebuildOnConnect && !config.alwaysRebuildOnConnect) continue;
+
+                autoRebuildConfigs.add(config);
+              }
+
+              _autoRebuildOnStart(clientId, autoRebuildConfigs, add: true);
+              return;
+            }
+
+            // re-run generation for the context
+            _autoRebuildOnStart(clientId, autoRebuildConfigs);
+
           case RunMacroResultMsg msg:
             final operation = _pendingOperations.remove(msg.id);
             if (operation == null) {
@@ -506,21 +560,73 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       return true;
     } catch (e, s) {
       logger.error('Unable to add message to client', e, s);
-      final channelInfo = _clientChannels.remove(channelId);
-      channelInfo?.sub?.cancel();
+      _removeClient(channelId);
       return false;
     }
   }
 
-  Future<String?> forceRegenerateCodeFor({
+  void _removeClient(int channelId) {
+    try {
+      final channelInfo = _clientChannels.remove(channelId);
+      channelInfo?.sub?.cancel();
+    } catch (_) {}
+  }
+
+  void _autoRebuildOnStart(int clientId, List<MacroClientConfiguration> configs, {bool add = false}) async {
+    if (configs.isEmpty) return;
+
+    await rebuildLock.synchronized(
+      () async {
+        final s = Stopwatch();
+
+        if (add) {
+          final pluginInfo = _pluginChannels.entries.firstOrNull;
+          if (pluginInfo != null) {
+            final newContexts = configs.map((e) => e.context).toList();
+            pluginInfo.value.contexts.addAll(newContexts);
+            logger.info('Dynamically added new context for testing: ${newContexts.join(', ')}');
+            await onContextChanged();
+          }
+        }
+
+        final contexts = <String>[];
+        final errors = <String?>[];
+
+        for (final config in configs) {
+          s
+            ..reset()
+            ..start();
+
+          final err = await _forceRegenerateCodeFor(
+            clientId: clientId,
+            contextPath: config.context,
+          );
+
+          contexts.add(config.context);
+          errors.add(err);
+
+          logger.info('Completed regeneration in ${s.elapsed.inSeconds}s');
+          if (err != null) {
+            logger.error('Auto rebuild on start failed', err);
+          } else if (_macroClientConfigs.containsKey(config.context)) {
+            _macroClientConfigs[config.context] = (_macroClientConfigs[config.context]!.$1, true);
+          }
+        }
+
+        _addMessageToClient(
+          clientId,
+          AutoRebuildOnConnectMsg(contexts: contexts, errors: errors),
+        );
+      },
+    );
+  }
+
+  Future<String?> _forceRegenerateCodeFor({
     required int clientId,
     required String contextPath,
-    required bool filterOnlyDirectory,
-    required bool addToContext,
-    required bool removeInContext,
   }) async {
     final clientInfo = _clientChannels[clientId];
-    if (clientInfo == null) return 'No Client registered with id: $clientId';
+    if (clientInfo == null) return 'No client registered with id: $clientId';
 
     (AnalysisContext?, StateError?) getContext(String path) {
       try {
@@ -531,43 +637,12 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       }
     }
 
-    MapEntry<int, _PluginChannelInfo>? firstPlugin;
     var (context, err) = getContext(contextPath);
-    if (err != null) {
-      if (!addToContext) {
-        return 'No analysis context found for: $contextPath, please ensure plugin installed';
-      }
-
-      firstPlugin = _pluginChannels.entries.firstOrNull;
-      if (firstPlugin == null) {
-        return 'No plugin registered, please ensure plugin installed';
-      }
-
-      _pluginChannels[firstPlugin.key] = (
-        ch: firstPlugin.value.ch,
-        contexts: firstPlugin.value.contexts.toList()..add(contextPath),
-      );
-      await onContextChanged();
-
-      (context, err) = getContext(contextPath);
-      if (err != null) {
-        _pluginChannels[firstPlugin.key] = firstPlugin.value;
-        return 'No analysis context found for: $contextPath after trying to load it';
-      }
-    } else if (context == null) {
-      return 'Unexpected state: context must not null';
+    if (err != null || context == null) {
+      return 'No analysis context found for: $contextPath, Error: $err';
     }
 
-    final isRootContext = contexts.contains(contextPath);
-    final List<String> files;
-
-    if (!isRootContext && filterOnlyDirectory) {
-      files = Directory(contextPath).listSync(recursive: true).whereType<File>().map((e) => e.path).toList();
-    } else {
-      files = context!.contextRoot.analyzedFiles().toList();
-    }
-
-    for (final file in files) {
+    for (final file in context.contextRoot.analyzedFiles()) {
       _onFileChanged(file, ChangeType.MODIFY, startProcessing: false);
     }
 
@@ -576,12 +651,6 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
     // wait until receive completed event
     await pendingAnalyzeCompleted.stream.first;
-
-    if (firstPlugin != null && removeInContext) {
-      _pluginChannels[firstPlugin.key] = firstPlugin.value;
-      await onContextChanged();
-    }
-
     return null;
   }
 

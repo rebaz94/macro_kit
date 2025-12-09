@@ -20,6 +20,7 @@ String encodeMessage(Message message) {
       'client_connect' => ClientConnectMsg.fromJson(data),
       'run_macro' => RunMacroMsg.fromJson(data),
       'run_macro_result' => RunMacroResultMsg.fromJson(data),
+      'auto_rebuild_on_connect_result' => AutoRebuildOnConnectMsg.fromJson(data),
       _ => throw 'Unimplemented message type: ${json['type']}',
     };
 
@@ -80,6 +81,7 @@ class AnalysisContextsMsg implements Message {
 class ClientConnectMsg implements Message {
   ClientConnectMsg({
     required this.id,
+    required this.package,
     required this.macros,
     required this.assetMacros,
     required this.runTimeout,
@@ -88,6 +90,7 @@ class ClientConnectMsg implements Message {
   static ClientConnectMsg fromJson(Map<String, dynamic> json) {
     return ClientConnectMsg(
       id: (json['id'] as num).toInt(),
+      package: PackageInfo.fromJson(json['packages'] as Map<String, dynamic>),
       macros: (json['macros'] as List).map((e) => e as String).toList(),
       assetMacros: (json['assetMacros'] as Map).map(
         (k, v) {
@@ -102,6 +105,7 @@ class ClientConnectMsg implements Message {
   }
 
   final int id;
+  final PackageInfo package;
   final List<String> macros;
   final Map<String, List<AssetMacroInfo>> assetMacros;
   final Duration runTimeout;
@@ -113,6 +117,7 @@ class ClientConnectMsg implements Message {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'packages': package.toJson(),
       'macros': macros,
       'assetMacros': assetMacros.map((k, v) => MapEntry(k, v.map((e) => e.toJson()).toList())),
       'runTimeout': runTimeout.inMicroseconds,
@@ -275,5 +280,67 @@ class RunMacroResultMsg implements Message {
       if (generatedFiles?.isNotEmpty == true) 'generatedFiles': generatedFiles!,
       if (error != null) 'error': error!,
     };
+  }
+}
+
+class AutoRebuildOnConnectMsg implements Message {
+  AutoRebuildOnConnectMsg({
+    required this.contexts,
+    required this.errors,
+  });
+
+  static AutoRebuildOnConnectMsg fromJson(Map<String, dynamic> json) {
+    return AutoRebuildOnConnectMsg(
+      contexts: (json['contexts'] as List).map((e) => e as String).toList(),
+      errors: (json['errors'] as List).map((e) => e as String?).toList(),
+    );
+  }
+
+  /// The regenerated context
+  final List<String> contexts;
+
+  /// The error message if any
+  final List<String?> errors;
+
+  @override
+  String get type => 'auto_rebuild_on_connect_result';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'contexts': contexts,
+      'errors': errors,
+    };
+  }
+}
+
+/// Result of an automatic macro rebuild operation.
+///
+/// Contains the list of contexts that were processed and any errors that
+/// occurred during regeneration. Errors are aligned with contexts by index.
+class AutoRebuildResult {
+  const AutoRebuildResult({required this.contexts, required this.errors});
+
+  /// The contexts (package paths) that were regenerated.
+  ///
+  /// Each context represents a package or directory where macro code was rebuilt.
+  final List<String> contexts;
+
+  /// Error messages for each context, or null if regeneration succeeded.
+  ///
+  /// This list has the same length as [contexts], with each index corresponding
+  /// to the result for that context. A null value indicates successful regeneration.
+  ///
+  /// Example:
+  /// ```dart
+  /// contexts: ['pkg_a', 'pkg_b', 'pkg_c']
+  /// errors:   [null,    'Parse error', null]
+  /// // pkg_a: success, pkg_b: failed, pkg_c: success
+  /// ```
+  final List<String?> errors;
+
+  @override
+  String toString() {
+    return 'AutoRebuildResult{contexts: $contexts, errors: $errors}';
   }
 }

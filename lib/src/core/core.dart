@@ -1972,6 +1972,78 @@ abstract class MacroGenerator implements BaseMacroGenerator {
   }
 }
 
+/// Provides package name(s) for connecting macros to the MacroPlugin server.
+///
+/// This class identifies which package(s) the macro is running in, enabling
+/// the macro to establish a connection with the plugin server. The package
+/// name should match the `name` field defined in your `pubspec.yaml`.
+///
+/// **Single Package (Common Use Case):**
+/// ```dart
+/// final packageInfo = PackageInfo('my_app');
+/// ```
+/// Use this when working with a single project in your IDE, which covers
+/// most development scenarios.
+///
+/// **Multiple Packages (Advanced):**
+/// ```dart
+/// final packageInfo = PackageInfo.multiple(['app', 'core', 'shared']);
+/// ```
+/// Use this when multiple packages need to connect to the same plugin server,
+/// such as in mono-repo setups or when working with multiple related packages
+/// simultaneously.
+///
+/// **Important:** The package name(s) must exactly match those defined in
+/// the respective `pubspec.yaml` files for the connection to succeed.
+class PackageInfo {
+  const PackageInfo._(this.names);
+
+  /// Creates a [PackageInfo] for a single package.
+  ///
+  /// The [name] must match the package name in `pubspec.yaml`.
+  ///
+  /// Example:
+  /// ```dart
+  /// final info = PackageInfo('my_app');
+  /// ```
+  factory PackageInfo(String name) {
+    return PackageInfo._([name]);
+  }
+
+  /// Creates a [PackageInfo] for multiple packages.
+  ///
+  /// Use this when multiple packages need to connect to the same plugin server.
+  /// Each name in [names] must match a package name in its respective `pubspec.yaml`.
+  ///
+  /// Example:
+  /// ```dart
+  /// final info = PackageInfo.multiple(['app', 'core', 'shared']);
+  /// ```
+  factory PackageInfo.multiple(Iterable<String> names) {
+    return PackageInfo._(names.toList());
+  }
+
+  static PackageInfo fromJson(Map<String, dynamic> json) {
+    return PackageInfo._(
+      (json['names'] as List).map((e) => e as String).toList(),
+    );
+  }
+
+  /// The list of package names that can connect to the MacroPlugin server.
+  final List<String> names;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'names': names,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'PackageInfo{names: $names}';
+  }
+}
+
 @internal
 extension MacroX on String {
   String get removedNullability {

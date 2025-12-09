@@ -1,11 +1,10 @@
 import 'dart:io';
 
 import 'package:macro_kit/macro.dart';
-import 'package:macro_kit/src/analyzer/regenerate.dart';
-import 'package:path/path.dart' as p;
 
 void main() async {
-  final clientId = await runMacro(
+  await runMacro(
+    package: PackageInfo('${Directory.current.path}/test'),
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
       'AssetPathMacro': AssetPathMacro.initialize,
@@ -22,17 +21,5 @@ void main() async {
     },
   );
 
-  // wait macro manager initialize
-  await Future.delayed(const Duration(seconds: 2));
-
-  final testDir = p.join(Directory.current.path);
-  final s = Stopwatch()..start();
-  await forceRegenerateFor(
-    clientId: clientId!,
-    contextPath: testDir,
-    addToContext: true,
-    removeInContext: false,
-  );
-
-  print('regenerated all files in ${s.elapsedMilliseconds} ms');
+  await waitUntilRebuildCompleted();
 }

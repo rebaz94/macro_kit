@@ -19,10 +19,19 @@ class MacroManager {
     required this.logger,
     required String serverAddress,
     required this.macros,
-    required this.autoReconnect,
-    required this.generateTimeout,
     required this.assetMacros,
+    required this.autoReconnect,
+    required this.packageInfo,
+    required this.generateTimeout,
   }) : serverAddress = Uri.parse(serverAddress);
+
+  static final List<Completer<AutoRebuildResult>> _waitAutoRebuildCompleteCompleter = [];
+
+  static Future<AutoRebuildResult> waitUntilRebuildCompleted() {
+    final c = Completer<AutoRebuildResult>();
+    _waitAutoRebuildCompleteCompleter.add(c);
+    return c.future;
+  }
 
   final int clientId = 1000 + Random().nextInt(1000);
   final sync.Lock lock = sync.Lock();
@@ -32,6 +41,8 @@ class MacroManager {
   final bool autoReconnect;
   final Duration generateTimeout;
   final Map<String, List<AssetMacroInfo>> assetMacros;
+  final PackageInfo packageInfo;
+
   final _clientRequestWatcher = WatchFileRequest(
     fileName: macroClientRequestFileName,
     inDirectory: macroDirectory,
@@ -157,9 +168,10 @@ class MacroManager {
       _addMessage(
         ClientConnectMsg(
           id: clientId,
-          runTimeout: generateTimeout,
+          package: packageInfo,
           macros: macros.keys.toList(),
           assetMacros: assetMacros,
+          runTimeout: generateTimeout,
         ),
       );
 
@@ -195,6 +207,20 @@ class MacroManager {
           _runAssetMacro(message);
         } else {
           _runMacro(msg);
+        }
+      case AutoRebuildOnConnectMsg msg:
+        final list = _waitAutoRebuildCompleteCompleter.toList();
+        _waitAutoRebuildCompleteCompleter.clear();
+
+        final result = AutoRebuildResult(
+          contexts: msg.contexts,
+          errors: msg.errors,
+        );
+
+        for (final c in list) {
+          if (c.isCompleted) continue;
+
+          c.complete(result);
         }
     }
   }

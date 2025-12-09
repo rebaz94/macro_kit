@@ -27,7 +27,6 @@ void startMacroServer() async {
       ),
     )
     ..get('/contexts', _getServerContexts)
-    ..post('/force_regenerate', _forceRegenerate)
     ..post('/shutdown', _onShutdown);
 
   final alreadyInUse = await _serveServer(app);
@@ -83,41 +82,6 @@ Future<Response> _getServerContexts(Request request) async {
     headers: {
       HttpHeaders.contentTypeHeader: ContentType.json.value,
     },
-  );
-}
-
-Future<Response> _forceRegenerate(Request request) async {
-  final data = jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-  final clientId = (data['clientId'] as num).toInt();
-  final context = data['context'] as String;
-  final filterOnlyDirectory = data['filterOnlyDirectory'] as bool;
-  final addToContext = data['addToContext'] as bool;
-  final removeInContext = data['removeInContext'] as bool;
-
-  if (context.isEmpty) {
-    return Response.badRequest(
-      body: jsonEncode({'status': false, 'error': 'context path required'}),
-      headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
-    );
-  }
-
-  final errMsg = await MacroAnalyzerServer.instance.forceRegenerateCodeFor(
-    clientId: clientId,
-    contextPath: context,
-    filterOnlyDirectory: filterOnlyDirectory,
-    addToContext: addToContext,
-    removeInContext: removeInContext,
-  );
-  if (errMsg != null) {
-    return Response.internalServerError(
-      body: jsonEncode({'status': false, 'error': 'failed to regenerate: $errMsg'}),
-      headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
-    );
-  }
-
-  return Response.ok(
-    jsonEncode({'status': true}),
-    headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
   );
 }
 
