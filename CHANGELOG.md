@@ -10,6 +10,7 @@
 - Better preparation of system paths for macro server startup
 - Skip files containing only empty class declarations
 - Added API for regeneration when connecting to server
+- Fixed Object.hash parameter limit issue for classes with 20+ fields (thanks @jainam-bhavasar, #2)
 - Improved documentation coverage
 - Expanded test suite
 
