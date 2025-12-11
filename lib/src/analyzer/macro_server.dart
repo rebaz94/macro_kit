@@ -7,6 +7,7 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
+import 'package:logging/logging.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
@@ -130,6 +131,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
         return;
       }
 
+      _sendMessageMacroClients(
+        GeneralMessage(message: 'Loading analysis context:\n${analysisContextPaths.map((e) => '-> $e').join('\n')}'),
+      );
       // Create new analysis context collection
       var old = contextCollection;
       contextCollection = AnalysisContextCollectionImpl(
@@ -227,8 +231,13 @@ class MacroAnalyzerServer extends MacroAnalyzer {
           macroLoop:
           for (final macro in assetMacros) {
             if (!p.isRelative(macro.output)) {
-              logger.warn(
-                'Skipping output directory "${macro.output}" for macro "${macro.macroName}": must be a relative path',
+              final msg =
+                  'Skipping output directory "${macro.output}" for macro "${macro.macroName}": must be a relative path';
+              logger.warn(msg);
+
+              _sendMessageMacroClients(
+                clientId: clientChannel.id,
+                GeneralMessage(message: msg, level: Level.WARNING),
               );
               continue macroLoop;
             }
@@ -251,10 +260,14 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       if (outputsDir.contains(inputDir)) {
         // remove input directory, because output to same location cause recursion
         _assetsDir.remove(inputDir);
-        logger.warn(
-          'Skipping asset directory "$inputDir": output directory cannot be the same as input '
-          '(would cause infinite regeneration loop)',
+        final msg =
+            'Skipping asset directory "$inputDir": output directory cannot be the same as input '
+            '(would cause infinite regeneration loop)';
+
+        _sendMessageMacroClients(
+          GeneralMessage(message: msg, level: Level.WARNING),
         );
+        logger.warn(msg);
       }
     }
 
@@ -501,9 +514,15 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       }
     }
 
-    logger.warn(
-      'No client found for macro "$targetMacro" in context "${contextInfo.packageName}" for file: $filePath',
+    final msg = 'No client found for macro "$targetMacro" in context "${contextInfo.packageName}" for file: $filePath';
+    _sendMessageMacroClients(
+      GeneralMessage(
+        message: msg,
+        level: Level.WARNING,
+      ),
     );
+
+    logger.warn(msg);
     return null;
   }
 
@@ -571,6 +590,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     if (autoRebuildConfigs.isNotEmpty) {
+      _sendMessageMacroClients(
+        GeneralMessage(message: 'Rebuilding macro generated for: ${clientChannel.package.values.join(', ')}'),
+      );
       await _runAutoRebuildOnConnect(clientId, autoRebuildConfigs);
     }
   }
@@ -847,6 +869,18 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       relativeToSource = '$fileName.dart';
 
       return (genFilePath: generatedFile, relativePartFilePath: relativeToSource);
+    }
+  }
+
+  /// send message to all client or only specific one if [clientId] is provided
+  void _sendMessageMacroClients(GeneralMessage message, {int? clientId}) {
+    if (clientId != null) {
+      _addMessageToClient(clientId, message);
+      return;
+    }
+
+    for (final client in _clientChannels.entries.toList()) {
+      _addMessageToClient(client.key, message);
     }
   }
 

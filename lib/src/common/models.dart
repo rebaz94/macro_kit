@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:logging/logging.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/core/core.dart';
 
@@ -23,6 +24,7 @@ String encodeMessage(Message message) {
       'run_macro' => RunMacroMsg.fromJson(data),
       'run_macro_result' => RunMacroResultMsg.fromJson(data),
       'auto_rebuild_on_connect_result' => AutoRebuildOnConnectMsg.fromJson(data),
+      'general_message' => GeneralMessage.fromJson(data),
       _ => throw 'Unimplemented message type: ${json['type']}',
     };
 
@@ -444,5 +446,34 @@ class AutoRebuildResult {
   @override
   String toString() {
     return 'AutoRebuildResult{contexts: $contexts, errors: $errors}';
+  }
+}
+
+class GeneralMessage implements Message {
+  const GeneralMessage({
+    required this.message,
+    this.level = Level.INFO,
+  });
+
+  static GeneralMessage fromJson(Map<String, dynamic> json) {
+    final level = (json['level'] as String).split(':');
+    return GeneralMessage(
+      message: json['message'] as String,
+      level: Level(level.first, int.parse(level.last)),
+    );
+  }
+
+  final String message;
+  final Level level;
+
+  @override
+  String get type => 'general_message';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'level': '${level.name}:${level.value}',
+    };
   }
 }

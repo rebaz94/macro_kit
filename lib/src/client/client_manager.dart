@@ -235,6 +235,9 @@ class MacroManager {
 
           c.complete(result);
         }
+
+      case GeneralMessage msg:
+        logger.logger.log(msg.level, msg.message);
     }
   }
 
