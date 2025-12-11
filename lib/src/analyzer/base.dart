@@ -18,7 +18,6 @@ import 'package:macro_kit/src/common/models.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
-import 'package:yaml/yaml.dart';
 
 abstract class MacroServer {
   void requestPluginToConnect();
