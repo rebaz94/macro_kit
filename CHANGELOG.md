@@ -1,3 +1,8 @@
+## 0.2.1
+
+- Disable linter and formatter for generated files
+- Add additional logging for client messages sent by server
+
 ## 0.2.0
 
 - Introduced a new API for defining project-level global macro configurations.
