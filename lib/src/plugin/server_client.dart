@@ -52,7 +52,7 @@ class MacroServerClient {
     }
   }
 
-  bool isDisabledAutoStartSever() {
+  bool isDisabledAutoStartServer() {
     try {
       final file = File(p.join(macroDirectory, 'macro_config.json'));
       if (!file.existsSync()) {
@@ -166,10 +166,12 @@ class MacroServerClient {
         onDone: () async => status = ConnectionStatus.disconnected,
       );
 
-      _addMessage(PluginConnectMsg(id: pluginId));
-
-      // setup initial contexts
-      analysisContentChanged();
+      _addMessage(
+        PluginConnectMsg(
+          id: pluginId,
+          initialContexts: listener.listAnalysisContexts(),
+        ),
+      );
 
       logger.info('Connected');
     } catch (e) {

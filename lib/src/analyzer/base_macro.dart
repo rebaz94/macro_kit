@@ -232,6 +232,36 @@ class MacroCapability {
   }
 }
 
+/// A function type for parsing global macro configuration from JSON.
+///
+/// Takes a JSON map and returns a [MacroGlobalConfig] instance, or null if parsing fails.
+///
+/// Example:
+/// ```dart
+/// MacroGlobalConfig? myConfigParser(Map<String, dynamic> json) {
+///   return MyMacroConfig.fromJson(json);
+/// }
+/// ```
+typedef MacroGlobalConfigParser = MacroGlobalConfig? Function(Map<String, dynamic> json);
+
+/// A base class for macro global configuration.
+///
+/// Extend this class to create custom global configurations for your macros.
+/// Global configurations allow you to define project-level settings that apply
+/// across all uses of a macro, reducing repetition in individual annotations.
+///
+/// Example:
+/// ```dart
+/// class MyMacroConfig extends MacroGlobalConfig {
+///   MyMacroConfig({required super.id, required this.asLiteral});
+///
+///   final bool asLiteral;
+/// }
+/// ```
+abstract class MacroGlobalConfig {
+  const MacroGlobalConfig();
+}
+
 /// Internal base class. Extend [MacroGenerator] to implement macros.
 @internal
 abstract class BaseMacroGenerator {
@@ -240,6 +270,8 @@ abstract class BaseMacroGenerator {
   String get suffixName;
 
   GeneratedType get generatedType;
+
+  MacroGlobalConfigParser? get globalConfigParser;
 
   Future<void> init(MacroState state);
 

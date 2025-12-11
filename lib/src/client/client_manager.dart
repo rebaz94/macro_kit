@@ -4,12 +4,12 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:macro_kit/macro_kit.dart';
+import 'package:macro_kit/src/analyzer/lock.dart';
 import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:macro_kit/src/common/watch_file_request.dart';
 import 'package:path/path.dart' as p;
-import 'package:synchronized/synchronized.dart' as sync;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 typedef MacroInitFunction = MacroGenerator Function(MacroConfig config);
@@ -34,14 +34,17 @@ class MacroManager {
   }
 
   final int clientId = 1000 + Random().nextInt(1000);
-  final sync.Lock lock = sync.Lock();
+  final CustomBasicLock lock = CustomBasicLock();
   final MacroLogger logger;
   final Uri serverAddress;
   final Map<String, MacroInitFunction> macros;
+  final Map<String, List<AssetMacroInfo>> assetMacros;
   final bool autoReconnect;
   final Duration generateTimeout;
-  final Map<String, List<AssetMacroInfo>> assetMacros;
   final PackageInfo packageInfo;
+  UserMacroConfig? userMacrosConfig;
+  final Map<String, (MacroGlobalConfig?,)> cachedUserMacrosConfig = {};
+  Completer<bool> _isMacrosConfigSynced = Completer<bool>();
 
   final _clientRequestWatcher = WatchFileRequest(
     fileName: macroClientRequestFileName,
@@ -108,7 +111,7 @@ class MacroManager {
               'MacroServer is not running. Restart the analyzer to automatically start the server.'
               '\nNote: When testing macOS Desktop or Windows applications, the server is started automatically.',
             );
-          } else {
+          } else if (status == ConnectionStatus.disconnected) {
             logger.error('Reconnecting to MacroServer in 10 seconds');
           }
         }
@@ -161,6 +164,10 @@ class MacroManager {
         onError: (error) => logger.error('WebSocket error occurred', error),
         onDone: () async {
           _status = ConnectionStatus.disconnected;
+          if (!_isMacrosConfigSynced.isCompleted) {
+            _isMacrosConfigSynced.complete(false);
+          }
+          _isMacrosConfigSynced = Completer();
           _reconnect();
         },
       );
@@ -208,6 +215,12 @@ class MacroManager {
         } else {
           _runMacro(msg);
         }
+      case SyncMacrosConfigMsg msg:
+        userMacrosConfig = msg.config;
+        if (!_isMacrosConfigSynced.isCompleted) {
+          _isMacrosConfigSynced.complete(true);
+        }
+
       case AutoRebuildOnConnectMsg msg:
         final list = _waitAutoRebuildCompleteCompleter.toList();
         _waitAutoRebuildCompleteCompleter.clear();
@@ -227,6 +240,8 @@ class MacroManager {
 
   void _runMacro(RunMacroMsg message) async {
     final generated = StringBuffer();
+    final synced = await _syncMacroConfiguration(message.path);
+    if (!synced) return;
 
     try {
       for (final declaration in message.classes ?? const <MacroClassDeclaration>[]) {
@@ -239,20 +254,28 @@ class MacroManager {
 
         for (final (index, macroConfig) in declaration.configs.indexed) {
           // initialize or reuse generator
-          final (generator, errMsg) = _getMacroGenerator(macroConfig);
-          if (errMsg != null || generator == null) {
+          final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
+          if (errMsg != null || macroGenrator == null) {
             _addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
             return;
+          }
+
+          // get global config if exists
+          MacroGlobalConfig? globalConfig;
+          if (userMacrosConfig != null) {
+            if (macroGenrator.globalConfigParser case final v?) {
+              globalConfig = _getGlobalMacroConfig(macroConfig.key.name, v, userMacrosConfig!);
+            }
           }
 
           // if combing generated code & first macro not applied yet, set the suffix and use that for all macro,
           // otherwise its if not combing or value is set, it fallback to MacroGenerator.suffixName
           if (isCombiningGenCodeMode && !firstMacroApplied) {
-            combinedSuffixName = generator.suffixName;
+            combinedSuffixName = macroGenrator.suffixName;
           }
 
           // get current generator type
-          final currentGeneratedType = generator.generatedType;
+          final currentGeneratedType = macroGenrator.generatedType;
 
           // combine mode only if first macro applied and its same type as before
           final isCombingGenerator =
@@ -266,6 +289,7 @@ class MacroManager {
           final state = MacroState(
             macro: macroConfig.key,
             remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
+            globalConfig: globalConfig,
             targetType: TargetType.clazz,
             importPrefix: declaration.importPrefix,
             imports: message.imports,
@@ -274,8 +298,8 @@ class MacroManager {
             modifier: declaration.modifier,
             isCombingGenerator: isCombingGenerator,
             suffixName: isCombingGenerator || (isCombiningGenCodeMode && !firstMacroApplied)
-                ? combinedSuffixName ?? generator.suffixName
-                : generator.suffixName,
+                ? combinedSuffixName ?? macroGenrator.suffixName
+                : macroGenrator.suffixName,
             classesById: message.sharedClasses,
             assetState: null,
           );
@@ -283,10 +307,10 @@ class MacroManager {
           final cap = macroConfig.capability;
 
           // init state and execute each capability as requested
-          await generator.init(state);
+          await macroGenrator.init(state);
 
           if (declaration.classTypeParameters != null) {
-            await generator.onClassTypeParameter(state, declaration.classTypeParameters!);
+            await macroGenrator.onClassTypeParameter(state, declaration.classTypeParameters!);
           }
 
           if (cap.classFields) {
@@ -294,14 +318,14 @@ class MacroManager {
 
             await switch ((hasMultipleMetadata, cap.filterClassStaticFields, cap.filterClassInstanceFields)) {
               (_, false, false) => Future.value(),
-              (false, _, _) || (_, true, true) => generator.onClassFields(state, fields),
-              (_, false, true) => generator.onClassFields(state, fields.where((e) => !e.isStatic).toList()),
-              (_, true, false) => generator.onClassFields(state, fields.where((e) => e.isStatic).toList()),
+              (false, _, _) || (_, true, true) => macroGenrator.onClassFields(state, fields),
+              (_, false, true) => macroGenrator.onClassFields(state, fields.where((e) => !e.isStatic).toList()),
+              (_, true, false) => macroGenrator.onClassFields(state, fields.where((e) => e.isStatic).toList()),
             };
           }
 
           if (cap.classConstructors) {
-            await generator.onClassConstructors(state, declaration.constructors ?? const []);
+            await macroGenrator.onClassConstructors(state, declaration.constructors ?? const []);
           }
 
           if (cap.classMethods) {
@@ -309,17 +333,23 @@ class MacroManager {
 
             await switch ((hasMultipleMetadata, cap.filterClassStaticMethod, cap.filterClassInstanceMethod)) {
               (_, false, false) => Future.value(),
-              (false, _, _) || (_, true, true) => generator.onClassMethods(state, methods),
-              (_, false, true) => generator.onClassMethods(state, methods.where((e) => !e.modifier.isStatic).toList()),
-              (_, true, false) => generator.onClassMethods(state, methods.where((e) => e.modifier.isStatic).toList()),
+              (false, _, _) || (_, true, true) => macroGenrator.onClassMethods(state, methods),
+              (_, false, true) => macroGenrator.onClassMethods(
+                state,
+                methods.where((e) => !e.modifier.isStatic).toList(),
+              ),
+              (_, true, false) => macroGenrator.onClassMethods(
+                state,
+                methods.where((e) => e.modifier.isStatic).toList(),
+              ),
             };
           }
 
           if (cap.collectClassSubTypes) {
-            await generator.onClassSubTypes(state, declaration.subTypes ?? const []);
+            await macroGenrator.onClassSubTypes(state, declaration.subTypes ?? const []);
           }
 
-          await generator.onGenerate(state);
+          await macroGenrator.onGenerate(state);
           String generatedCode = state.generated;
 
           if (isCombiningGenCodeMode) {
@@ -407,8 +437,8 @@ class MacroManager {
         ),
       );
 
-      final (generator, errMsg) = _getMacroGenerator(macroConfig);
-      if (errMsg != null || generator == null) {
+      final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
+      if (errMsg != null || macroGenrator == null) {
         _addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
         return;
       }
@@ -417,8 +447,17 @@ class MacroManager {
       assert(message.assetAbsoluteBasePath != null);
       assert(message.assetAbsoluteOutputPath != null);
 
+      // get global config if exists
+      MacroGlobalConfig? globalConfig;
+      if (userMacrosConfig != null) {
+        if (macroGenrator.globalConfigParser case final v?) {
+          globalConfig = _getGlobalMacroConfig(macroConfig.key.name, v, userMacrosConfig!);
+        }
+      }
+
       final state = MacroState(
         macro: macroConfig.key,
+        globalConfig: globalConfig,
         remainingMacro: const [],
         targetType: TargetType.asset,
         importPrefix: '',
@@ -427,7 +466,7 @@ class MacroManager {
         targetName: declaration.name,
         modifier: MacroModifier(const {}),
         isCombingGenerator: false,
-        suffixName: generator.suffixName,
+        suffixName: macroGenrator.suffixName,
         classesById: const {},
         assetState: AssetState(
           relativeBasePath: message.assetBasePath!,
@@ -436,9 +475,9 @@ class MacroManager {
         ),
       );
 
-      await generator.init(state);
-      await generator.onAsset(state, declaration);
-      await generator.onGenerate(state);
+      await macroGenrator.init(state);
+      await macroGenrator.onAsset(state, declaration);
+      await macroGenrator.onGenerate(state);
 
       generatedFiles.addAll(state.generatedFilePaths);
     } catch (e, s) {
@@ -478,6 +517,44 @@ class MacroManager {
     } catch (e, s) {
       logger.error('Failed to initialize Macro generator', e, s);
       return (null, 'Generation Failed: Unable to initialize Macro generator, ${e.toString()}');
+    }
+  }
+
+  Future<bool> _syncMacroConfiguration(String path) async {
+    if (_isMacrosConfigSynced.isCompleted) return true;
+
+    _addMessage(RequestMacrosConfigMsg(clientId: clientId, filePath: path));
+
+    try {
+      final res = await _isMacrosConfigSynced.future;
+      return res;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  MacroGlobalConfig? _getGlobalMacroConfig(
+    String macroName,
+    MacroGlobalConfigParser parser,
+    UserMacroConfig rawConfig,
+  ) {
+    final cacheKey = '${rawConfig.id}_$macroName';
+    final cached = cachedUserMacrosConfig[cacheKey];
+    if (cached != null) return cached.$1;
+
+    final macroConfigValue = rawConfig.configs[macroName];
+    if (macroConfigValue == null || macroConfigValue is! Map<String, dynamic>) {
+      cachedUserMacrosConfig[cacheKey] = (null,);
+      return null;
+    }
+
+    try {
+      final globalConfig = parser(macroConfigValue);
+      cachedUserMacrosConfig[cacheKey] = (globalConfig,);
+      return globalConfig;
+    } catch (e, s) {
+      logger.error('Failed to decode macro configuration for: $macroName', e, s);
+      return null;
     }
   }
 

@@ -10,26 +10,16 @@ import 'package:http/http.dart' as http;
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
+import 'package:macro_kit/src/analyzer/lock.dart';
 import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:path/path.dart' as p;
-import 'package:synchronized/synchronized.dart' as sync;
 import 'package:watcher/watcher.dart';
 import 'package:web_socket_channel/status.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'base.dart';
-
-typedef _PluginChannelInfo = ({WebSocketChannel ch, List<String> contexts});
-
-typedef _ClientChannelInfo = ({
-  WebSocketChannel ch,
-  List<String> macros,
-  Map<String, List<AssetMacroInfo>> assetMacros,
-  Duration timeout,
-  StreamSubscription? sub,
-});
 
 typedef _AssetDirInfo = ({AssetMacroInfo macro, String relativeBasePath, String absoluteOutputPath});
 
@@ -47,23 +37,22 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     return MacroAnalyzerServer(logger: logger).._setupAutoShutdown();
   }();
 
-  final sync.Lock lock = sync.Lock();
-  final sync.Lock rebuildLock = sync.Lock();
+  final CustomBasicLock lock = CustomBasicLock();
+  final CustomBasicLock rebuildLock = CustomBasicLock();
   final Map<String, StreamSubscription<WatchEvent>> _subs = {};
-  final Map<int, _PluginChannelInfo> _pluginChannels = {};
+  final Map<int, PluginChannelInfo> _pluginChannels = {};
   final List<StreamSubscription> _wsPluginSubs = [];
 
-  // VmUtils? vmUtils;
-
   /// List of connected client by client id with ws socket and supported macro names
-  final Map<int, _ClientChannelInfo> _clientChannels = {};
+  final Map<int, ClientChannelInfo> _clientChannels = {};
 
   /// List of absolute asset directory mapping to each user macro
   final Map<String, Set<_AssetDirInfo>> _assetsDir = {};
 
-  /// A map of all loaded context with plugin configuration and state of
-  /// first rebuild is executed or not
-  final Map<String, (MacroClientConfiguration, bool)> _macroClientConfigs = {};
+  /// Single source of truth for all contexts with their configurations
+  /// Key: absolute context path
+  /// Value: ContextInfo containing path, package name, config, and state
+  final Map<String, ContextInfo> _contextRegistry = {};
 
   /// List of requested code generation by request id
   final Map<int, Completer<RunMacroResultMsg>> _pendingOperations = {};
@@ -115,73 +104,111 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
   }
 
-  Future<void> onContextChanged() async {
-    await Future.wait([
-      lock.synchronized(() async {
-        final newContexts = Set<String>.of(_pluginChannels.values.map((e) => e.contexts).expand((e) => e)).toList();
-        if (const DeepCollectionEquality().equals(contexts, newContexts)) {
-          _reloadMacroConfiguration(contexts);
-          final assetContexts = _setupAssetMacroConfiguration();
-          await _reWatchContexts(
-            CombinedListView([
-              contexts.map((c) => p.join(c, 'lib')).toList(),
-              assetContexts,
-            ]),
-          );
-          return;
-        }
+  Future<void> onContextChanged({ClientChannelInfo? connectedClient}) async {
+    await lock.synchronized(() async {
+      // Rebuild the context registry
+      await _rebuildContextRegistry();
 
-        var old = contextCollection;
-        contextCollection = AnalysisContextCollectionImpl(
-          includedPaths: newContexts,
-          byteStore: byteStore,
-          resourceProvider: PhysicalResourceProvider.INSTANCE,
-        );
+      // Get paths for analysis context collection
+      final analysisContextPaths = _contextRegistry.keys.toList();
 
-        // set new context, reload configuration and re-watch context
-        contexts = newContexts;
-        _reloadMacroConfiguration(contexts);
+      // Get paths for file watching
+      final watchPaths = _getWatchPaths();
 
+      // Check if contexts actually changed
+      final contextsChanged = !const DeepCollectionEquality().equals(
+        contexts.map((e) => e.path).toList(),
+        analysisContextPaths,
+      );
+
+      if (!contextsChanged) {
+        // Even if contexts didn't change, we need to update asset config and watchers
+        fileCaches.clear();
         final assetContexts = _setupAssetMacroConfiguration();
-        await _reWatchContexts(
-          CombinedListView([
-            contexts.map((c) => p.join(c, 'lib')).toList(),
-            assetContexts,
-          ]),
-        );
+        await _reWatchContexts(CombinedListView([watchPaths, assetContexts]));
+        await _prepareAutoRebuildForAllClient(connectedClient: connectedClient);
+        return;
+      }
 
-        // remove after some delay, in case of processing source not completed while context changes
-        Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
-      }),
-      // synchronize future call to be called before returning
-      Future.delayed(const Duration(milliseconds: 10)),
-    ]);
+      // Create new analysis context collection
+      var old = contextCollection;
+      contextCollection = AnalysisContextCollectionImpl(
+        includedPaths: analysisContextPaths,
+        byteStore: byteStore,
+        resourceProvider: PhysicalResourceProvider.INSTANCE,
+      );
+
+      // Update contexts list
+      contexts = _contextRegistry.values.map((info) => info).toList();
+
+      // Clear caches and setup watchers
+      fileCaches.clear();
+      final assetContexts = _setupAssetMacroConfiguration();
+      await _reWatchContexts(CombinedListView([watchPaths, assetContexts]));
+      await _prepareAutoRebuildForAllClient(connectedClient: connectedClient);
+
+      // Dispose old context after delay
+      Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
+    });
   }
 
-  void _reloadMacroConfiguration(List<String> contexts) {
-    logger.fine('Reloading context configuration');
-    final oldMacroClientConfigs = {..._macroClientConfigs};
-    _macroClientConfigs.clear();
-    _assetsDir.clear();
-    fileCaches.clear();
+  /// Get all contexts that should be watched
+  /// For non-dynamic contexts, watch lib/ subdirectory
+  /// For dynamic contexts (tests), watch the entire context
+  List<String> _getWatchPaths() {
+    return _contextRegistry.values.map((ctx) => ctx.isDynamic ? ctx.path : p.join(ctx.path, 'lib')).toList();
+  }
 
-    /// reload macro config defined in the project
-    for (final context in contexts) {
-      final autoRebuildExecuted = oldMacroClientConfigs[context]?.$2 == true;
-      final packageName = loadContextPackageName(context);
-      final config = loadMacroConfig(context, packageName);
-      _macroClientConfigs[context] = (config, autoRebuildExecuted);
+  /// Rebuild the context registry from plugin channels
+  Future<void> _rebuildContextRegistry() async {
+    final newRegistry = <String, ContextInfo>{};
+
+    // Collect all unique context paths from all plugins
+    final Set<String> allContextPaths = {};
+    for (final plugin in _pluginChannels.values) {
+      allContextPaths.addAll(plugin.contextPaths);
     }
+
+    // Build ContextInfo for each unique path
+    for (final contextPath in allContextPaths) {
+      // Preserve auto-rebuild state if context already exists
+      final existingInfo = _contextRegistry[contextPath];
+
+      final packageName = loadContextPackageName(contextPath);
+      final config = loadMacroConfig(contextPath, packageName);
+
+      final contextInfo = ContextInfo(
+        path: contextPath,
+        packageName: packageName,
+        isDynamic: existingInfo?.isDynamic ?? false,
+        config: config,
+      );
+
+      // Preserve auto-rebuild execution state
+      if (existingInfo != null) {
+        contextInfo.autoRebuildExecuted = existingInfo.autoRebuildExecuted;
+      }
+
+      newRegistry[contextPath] = contextInfo;
+    }
+
+    // Clear existing and sort by longest context path first
+    _contextRegistry
+      ..clear()
+      ..addEntries(newRegistry.entries.sorted((a, b) => b.key.length.compareTo(a.key.length)));
+
+    logger.fine('Context registry rebuilt with ${_contextRegistry.length} contexts');
   }
 
-  /// setup asset macro and return a list of absolute asset directory
-  /// that required to watch
+  /// Setup asset macro and return a list of absolute asset directories to watch
   List<String> _setupAssetMacroConfiguration() {
+    _assetsDir.clear();
+
     /// map each asset to absolute path with applied macros
     final Set<String> outputsDir = {};
 
     /// setup asset macro
-    for (final clientChannel in _clientChannels.values) {
+    for (final clientChannel in _clientChannels.values.toList()) {
       inner:
       for (final entry in clientChannel.assetMacros.entries) {
         final assetDirRelative = entry.key;
@@ -192,9 +219,9 @@ class MacroAnalyzerServer extends MacroAnalyzer {
           continue inner;
         }
 
-        // combine context with provided asset directory
-        for (final ctx in contexts) {
-          final assetAbsolutePath = p.join(ctx, assetDirRelative);
+        // Combine each context with the provided asset directory
+        for (final contextInfo in _contextRegistry.values) {
+          final assetAbsolutePath = p.join(contextInfo.path, assetDirRelative);
           final assetAbsolutePaths = _assetsDir.putIfAbsent(assetAbsolutePath, () => {});
 
           macroLoop:
@@ -206,7 +233,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
               continue macroLoop;
             }
 
-            final absoluteOutputPath = p.join(ctx, macro.output);
+            final absoluteOutputPath = p.join(contextInfo.path, macro.output);
             outputsDir.add(absoluteOutputPath);
             assetAbsolutePaths.add((
               macro: macro,
@@ -218,7 +245,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       }
     }
 
-    /// remove any macro that generated output to same asset dir to prevent recursion
+    // Remove any macro that generates output to same asset dir (prevents recursion)
     final inputDirs = _assetsDir.keys.toList();
     for (final inputDir in inputDirs) {
       if (outputsDir.contains(inputDir)) {
@@ -256,6 +283,389 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       _subs[path]?.cancel();
       _subs.remove(path);
     }
+  }
+
+  void onPluginConnected(WebSocketChannel webSocket) {
+    int pluginId = -1;
+
+    final sub = webSocket.stream.listen(
+      (data) async {
+        final (message, err, stack) = decodeMessage(data);
+        if (err != null) {
+          logger.error('Failed to decode message from plugin', err, stack);
+          return;
+        }
+
+        switch (message) {
+          case PluginConnectMsg msg:
+            final current = PluginChannelInfo(channel: webSocket, contextPaths: []);
+            pluginId = msg.id;
+            _pluginChannels[pluginId] = current;
+
+            _onPluginContextReceived(pluginId, current, msg.initialContexts);
+
+          case AnalysisContextsMsg(contexts: var contexts):
+            final current = pluginId == -1 ? null : _pluginChannels[pluginId];
+            if (current == null) {
+              logger.error('Plugin received context but no active channel exists, ignored');
+              return;
+            }
+
+            _onPluginContextReceived(pluginId, current, contexts);
+
+          default:
+            logger.info('Unhandled message: $message');
+        }
+      },
+      onError: (err) => logger.error('WebSocket channel error occurred', err),
+      onDone: () async {
+        final pluginInfo = _pluginChannels[pluginId];
+        if (pluginInfo == null) {
+          // Plugin already removed from tracking, trigger immediate context update
+          onContextChanged();
+          return;
+        }
+
+        // Wait 1 minute before fully removing the plugin context
+        // This grace period handles temporary crashes/restarts.
+        // If the plugin reconnects during this window with the same contexts, removing the old
+        // plugin ID and calling onContextChanged() won't trigger analysis reload since the
+        // contexts themselves remain unchanged and tracked.
+        await Future.delayed(const Duration(minutes: 1));
+        _pluginChannels.remove(pluginId);
+        onContextChanged();
+      },
+    );
+
+    _wsPluginSubs.add(sub);
+  }
+
+  Future<void> _onPluginContextReceived(int pluginId, PluginChannelInfo plugin, List<String> contexts) async {
+    const excluded = [
+      '.dart_tool', '.pub-cache', '.idea', '.vscode', 'build/intermediates', //
+      '.symlinks/plugins', 'Intermediates.noindex', 'build/macos', //
+    ];
+    contexts = contexts.where((path) => !excluded.any((word) => path.contains(word))).toList();
+
+    // Remove auto-rebuild state for these contexts to trigger rebuild on reconnect
+    for (final context in contexts) {
+      _contextRegistry[context]?.autoRebuildExecuted = false;
+    }
+
+    _pluginChannels[pluginId] = plugin.copyWith(contextPaths: contexts);
+    await onContextChanged();
+  }
+
+  void onMacroClientGeneratorConnected(WebSocketChannel webSocket) {
+    int clientId = -1;
+
+    StreamSubscription? sub;
+    sub = webSocket.stream.listen(
+      (data) async {
+        final (message, err, stackTrace) = decodeMessage(data);
+        if (err != null) {
+          logger.error('Failed to decode message from client', err, stackTrace);
+          return;
+        }
+
+        switch (message) {
+          case ClientConnectMsg msg:
+            final client = ClientChannelInfo(
+              id: msg.id,
+              channel: webSocket,
+              package: msg.package,
+              macros: msg.macros,
+              assetMacros: msg.assetMacros,
+              timeout: msg.runTimeout,
+              sub: sub,
+            );
+            _clientChannels[msg.id] = client;
+            clientId = msg.id;
+
+            // this will trigger auto rebuild if configured
+            await onContextChanged(connectedClient: client);
+
+          case RequestMacrosConfigMsg msg:
+            await _syncClientMacrosConfig(msg.clientId, msg.filePath);
+
+          case RunMacroResultMsg msg:
+            final operation = _pendingOperations.remove(msg.id);
+            if (operation == null) {
+              logger.error('No pending operation found for result: ${msg.id}');
+              return;
+            }
+
+            operation.complete(msg);
+          default:
+            logger.info('Unhandled message: $message');
+        }
+      },
+      onError: (err) => logger.error('WebSocket channel error occurred', err),
+      onDone: () => _clientChannels.remove(clientId),
+    );
+  }
+
+  Future<void> _syncClientMacrosConfig(int clientId, String filePath) async {
+    final clientChannel = _clientChannels[clientId];
+    if (clientChannel == null) {
+      return;
+    }
+
+    final fileContext = getContextInfoForPath(filePath);
+    final UserMacroConfig config;
+    if (fileContext == null) {
+      config = const UserMacroConfig(id: 0, context: '', configs: {});
+    } else {
+      config = UserMacroConfig(
+        id: fileContext.config.id,
+        context: filePath,
+        configs: fileContext.config.userMacrosConfig,
+      );
+    }
+    final sent = _addMessageToClient(clientId, SyncMacrosConfigMsg(config: config));
+    if (!sent) {
+      logger.error('Failed to send macro configuration to channel: $clientId');
+    }
+  }
+
+  bool _addMessageToClient(int channelId, Message msg) {
+    try {
+      _clientChannels[channelId]?.channel.sink.add(encodeMessage(msg));
+      return true;
+    } catch (e, s) {
+      logger.error('Unable to add message to client', e, s);
+      _removeClient(channelId);
+      return false;
+    }
+  }
+
+  void _removeClient(int channelId) {
+    try {
+      final channelInfo = _clientChannels.remove(channelId);
+      channelInfo?.sub?.cancel();
+    } catch (_) {}
+  }
+
+  Iterable<WebSocketChannel> getPluginChannelsByPath(String path) sync* {
+    // Find the context this file belongs to
+    final contextInfo = getContextInfoForPath(path);
+    if (contextInfo == null) return;
+
+    // Find plugins that manage this context
+    for (final entry in _pluginChannels.entries) {
+      if (entry.value.contextPaths.contains(contextInfo.path) && entry.value.channel != null) {
+        yield entry.value.channel!;
+      }
+    }
+  }
+
+  /// Get context info for a given file path
+  /// Returns null if no context contains this file
+  ContextInfo? getContextInfoForPath(String filePath) {
+    for (final entry in _contextRegistry.entries) {
+      if (p.isWithin(entry.key, filePath)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  MacroClientConfiguration getMacroConfigFor(String path) {
+    final contextInfo = getContextInfoForPath(path);
+    return contextInfo?.config ?? MacroClientConfiguration.defaultConfig;
+  }
+
+  /// Get the client channel that supports a specific macro for a given file path
+  /// This ensures we send requests to the correct client based on file location
+  @override
+  int? getClientChannelIdByMacro(String targetMacro, String filePath) {
+    // First, find which context this file belongs to
+    final contextInfo = getContextInfoForPath(filePath);
+    if (contextInfo == null) return null;
+
+    // Then find a client that:
+    // 1. Supports the requested macro
+    // 2. Works within the context's package
+    for (final entry in _clientChannels.entries) {
+      final clientInfo = entry.value;
+
+      // Check if client supports this macro
+      if (!clientInfo.macros.contains(targetMacro)) {
+        continue;
+      }
+
+      // Check if client works with this package/context
+      if (clientInfo.package.values.contains(contextInfo.packageName) ||
+          clientInfo.package.values.contains(contextInfo.path)) {
+        return entry.key;
+      }
+    }
+
+    logger.warn(
+      'No client found for macro "$targetMacro" in context "${contextInfo.packageName}" for file: $filePath',
+    );
+    return null;
+  }
+
+  Future<void> _prepareAutoRebuildForAllClient({required ClientChannelInfo? connectedClient}) async {
+    for (final client in _clientChannels.values.toList()) {
+      await _prepareAndRunAutoRebuild(client, connectedClient);
+    }
+  }
+
+  Future<void> _prepareAndRunAutoRebuild(
+    ClientChannelInfo clientChannel,
+    ClientChannelInfo? connectedClient,
+  ) async {
+    final clientId = clientChannel.id;
+    final clientPkgNames = clientChannel.package.values;
+    final autoRebuildConfigs = <ContextInfo>[];
+    bool hasPackageContext = false;
+
+    final isSameClient = connectedClient?.id == clientId;
+
+    // Check each context in the registry
+    for (final contextInfo in _contextRegistry.values) {
+      if (!clientPkgNames.contains(contextInfo.packageName) && !clientPkgNames.contains(contextInfo.path)) {
+        continue;
+      }
+
+      final config = contextInfo.config;
+      if ((!config.autoRebuildOnConnect || contextInfo.autoRebuildExecuted) && !config.alwaysRebuildOnConnect) {
+        continue;
+      }
+
+      if (config.alwaysRebuildOnConnect && !isSameClient && contextInfo.autoRebuildExecuted) {
+        continue;
+      }
+
+      hasPackageContext = true;
+      autoRebuildConfigs.add(contextInfo);
+    }
+
+    // Handle dynamic contexts (for testing)
+    if (!hasPackageContext) {
+      for (final pkgName in clientChannel.package.values) {
+        if (!pkgName.contains('/') && !pkgName.contains('\\')) continue;
+
+        final config = loadMacroConfig(pkgName, pkgName);
+
+        if (!config.autoRebuildOnConnect && !config.alwaysRebuildOnConnect) continue;
+        if (config.alwaysRebuildOnConnect && !isSameClient) continue;
+
+        final contextInfo = ContextInfo(
+          path: pkgName,
+          packageName: pkgName,
+          isDynamic: true,
+          config: config,
+        );
+
+        _contextRegistry[pkgName] = contextInfo;
+        autoRebuildConfigs.add(contextInfo);
+      }
+
+      if (autoRebuildConfigs.isNotEmpty) {
+        _addContextDynamically(autoRebuildConfigs, connectedClient);
+        return;
+      }
+    }
+
+    if (autoRebuildConfigs.isNotEmpty) {
+      await _runAutoRebuildOnConnect(clientId, autoRebuildConfigs);
+    }
+  }
+
+  void _addContextDynamically(
+    List<ContextInfo> contextInfos,
+    ClientChannelInfo? connectedClient,
+  ) {
+    final newContextPaths = contextInfos.map((info) => info.path).toList();
+
+    var pluginInfo = _pluginChannels.entries.firstOrNull;
+    if (pluginInfo == null) {
+      _pluginChannels[newId()] = PluginChannelInfo(
+        channel: null,
+        contextPaths: newContextPaths,
+      );
+    } else {
+      final updated = pluginInfo.value.contextPaths.toSet()..addAll(newContextPaths);
+      _pluginChannels[pluginInfo.key] = pluginInfo.value.copyWith(
+        contextPaths: updated.toList(),
+      );
+    }
+
+    logger.info('Dynamically added new contexts for testing: ${newContextPaths.join(', ')}');
+    onContextChanged(connectedClient: connectedClient);
+  }
+
+  Future<void> _runAutoRebuildOnConnect(
+    int clientId,
+    List<ContextInfo> contextInfos,
+  ) async {
+    await rebuildLock.synchronized(() async {
+      final s = Stopwatch();
+      final contexts = <String>[];
+      final errors = <String?>[];
+
+      for (final contextInfo in contextInfos) {
+        s
+          ..reset()
+          ..start();
+
+        final err = await _forceRegenerateCodeFor(
+          clientId: clientId,
+          contextPath: contextInfo.path,
+        );
+
+        contexts.add(contextInfo.path);
+        errors.add(err);
+
+        logger.info('Completed regeneration in ${s.elapsed.inSeconds}s');
+        if (err != null) {
+          logger.error('Auto rebuild on start failed', err);
+        } else {
+          contextInfo.autoRebuildExecuted = true;
+        }
+      }
+
+      _addMessageToClient(
+        clientId,
+        AutoRebuildOnConnectMsg(contexts: contexts, errors: errors),
+      );
+    });
+  }
+
+  Future<String?> _forceRegenerateCodeFor({
+    required int clientId,
+    required String contextPath,
+  }) async {
+    final clientInfo = _clientChannels[clientId];
+    if (clientInfo == null) return 'No client registered with id: $clientId';
+
+    (AnalysisContext?, StateError?) getContext(String path) {
+      try {
+        final context = contextCollection.contextFor(contextPath);
+        return (context, null);
+      } on StateError catch (e) {
+        return (null, e);
+      }
+    }
+
+    var (context, err) = getContext(contextPath);
+    if (err != null || context == null) {
+      return 'No analysis context found for: $contextPath, Error: $err';
+    }
+
+    for (final file in context.contextRoot.analyzedFiles()) {
+      _onFileChanged(file, ChangeType.MODIFY, startProcessing: false);
+    }
+
+    // start processing file
+    _processNext();
+
+    // wait until receive completed event
+    await pendingAnalyzeCompleted.stream.first;
+    return null;
   }
 
   void _onWatchFileError(Object error, StackTrace _) {
@@ -371,18 +781,6 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   @override
-  MacroClientConfiguration getMacroConfigFor(String path) {
-    for (final entry in _macroClientConfigs.entries) {
-      // check if path with the context of configuration
-      if (p.isWithin(entry.key, path)) {
-        return entry.value.$1;
-      }
-    }
-
-    return MacroClientConfiguration.defaultConfig;
-  }
-
-  @override
   void removeFile(String path) {
     try {
       (fileCaches[path] ?? File(path)).deleteSync();
@@ -391,280 +789,6 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     } catch (e) {
       logger.error('Failed to delete file', e);
     }
-  }
-
-  void onPluginConnected(WebSocketChannel webSocket) {
-    int pluginId = -1;
-
-    final sub = webSocket.stream.listen(
-      (data) {
-        final (message, err, stack) = decodeMessage(data);
-        if (err != null) {
-          logger.error('Failed to decode message from plugin', err, stack);
-          return;
-        }
-
-        switch (message) {
-          case PluginConnectMsg(id: final id):
-            _pluginChannels[id] = (ch: webSocket, contexts: const []);
-            pluginId = id;
-          case AnalysisContextsMsg(contexts: var contexts):
-            final current = pluginId == -1 ? null : _pluginChannels[pluginId];
-            if (current == null) {
-              logger.error('Plugin received context but no active channel exists, ignored');
-              return;
-            }
-
-            const excluded = [
-              '.dart_tool', '.pub-cache', '.idea', '.vscode', 'build/intermediates', //
-              '.symlinks/plugins', 'Intermediates.noindex', 'build/macos', //
-            ];
-            contexts = contexts.where((path) => !excluded.any((word) => path.contains(word))).toList();
-
-            // remove configuration to trigger auto rebuild as plugin connected
-            // so any restart can cause to rebuild if configured
-            for (final context in contexts) {
-              _macroClientConfigs.remove(context);
-            }
-
-            _pluginChannels[pluginId] = (ch: current.ch, contexts: contexts);
-            onContextChanged();
-          default:
-            logger.info('Unhandled message: $message');
-        }
-      },
-      onError: (err) => logger.error('WebSocket channel error occurred', err),
-      onDone: () async {
-        final pluginInfo = _pluginChannels[pluginId];
-        if (pluginInfo == null) {
-          // Plugin already removed from tracking, trigger immediate context update
-          onContextChanged();
-          return;
-        }
-
-        // Wait 1 minute before fully removing the plugin context
-        // This grace period handles temporary crashes/restarts.
-        // If the plugin reconnects during this window with the same contexts, removing the old
-        // plugin ID and calling onContextChanged() won't trigger analysis reload since the
-        // contexts themselves remain unchanged and tracked.
-        await Future.delayed(const Duration(minutes: 1));
-        _pluginChannels.remove(pluginId);
-        onContextChanged();
-      },
-    );
-    _wsPluginSubs.add(sub);
-  }
-
-  Iterable<WebSocketChannel> getPluginChannelsByPath(String path) sync* {
-    for (final entry in _pluginChannels.entries) {
-      inner:
-      for (final contextPath in entry.value.contexts) {
-        if (p.isWithin(contextPath, path)) {
-          yield entry.value.ch;
-          break inner;
-        }
-      }
-    }
-  }
-
-  void onMacroClientGeneratorConnected(WebSocketChannel webSocket) {
-    int clientId = -1;
-
-    StreamSubscription? sub;
-    sub = webSocket.stream.listen(
-      (data) async {
-        final (message, err, stackTrace) = decodeMessage(data);
-        if (err != null) {
-          logger.error('Failed to decode message from client', err, stackTrace);
-          return;
-        }
-
-        switch (message) {
-          case ClientConnectMsg msg:
-            _clientChannels[msg.id] = (
-              ch: webSocket,
-              macros: msg.macros,
-              timeout: msg.runTimeout,
-              sub: sub,
-              assetMacros: msg.assetMacros,
-            );
-            clientId = msg.id;
-
-            final clientPkgNames = msg.package.names;
-            var autoRebuildConfigs = <MacroClientConfiguration>[];
-            bool hasPackageContext = false;
-
-            for (final entry in _macroClientConfigs.entries) {
-              final (config, autoRebuildExecuted) = entry.value;
-              if (clientPkgNames.contains(config.packageName) || clientPkgNames.contains(config.context)) {
-                hasPackageContext = true;
-                if ((!config.autoRebuildOnConnect || autoRebuildExecuted) && !config.alwaysRebuildOnConnect) {
-                  continue;
-                }
-
-                autoRebuildConfigs.add(config);
-              }
-            }
-
-            // if not loaded, check if package name is a path,
-            // if true: load it dynamically, probably used in test
-            if (!hasPackageContext) {
-              autoRebuildConfigs.clear();
-              for (final pkgName in msg.package.names) {
-                if (!pkgName.contains('/') && !pkgName.contains('\\')) continue;
-
-                final config = loadMacroConfig(pkgName, pkgName);
-                if (!config.autoRebuildOnConnect && !config.alwaysRebuildOnConnect) continue;
-
-                autoRebuildConfigs.add(config);
-              }
-
-              _autoRebuildOnStart(clientId, autoRebuildConfigs, add: true);
-              return;
-            }
-
-            // re-run generation for the context
-            _autoRebuildOnStart(clientId, autoRebuildConfigs);
-
-          case RunMacroResultMsg msg:
-            final operation = _pendingOperations.remove(msg.id);
-            if (operation == null) {
-              logger.error('No pending operation found for result: ${msg.id}');
-              return;
-            }
-
-            operation.complete(msg);
-          default:
-            logger.info('Unhandled message: $message');
-        }
-      },
-      onError: (err) => logger.error('WebSocket channel error occurred', err),
-      onDone: () => _clientChannels.remove(clientId),
-    );
-  }
-
-  bool _addMessageToClient(int channelId, Message msg) {
-    try {
-      _clientChannels[channelId]?.ch.sink.add(encodeMessage(msg));
-      return true;
-    } catch (e, s) {
-      logger.error('Unable to add message to client', e, s);
-      _removeClient(channelId);
-      return false;
-    }
-  }
-
-  void _removeClient(int channelId) {
-    try {
-      final channelInfo = _clientChannels.remove(channelId);
-      channelInfo?.sub?.cancel();
-    } catch (_) {}
-  }
-
-  void _autoRebuildOnStart(int clientId, List<MacroClientConfiguration> configs, {bool add = false}) async {
-    if (configs.isEmpty) return;
-
-    await rebuildLock.synchronized(
-      () async {
-        final s = Stopwatch();
-
-        if (add) {
-          final pluginInfo = _pluginChannels.entries.firstOrNull;
-          if (pluginInfo != null) {
-            final newContexts = <String>[];
-            for (final config in configs) {
-              // manually add context as dynamic, this will trigger for any file in the context
-              // the onContextChanged only watch for context/lib directory
-              if (!_subs.containsKey(config.context)) {
-                final newWatcher = Watcher(config.context);
-                _subs[config.context] = newWatcher.events.listen(_onWatchFileChanged, onError: _onWatchFileError);
-              }
-
-              newContexts.add(config.context);
-            }
-
-            pluginInfo.value.contexts.addAll(newContexts);
-            logger.info('Dynamically added new context for testing: ${newContexts.join(', ')}');
-            await onContextChanged();
-          }
-        }
-
-        final contexts = <String>[];
-        final errors = <String?>[];
-
-        for (final config in configs) {
-          s
-            ..reset()
-            ..start();
-
-          final err = await _forceRegenerateCodeFor(
-            clientId: clientId,
-            contextPath: config.context,
-          );
-
-          contexts.add(config.context);
-          errors.add(err);
-
-          logger.info('Completed regeneration in ${s.elapsed.inSeconds}s');
-          if (err != null) {
-            logger.error('Auto rebuild on start failed', err);
-          } else if (_macroClientConfigs.containsKey(config.context)) {
-            _macroClientConfigs[config.context] = (_macroClientConfigs[config.context]!.$1, true);
-          }
-        }
-
-        _addMessageToClient(
-          clientId,
-          AutoRebuildOnConnectMsg(contexts: contexts, errors: errors),
-        );
-      },
-    );
-  }
-
-  Future<String?> _forceRegenerateCodeFor({
-    required int clientId,
-    required String contextPath,
-  }) async {
-    final clientInfo = _clientChannels[clientId];
-    if (clientInfo == null) return 'No client registered with id: $clientId';
-
-    (AnalysisContext?, StateError?) getContext(String path) {
-      try {
-        final context = contextCollection.contextFor(contextPath);
-        return (context, null);
-      } on StateError catch (e) {
-        return (null, e);
-      }
-    }
-
-    var (context, err) = getContext(contextPath);
-    if (err != null || context == null) {
-      return 'No analysis context found for: $contextPath, Error: $err';
-    }
-
-    for (final file in context.contextRoot.analyzedFiles()) {
-      _onFileChanged(file, ChangeType.MODIFY, startProcessing: false);
-    }
-
-    // start processing file
-    _processNext();
-
-    // wait until receive completed event
-    await pendingAnalyzeCompleted.stream.first;
-    return null;
-  }
-
-  /// return first connected client channel id that has a [targetMacro]
-  @override
-  int? getClientChannelIdByMacro(String targetMacro) {
-    for (final entry in _clientChannels.entries) {
-      for (final macroName in entry.value.macros) {
-        if (macroName == targetMacro) {
-          return entry.key;
-        }
-      }
-    }
-    return null;
   }
 
   @override
@@ -695,20 +819,20 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   @override
   ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path) {
-    final config = getMacroConfigFor(path);
+    final contextInfo = getContextInfoForPath(path);
+    final config = contextInfo?.config ?? MacroClientConfiguration.defaultConfig;
     final String relativeToSource;
 
-    if (config.remapGeneratedFileTo.isNotEmpty && config.context.length <= path.length) {
-      var relativePath = p.relative(path, from: config.context);
+    if (config.remapGeneratedFileTo.isNotEmpty && contextInfo != null && contextInfo.path.length <= path.length) {
+      var relativePath = p.relative(path, from: contextInfo.path);
       if (relativePath.startsWith('lib/')) {
         relativePath = relativePath.substring(4);
       }
 
-      final newPath = p.absolute(config.context, config.remapGeneratedFileTo, relativePath);
-
-      // Calculate relative path from generated file back to original source file
+      final newPath = p.absolute(contextInfo.path, config.remapGeneratedFileTo, relativePath);
       relativeToSource = p.posix.relative(path, from: p.dirname(newPath));
 
+      // Calculate relative path from generated file back to original source file
       // Add generated suffix
       final dir = p.dirname(newPath);
       final fileName = p.basenameWithoutExtension(newPath);
@@ -750,12 +874,12 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     for (final channel in _pluginChannels.values.toList()) {
-      tryFn(() => channel.ch.sink.close(normalClosure, 'Server is closing'));
+      tryFn(() => channel.channel?.sink.close(normalClosure, 'Server is closing'));
     }
 
     for (final channel in _clientChannels.values.toList()) {
       tryFn(() => channel.sub?.cancel);
-      tryFn(() => channel.ch.sink.close(normalClosure, 'Server is closing').catchError((_) {}));
+      tryFn(() => channel.channel.sink.close(normalClosure, 'Server is closing').catchError((_) {}));
     }
 
     tryFn(contextCollection.dispose);

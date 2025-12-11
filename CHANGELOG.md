@@ -1,3 +1,13 @@
+## 0.2.0
+
+- Introduced a new API for defining project-level global macro configurations.
+- Added support for skipping serialization/deserialization using `asLiteral` in `@JsonKey`, or by
+  defining global `as_literal_types` in `.macro.json` for type configurations.
+- Enabled adding dynamic analysis contexts via project paths, useful for CI environments and testing
+  setups.
+- Improved performance and reliability when rebuilding the entire project.
+- Add more documentation
+
 ## 0.1.4
 
 - Improve watch context and remove duplicate event

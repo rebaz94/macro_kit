@@ -1,6 +1,0 @@
-config:
-# Relocate generated files to a custom directory (e.g., "lib/gen")
-# remap_generated_file_to: "lib/gen"
-
-# Rebuild on first connect per analysis session
-# auto_rebuild_on_connect: true

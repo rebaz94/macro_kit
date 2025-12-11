@@ -3,14 +3,18 @@ class Utils {
     return input.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
   }
 
-  static bool isValueTypeCanBeOfType(String valueType, String ofType) {
-    if (valueType == ofType) {
+  static bool isValueTypeCanBeOfType(
+    String valueType,
+    String expectedType, {
+    required bool valueTypeIsGeneric,
+  }) {
+    if (valueTypeIsGeneric || valueType == expectedType) {
       return true;
     }
 
-    return switch (ofType) {
+    return switch (expectedType) {
       'Object' || 'Object?' || 'dynamic' => true,
-      _ when '$valueType?' == ofType => true, // non nullable can be used for nullable type
+      _ when '$valueType?' == expectedType => true, // non nullable can be used for nullable type
       _ => valueType == 'dynamic',
     };
   }

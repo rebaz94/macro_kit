@@ -26,6 +26,7 @@ mixin Generator on BaseAnalyzer {
         runConfigs[macroName] = RunMacroMsg(
           id: newId(),
           macroName: macroName,
+          path: path,
           imports: imports,
           libraryPaths: libraryPaths,
           sharedClasses: sharedClasses,
@@ -61,13 +62,13 @@ part of '$relativePartFilePath';
         continue;
       }
 
-      var clientChannelId = getClientChannelIdByMacro(macroName);
+      var clientChannelId = getClientChannelIdByMacro(macroName, path);
 
       if (clientChannelId == null) {
         requestClientToConnect();
         await Future.delayed(const Duration(seconds: 3));
 
-        clientChannelId = getClientChannelIdByMacro(macroName);
+        clientChannelId = getClientChannelIdByMacro(macroName, path);
         if (clientChannelId == null) {
           logger.error('No Macro generator found for: $macroName');
           onClientError(-1, 'No Macro generator found for: $macroName');
@@ -120,6 +121,7 @@ part of '$relativePartFilePath';
           (assetMacro) => RunMacroMsg(
             id: newId(),
             macroName: assetMacro.macro.macroName,
+            path: path,
             imports: imports,
             libraryPaths: libraryPathById,
             assetDeclaration: MacroAssetDeclaration(path: path, type: changeType),
@@ -134,13 +136,13 @@ part of '$relativePartFilePath';
     // step:2 run the macro generator
     // final generatedFiles = <String>[];
     for (final msg in runConfigs) {
-      var clientChannelId = getClientChannelIdByMacro(msg.macroName);
+      var clientChannelId = getClientChannelIdByMacro(msg.macroName, path);
 
       if (clientChannelId == null) {
         requestClientToConnect();
         await Future.delayed(const Duration(seconds: 3));
 
-        clientChannelId = getClientChannelIdByMacro(msg.macroName);
+        clientChannelId = getClientChannelIdByMacro(msg.macroName, path);
         if (clientChannelId == null) {
           logger.error('No Macro generator found for: ${msg.macroName}');
           onClientError(-1, 'No Macro generator found for: ${msg.macroName}');

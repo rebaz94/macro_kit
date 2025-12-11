@@ -18,6 +18,8 @@ String encodeMessage(Message message) {
       'plugin_connect' => PluginConnectMsg.fromJson(data),
       'contexts' => AnalysisContextsMsg.fromJson(data),
       'client_connect' => ClientConnectMsg.fromJson(data),
+      'request_macros_config' => RequestMacrosConfigMsg.fromJson(data),
+      'sync_macros_config' => SyncMacrosConfigMsg.fromJson(data),
       'run_macro' => RunMacroMsg.fromJson(data),
       'run_macro_result' => RunMacroResultMsg.fromJson(data),
       'auto_rebuild_on_connect_result' => AutoRebuildOnConnectMsg.fromJson(data),
@@ -37,13 +39,20 @@ abstract class Message {
 }
 
 class PluginConnectMsg implements Message {
-  PluginConnectMsg({required this.id});
+  PluginConnectMsg({
+    required this.id,
+    required this.initialContexts,
+  });
 
   static PluginConnectMsg fromJson(Map<String, dynamic> json) {
-    return PluginConnectMsg(id: (json['id'] as num).toInt());
+    return PluginConnectMsg(
+      id: (json['id'] as num).toInt(),
+      initialContexts: (json['contexts'] as List).map((e) => e as String).toList(),
+    );
   }
 
   final int id;
+  final List<String> initialContexts;
 
   @override
   String get type => 'plugin_connect';
@@ -52,6 +61,7 @@ class PluginConnectMsg implements Message {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'contexts': initialContexts,
     };
   }
 }
@@ -125,9 +135,96 @@ class ClientConnectMsg implements Message {
   }
 }
 
+class RequestMacrosConfigMsg implements Message {
+  RequestMacrosConfigMsg({
+    required this.clientId,
+    required this.filePath,
+  });
+
+  static RequestMacrosConfigMsg fromJson(Map<String, dynamic> json) {
+    return RequestMacrosConfigMsg(
+      clientId: (json['id'] as num).toInt(),
+      filePath: json['path'] as String,
+    );
+  }
+
+  final int clientId;
+  final String filePath;
+
+  @override
+  String get type => 'request_macros_config';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'id': clientId,
+      'path': filePath,
+    };
+  }
+}
+
+class SyncMacrosConfigMsg implements Message {
+  const SyncMacrosConfigMsg({
+    required this.config,
+  });
+
+  static SyncMacrosConfigMsg fromJson(Map<String, dynamic> json) {
+    return SyncMacrosConfigMsg(
+      config: UserMacroConfig.fromJson(json['config'] as Map<String, dynamic>),
+    );
+  }
+
+  /// All macro configuration by keyed by macro name
+  final UserMacroConfig config;
+
+  @override
+  String get type => 'sync_macros_config';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'config': config.toJson(),
+    };
+  }
+}
+
+class UserMacroConfig {
+  const UserMacroConfig({
+    required this.id,
+    required this.context,
+    required this.configs,
+  });
+
+  static UserMacroConfig fromJson(Map<String, dynamic> json) {
+    return UserMacroConfig(
+      id: (json['id'] as num).toInt(),
+      context: json['context'] as String,
+      configs: json['configs'] as Map<String, dynamic>,
+    );
+  }
+
+  /// Unique id of the config, that can be used to cache parsed configs
+  final int id;
+
+  /// The context path root
+  final String context;
+
+  /// The user macro configuration
+  final Map<String, dynamic> configs;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'context': context,
+      'configs': configs,
+    };
+  }
+}
+
 class RunMacroMsg implements Message {
   RunMacroMsg({
     required this.id,
+    required this.path,
     required this.macroName,
     required this.imports,
     required this.libraryPaths,
@@ -175,6 +272,7 @@ class RunMacroMsg implements Message {
 
     return RunMacroMsg(
       id: (json['id'] as num).toInt(),
+      path: json['path'] as String,
       macroName: json['name'] as String,
       imports: (json['imports'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as String)),
       libraryPaths: (json['libraryPaths'] as Map<String, dynamic>).map(
@@ -194,6 +292,9 @@ class RunMacroMsg implements Message {
 
   /// Unique id of the run
   final int id;
+
+  /// The absolute path of the file that triggered the macro
+  final String path;
 
   /// Name of the macro to run
   final String macroName;
@@ -233,6 +334,7 @@ class RunMacroMsg implements Message {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'path': path,
       'name': macroName,
       'imports': imports,
       'libraryPaths': libraryPaths.map((k, v) => MapEntry(k.toString(), v)),

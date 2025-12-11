@@ -132,6 +132,8 @@ class UserProfile with UserProfileData {
 }
 ```
 
+For more information, see the [Data Class Macro](doc/data_class_macro.md) documentation.
+
 ### AssetPathMacro
 
 Generates type-safe constants for your asset paths. Never hardcode asset strings again!
@@ -158,6 +160,8 @@ void main() async {
   runApp(MyApp());
 }
 ```
+
+For more information, see the [Asset Path Macro](doc/asset_path_macro.md) documentation.
 
 ```dart
 // Usage in code
@@ -226,20 +230,35 @@ Simply open `macro.dart` and run it directly.
 
 ### Auto-rebuild configuration
 
+Configuration is defined in the `.macro.json` file. We recommend using CLI-based generation
+primarily for CI/CD pipelines and automated testing. During regular development, the IDE plugin
+automatically loads context and regenerates code when you save files—no manual code generation
+needed, just like writing regular Dart code.
+
+For CI/CD and testing environments, you'll need to set up manual generation:
+
+1. Install macro_kit: `dart pub global activate macro_kit`
+2. Start the macro server in a separate process: `macro` (normally handled by the plugin).
+   Alternatively, you can import internal functions like `startMacroServer` directly if you prefer not
+   to activate the plugin globally (CI only)
+3. Add absolute paths for directories to regenerate—context is loaded dynamically without requiring
+   the analyzer plugin
+
 To wait for regeneration to complete, call `waitUntilRebuildCompleted` after `runMacro`.
 
-Enable auto-rebuild in `.macro.yaml`:
+Enable auto-rebuild in `.macro.json`:
 
-```yaml
-config:
-  auto_rebuild_on_connect: true
-  # always_rebuild_on_connect: true  # Rebuild on every reconnection
+```json
+{
+  "config": {
+    "auto_rebuild_on_connect": true,
+    "always_rebuild_on_connect": false
+  }
+}
 ```
 
-### Dynamic context loading
-
-For tests or dynamic analysis contexts, pass an absolute path instead of a package name to load and
-regenerate code for that location.
+- **`auto_rebuild_on_connect`**: Automatically rebuilds when the macro server connects
+- **`always_rebuild_on_connect`**: Rebuilds on every reconnection (useful for CI environments)
 
 ## ⚠️ Current Limitations
 

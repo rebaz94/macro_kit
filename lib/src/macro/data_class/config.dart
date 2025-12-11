@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:meta/meta.dart';
 
@@ -18,6 +17,7 @@ class JsonKey {
     this.toJson,
     this.unknownEnumValue,
     this.asRequired,
+    this.asLiteral,
   });
 
   /// The value to use if the source JSON does not contain this key or if the
@@ -118,6 +118,16 @@ class JsonKey {
   /// Determine an nullable field must have a `required` keyword when generating a constructor
   /// note: this field is not been used until augment became stable
   final bool? asRequired;
+
+  /// Whether this field should be treated as a literal, bypassing serialization/deserialization.
+  ///
+  /// When `true`, the field value is passed through directly without any transformation.
+  /// This is useful for types that are already serializable or have custom serialization
+  /// handled elsewhere, such as Firebase's `GeoPoint` or `Timestamp`.
+  ///
+  /// If `null`, the field will use the default serialization behavior or inherit from
+  /// global `asLiteralTypes` configuration.
+  final bool? asLiteral;
 }
 
 /// Represents a default enum value or multiple enum values for handling unknown cases.
@@ -165,6 +175,7 @@ class JsonKeyConfig {
     this.toJsonReturnNullable,
     this.unknownEnumValue,
     this.asRequired,
+    this.asLiteral,
   });
 
   static const defaultKey = JsonKeyConfig();
@@ -239,6 +250,7 @@ class JsonKeyConfig {
           ? unknownEnumValuesFromJson(unknownEnumValue as Map<String, dynamic>)
           : null,
       asRequired: props['asRequired']?.asBoolConstantValue(),
+      asLiteral: props['asLiteral']?.asBoolConstantValue(),
     );
   }
 
@@ -263,10 +275,19 @@ class JsonKeyConfig {
   final bool? toJsonReturnNullable;
   final List<String>? unknownEnumValue;
   final bool? asRequired;
+  final bool? asLiteral;
+
+  bool isLiteral(DataClassMacroConfig config, String type) {
+    return switch (asLiteral) {
+      false => false,
+      true => true,
+      _ => config.asLiteralTypes.contains(type),
+    };
+  }
 }
 
 @internal
-class DataClassMacroConfig {
+class DataClassMacroConfig extends MacroGlobalConfig {
   const DataClassMacroConfig({
     this.fieldRename,
     this.createFromJson,
@@ -277,23 +298,27 @@ class DataClassMacroConfig {
     this.createCopyWith,
     this.createToStringOverride,
     this.includeIfNull,
+    this.asLiteralTypes = const [],
   });
 
-  static DataClassMacroConfig get defaultConfig {
-    return DataClassMacroConfig();
-  }
-
   static DataClassMacroConfig fromJson(Map<String, dynamic> json) {
+    @pragma('vm:prefer-inline')
+    T? parseField<T>(Object? value) {
+      if (value is T) return value;
+      return null;
+    }
+
     return DataClassMacroConfig(
-      fieldRename: FieldRename.values.firstWhereOrNull((e) => e.name == json['field_rename']) ?? FieldRename.none,
-      createFromJson: json['create_from_json'] as bool?,
-      createToJson: json['create_to_json'] as bool?,
-      createMapTo: json['createMapTo'] as bool?,
-      createAsCast: json['createAsCast'] as bool?,
-      createEqual: json['create_equal'] as bool?,
-      createCopyWith: json['create_copy_with'] as bool?,
-      createToStringOverride: json['create_to_string'] as bool?,
-      includeIfNull: json['include_if_null'] as bool?,
+      fieldRename: MacroExt.decodeEnum(FieldRename.values, json['field_rename'] ?? '', unknownValue: FieldRename.none),
+      createFromJson: parseField(json['create_from_json']),
+      createToJson: parseField(json['create_to_json']),
+      createMapTo: parseField(json['create_map_to']),
+      createAsCast: parseField(json['create_as_cast']),
+      createEqual: parseField(json['create_equal']),
+      createCopyWith: parseField(json['create_copy_with']),
+      createToStringOverride: parseField(json['create_to_string']),
+      includeIfNull: parseField(json['include_if_null']),
+      asLiteralTypes: parseField<List>(json['as_literal_types'])?.map((e) => e as String).toList() ?? const [],
     );
   }
 
@@ -359,4 +384,11 @@ class DataClassMacroConfig {
   /// If a field is annotated with `JsonKey` with a non-`null` value for
   /// `includeIfNull`, that value takes precedent.
   final bool? includeIfNull;
+
+  /// Types that should be treated as literals, bypassing serialization/deserialization.
+  ///
+  /// These types are passed through directly without any transformation. This is
+  /// useful for types that are already serializable or have custom serialization
+  /// handled elsewhere, such as Firebase's `GeoPoint` or `Timestamp`.
+  final List<String> asLiteralTypes;
 }

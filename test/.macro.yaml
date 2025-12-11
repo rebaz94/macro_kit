@@ -1,4 +1,0 @@
-config:
-#  remap_generated_file_to: "lib/gen"
-  auto_rebuild_on_connect: true
-  always_rebuild_on_connect: true # Rebuild on every connect, including all reconnections

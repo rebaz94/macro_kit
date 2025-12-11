@@ -1512,8 +1512,13 @@ enum AssetChangeType {
   remove,
 }
 
+/// The target type that the macro has been applied to
 enum TargetType { clazz, enumType, asset }
 
+/// State information about the asset directory when processing asset-related macros.
+///
+/// This class contains path information about the asset directory being processed,
+/// including both relative and absolute paths for input assets and output generation.
 class AssetState {
   AssetState({
     required this.relativeBasePath,
@@ -1642,6 +1647,7 @@ class MacroState {
   MacroState({
     required this.macro,
     required this.remainingMacro,
+    required this.globalConfig,
     required this.targetType,
     required this.targetName,
     required this.importPrefix,
@@ -1660,6 +1666,15 @@ class MacroState {
 
   /// The list of remaining macros that will be executed after the current one
   final Iterable<MacroKey> remainingMacro;
+
+  /// The global configuration for this macro based on the file's context path.
+  ///
+  /// This config is determined by matching the file's path against configured
+  /// context paths.
+  ///
+  /// Returns `null` unless [MacroGenerator.globalConfigParser] is configured
+  /// to parse and return a global config.
+  final MacroGlobalConfig? globalConfig;
 
   /// The type of target this macro is applied to (class, asset, variable,...)
   final TargetType targetType;
@@ -1798,6 +1813,17 @@ class MacroState {
   }
 }
 
+/// The type of code this macro generates.
+///
+/// Used to determine compatibility when multiple macros are applied to the same class.
+/// The macro system uses this information to ensure that generated code structures
+/// can coexist without conflicts.
+///
+/// Choose the appropriate type based on your generated code structure:
+/// - [mixin] - Generates `mixin ClassNameSuffixName`
+/// - [clazz] - Generates `class ClassNameSuffixName`
+/// - [abstractClass] - Generates `abstract class ClassNameSuffixName`
+/// - [extendsClass] - Generates `class ClassNameSuffixName extends Base`
 enum GeneratedType {
   mixin,
   clazz,
@@ -1919,6 +1945,10 @@ abstract class MacroGenerator implements BaseMacroGenerator {
   @override
   GeneratedType get generatedType;
 
+  /// A function type for parsing global macro configuration from JSON.
+  @override
+  MacroGlobalConfigParser? get globalConfigParser => null;
+
   /// Called once per annotated class to initialize the macro state.
   @override
   Future<void> init(MacroState state) async {}
@@ -1991,75 +2021,220 @@ abstract class MacroGenerator implements BaseMacroGenerator {
   }
 }
 
-/// Provides package name(s) for connecting macros to the MacroPlugin server.
+/// Provides package identification for connecting macros to the Macro server.
 ///
-/// This class identifies which package(s) the macro is running in, enabling
-/// the macro to establish a connection with the plugin server. The package
-/// name should match the `name` field defined in your `pubspec.yaml`.
+/// This class specifies which package(s) the macro should analyze, enabling
+/// the macro to establish a connection with the server and access
+/// the analysis context.
 ///
-/// **Single Package (Common Use Case):**
+/// ## Development vs CI/CD Environments
+///
+/// **In Development (IDE/Editor):**
+/// The analyzer plugin automatically provides package information to the macro
+/// server, so you typically only need to specify the package name:
 /// ```dart
 /// final packageInfo = PackageInfo('my_app');
 /// ```
-/// Use this when working with a single project in your IDE, which covers
-/// most development scenarios.
 ///
-/// **Multiple Packages (Advanced):**
+/// **In CI/CD or Without Plugin:**
+/// When the analyzer plugin isn't running (e.g., in CI pipelines, automated tests,
+/// or standalone builds), you must provide the absolute path to the package root
+/// so the macro server can initialize its analysis context:
 /// ```dart
-/// final packageInfo = PackageInfo.multiple(['app', 'core', 'shared']);
+/// final packageInfo = PackageInfo.path('/workspace/my_app');
 /// ```
-/// Use this when multiple packages need to connect to the same plugin server,
-/// such as in mono-repo setups or when working with multiple related packages
-/// simultaneously.
 ///
-/// **Important:** The package name(s) must exactly match those defined in
-/// the respective `pubspec.yaml` files for the connection to succeed.
+/// ## Package Identification Methods
+///
+/// You can identify packages in two ways:
+/// 1. **By name** - Works when the analyzer plugin is active (development)
+/// 2. **By path** - Required when the plugin isn't available (CI/CD, standalone)
+///
+/// ## Usage Examples
+///
+/// **Single Package:**
+/// ```dart
+/// // Development: by package name (plugin provides context)
+/// final packageInfo = PackageInfo('my_app');
+///
+/// // CI/CD: by absolute path (no plugin available)
+/// final packageInfo = PackageInfo.path('/workspace/my_app');
+///
+/// // For test directory specifically
+/// final packageInfo = PackageInfo.path('/workspace/my_app/test');
+/// ```
+///
+/// **Multiple Packages (Mono-repos):**
+/// ```dart
+/// final packageInfo = PackageInfo.mixed([
+///   'my_app',                           // By name (dev)
+///   '/workspace/shared_models',         // By path (CI)
+///   '/workspace/core_lib',              // By path (CI)
+/// ]);
+/// ```
+///
+/// ## Auto-Rebuild & Regeneration
+///
+/// Providing the correct package path is crucial for auto-rebuild functionality.
+/// When enabled, the macro server monitors the specified package(s) and automatically
+/// regenerates code based on your `.macro.json` configuration.
+///
+/// **Auto-Rebuild Behavior:**
+/// - When you call `runMacro()` in your `main.dart` and have `auto_rebuild_on_connect: true`
+///   in `.macro.json`, any macro within the specified package/directory will automatically
+///   rebuild upon connection.
+/// - If `always_rebuild_on_connect: true`, macros will rebuild on every client connection,
+///   including when you restart your Flutter app multiple times.
+///
+/// **Example for CI with auto-rebuild:**
+/// ```dart
+/// final packageInfo = PackageInfo.path(
+///   Platform.environment['CI_PROJECT_DIR'] ?? '/workspace/my_app'
+/// );
+/// ```
+///
+/// ## Important Notes
+///
+/// - Package names must **exactly match** the `name` in `pubspec.yaml`
+/// - Paths must be **absolute** and point to a directory containing `pubspec.yaml`
+///   (or a valid subdirectory like `test/`)
+/// - In CI/CD environments, **always use absolute paths** since the plugin isn't available
+/// - All specified packages must be valid and accessible for initialization to succeed
+/// - If you need code regeneration in CI, ensure you run the macro server before executing your code or tests:
+/// ```bash
+/// dart pub global activate macro_kit
+/// macro  # Start the server before runMacro()
+/// ```
 class PackageInfo {
-  const PackageInfo._(this.names);
+  const PackageInfo._(this.values);
 
-  /// Creates a [PackageInfo] for a single package.
+  /// Creates a [PackageInfo] for a single package by name.
   ///
-  /// The [name] must match the package name in `pubspec.yaml`.
+  /// **Best for:** Development environments where the analyzer plugin is active.
   ///
-  /// Example:
+  /// The [name] must exactly match the `name` field in the package's `pubspec.yaml`.
+  /// The analyzer plugin will automatically provide the package path and context.
+  ///
+  /// **Example:**
   /// ```dart
+  /// // For a pubspec.yaml with: name: my_app
   /// final info = PackageInfo('my_app');
   /// ```
+  ///
+  /// **Note:** This won't work in CI/CD environments without the analyzer plugin.
+  /// Use [PackageInfo.path] instead for those scenarios.
+  ///
+  /// **Parameters:**
+  /// - [name]: The package name from `pubspec.yaml`
   factory PackageInfo(String name) {
+    if (name.contains('/') || name.contains('\\')) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'Must be a package name, not a path. Use PackageInfo.path() for paths, '
+            'e.g., PackageInfo.path("/workspace/my_app") for CI/CD environments.',
+      );
+    }
     return PackageInfo._([name]);
   }
 
-  /// Creates a [PackageInfo] for multiple packages.
+  /// Creates a [PackageInfo] for a single package by absolute path.
   ///
-  /// Use this when multiple packages need to connect to the same plugin server.
-  /// Each name in [names] must match a package name in its respective `pubspec.yaml`.
+  /// **Best for:** CI/CD pipelines, automated tests, or any environment where
+  /// the analyzer plugin isn't running.
   ///
-  /// Example:
+  /// The [absolutePath] must be the absolute path to:
+  /// - The package root directory (containing `pubspec.yaml`), or
+  /// - A valid subdirectory like `test/` for focused analysis
+  ///
+  /// This allows the macro server to initialize its analysis context without
+  /// relying on the analyzer plugin, which is essential for auto-rebuild and
+  /// code regeneration in automated environments.
+  ///
+  /// **Examples:**
   /// ```dart
-  /// final info = PackageInfo.multiple(['app', 'core', 'shared']);
+  /// // Package root
+  /// final info = PackageInfo.path('/workspace/my_app');
+  ///
+  /// // Test directory specifically
+  /// final info = PackageInfo.path('/workspace/my_app/test');
+  ///
+  /// // Using environment variable (CI)
+  /// final info = PackageInfo.path(Platform.environment['CI_PROJECT_DIR']!);
   /// ```
-  factory PackageInfo.multiple(Iterable<String> names) {
-    return PackageInfo._(names.toList());
+  ///
+  /// **Parameters:**
+  /// - [absolutePath]: Absolute path to the package root or subdirectory
+  ///
+  /// **Throws:**
+  /// - [ArgumentError] if the path is not absolute (doesn't contain `/` or `\`)
+  factory PackageInfo.path(String absolutePath) {
+    if (!absolutePath.contains('/') && !absolutePath.contains('\\')) {
+      throw ArgumentError.value(
+        absolutePath,
+        'absolutePath',
+        'Must be an absolute path. Use PackageInfo(name) for package names, '
+            'or provide a full path like "/workspace/my_app" for CI/CD environments.',
+      );
+    }
+    return PackageInfo._([absolutePath]);
+  }
+
+  /// Creates a [PackageInfo] for multiple packages using names and/or paths.
+  ///
+  /// **Best for:** Mono-repo setups, multi-package projects, or mixed environments
+  /// where some packages use the analyzer plugin and others need explicit paths.
+  ///
+  /// Each value in [nameOrAbsolutePath] can be either:
+  /// - A package name (works with analyzer plugin in development)
+  /// - An absolute path (works without plugin in CI/CD)
+  ///
+  /// This flexibility allows you to:
+  /// - Use names for packages with active plugin support
+  /// - Use paths for packages in CI/CD or for auto-rebuild
+  /// - Mix both approaches as needed
+  ///
+  /// **Examples:**
+  /// ```dart
+  /// // Mixed: development packages by name, CI paths for auto-rebuild
+  /// final info = PackageInfo.mixed([
+  ///   'my_app',                          // Plugin provides context
+  ///   '/workspace/shared_utils',         // Explicit path for CI
+  ///   '/workspace/core/test',            // Test directory for focused analysis
+  /// ]);
+  ///
+  /// // All paths for CI/CD environment
+  /// final info = PackageInfo.mixed([
+  ///   '/workspace/app',
+  ///   '/workspace/shared',
+  ///   '/workspace/core',
+  /// ]);
+  /// ```
+  ///
+  /// **Parameters:**
+  /// - [nameOrAbsolutePath]: Collection of package names or absolute paths
+  factory PackageInfo.mixed(Iterable<String> nameOrAbsolutePath) {
+    return PackageInfo._(nameOrAbsolutePath.toList());
   }
 
   static PackageInfo fromJson(Map<String, dynamic> json) {
     return PackageInfo._(
-      (json['names'] as List).map((e) => e as String).toList(),
+      (json['values'] as List).map((e) => e as String).toList(),
     );
   }
 
   /// The list of package names that can connect to the MacroPlugin server.
-  final List<String> names;
+  final List<String> values;
 
   Map<String, dynamic> toJson() {
     return {
-      'names': names,
+      'values': values,
     };
   }
 
   @override
   String toString() {
-    return 'PackageInfo{names: $names}';
+    return 'PackageInfo{values: $values}';
   }
 }
 

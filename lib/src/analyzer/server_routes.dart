@@ -48,6 +48,8 @@ void startMacroServer() async {
     // ..vmUtils = vmUtils
     ..requestPluginToConnect()
     ..requestClientToConnect();
+
+  MacroAnalyzerServer.instance.logger.info('MacroServer started');
 }
 
 Future<bool> _serveServer(Router app, {bool throwErr = false}) async {
@@ -78,7 +80,7 @@ void _onNewCodeGeneratorConnection(WebSocketChannel webSocket) async {
 
 Future<Response> _getServerContexts(Request request) async {
   return Response.ok(
-    jsonEncode(MacroAnalyzerServer.instance.contexts),
+    jsonEncode(MacroAnalyzerServer.instance.contexts.map((e) => e.path).toList()),
     headers: {
       HttpHeaders.contentTypeHeader: ContentType.json.value,
     },

@@ -117,15 +117,21 @@ class DataClassMacro extends MacroGenerator {
   /// discriminator value matches, set it to true.
   final bool? defaultDiscriminator;
 
-  DataClassMacroConfig _getConfig(MacroState state) {
-    return state.getOrNull<DataClassMacroConfig>('data_class_macro_config') ?? DataClassMacroConfig.defaultConfig;
-  }
-
   @override
   String get suffixName => 'Data';
 
   @override
   GeneratedType get generatedType => GeneratedType.mixin;
+
+  @override
+  MacroGlobalConfigParser? get globalConfigParser => DataClassMacroConfig.fromJson;
+
+  DataClassMacroConfig _getConfig(MacroState state) {
+    if (state.globalConfig case DataClassMacroConfig v) {
+      return v;
+    }
+    return const DataClassMacroConfig();
+  }
 
   @override
   Future<void> init(MacroState state) async {
@@ -598,6 +604,7 @@ class DataClassMacro extends MacroGenerator {
 
     String fieldCast(
       MacroProperty field,
+      JsonKeyConfig? jsonKey,
       String value, {
       String? defaultValue,
       MacroProperty? mainType,
@@ -612,6 +619,10 @@ class DataClassMacro extends MacroGenerator {
       final startParen = isNullable || typeInfo.isIntOrDouble ? '(' : '';
       final endParen = isNullable || typeInfo.isIntOrDouble ? ')' : '';
       final nullableDefault = isNullable && defaultValue != null ? ' ?? $defaultValue' : '';
+
+      if (jsonKey?.isLiteral(config, type.removedNullability) == true) {
+        return '$value as $prefix$type$nullableDefault';
+      }
 
       switch (typeInfo) {
         case TypeInfo.clazz:
@@ -640,7 +651,7 @@ class DataClassMacro extends MacroGenerator {
               );
             }
 
-            final fromJsonCastValue = fieldCast(fromJsonFn.params.first, value);
+            final fromJsonCastValue = fieldCast(fromJsonFn.params.first, null, value);
             final typeParams = MacroProperty.getClassTypeParameter(fromJsonFn.typeParams);
 
             if (isNullable) {
@@ -661,7 +672,7 @@ class DataClassMacro extends MacroGenerator {
             ],
           );
 
-          final fromJsonCastValue = fieldCast(defaultFromJsonArg, value);
+          final fromJsonCastValue = fieldCast(defaultFromJsonArg, null, value);
           final (clsName, typeParam) = _classTypeToMixin(prefix, type, mixinSuffix: suffixName);
 
           List<String>? typeParamsFromJson;
@@ -715,7 +726,7 @@ class DataClassMacro extends MacroGenerator {
             return '($value as $prefix$firstCast).iterator';
           }
 
-          final elemTypeStr = fieldCast(elemType!, 'e');
+          final elemTypeStr = fieldCast(elemType!, null, 'e');
           return '($value as ${dcp}List<${dcp}dynamic>$nullable)$nullable.map((e) => $elemTypeStr)$nullableDefault';
         case TypeInfo.list:
           final elemType = field.typeArguments?.firstOrNull;
@@ -725,7 +736,7 @@ class DataClassMacro extends MacroGenerator {
             return '$value as $prefix$type$nullableDefault';
           }
 
-          final elemTypeStr = fieldCast(elemType!, 'e');
+          final elemTypeStr = fieldCast(elemType!, null, 'e');
           return '($value as ${dcp}List<${dcp}dynamic>$nullable)$nullable.map((e) => $elemTypeStr).toList()$nullableDefault';
         case TypeInfo.map:
           final elemType = field.typeArguments?.firstOrNull;
@@ -744,7 +755,7 @@ class DataClassMacro extends MacroGenerator {
             );
           }
 
-          final mapElemValue = fieldCast(elemValueType!, 'e');
+          final mapElemValue = fieldCast(elemValueType!, null, 'e');
 
           // key type is string, use it directly and only cast map value
           final elemTypePrefix = elemType.importPrefix;
@@ -754,26 +765,22 @@ class DataClassMacro extends MacroGenerator {
             case TypeInfo.string:
               return '($value as ${dcp}Map<${dcp}String, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(k, $mapElemValue))$nullableDefault';
             case TypeInfo.datetime:
-              final keyType = fieldCast(elemType, 'k');
+              final keyType = fieldCast(elemType, null, 'k');
               return '($value as ${dcp}Map<${dcp}String, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry($elemTypePrefix$keyType, $mapElemValue))$nullableDefault';
             case TypeInfo.bigInt:
               return '($value as ${dcp}Map<${dcp}String, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(${elemTypePrefix}BigInt.parse(k), $mapElemValue))$nullableDefault';
             case TypeInfo.uri:
               return '($value as ${dcp}Map<${dcp}String, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(${elemTypePrefix}Uri.parse(k), $mapElemValue))$nullableDefault';
             case TypeInfo.enumData:
-              final key = field.cacheFirstKeyInto(
-                keyName: 'JsonKey',
-                convertFn: JsonKeyConfig.fromMacroKey,
-                defaultValue: JsonKeyConfig.defaultKey,
-              );
-              final unknownEnumValue = key.unknownEnumValue?.firstOrNull;
+              final unknownEnumValue = jsonKey?.unknownEnumValue?.firstOrNull;
 
               final mapElemValue = fieldCast(
                 elemValueType,
+                null,
                 'e',
                 mainType: field,
                 // use first one and provide remaining unknown default value to next type
-                usedUnknownEnumVals: key.unknownEnumValue?.skip(1),
+                usedUnknownEnumVals: jsonKey?.unknownEnumValue?.skip(1),
               );
               return '($value as ${dcp}Map<${dcp}String, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(MacroExt.decodeEnum(${elemType.importPrefix}${elemType.type}.values, k, unknownValue: $unknownEnumValue), $mapElemValue))$nullableDefault';
             case TypeInfo.object:
@@ -807,7 +814,7 @@ class DataClassMacro extends MacroGenerator {
             return '($value as $prefix$firstCast).toSet()';
           }
 
-          final elemTypeStr = fieldCast(elemType!, 'e');
+          final elemTypeStr = fieldCast(elemType!, null, 'e');
 
           return '($value as ${dcp}List<${dcp}dynamic>$nullable)$nullable.map((e) => $elemTypeStr).toSet()$nullableDefault';
         case TypeInfo.datetime:
@@ -834,12 +841,7 @@ class DataClassMacro extends MacroGenerator {
 
           return '${prefix}Uri.parse($value as ${dcp}String)';
         case TypeInfo.enumData:
-          final key = field.cacheFirstKeyInto(
-            keyName: 'JsonKey',
-            convertFn: JsonKeyConfig.fromMacroKey,
-            defaultValue: JsonKeyConfig.defaultKey,
-          );
-          final unknownEnumValue = key.unknownEnumValue?.firstOrNull ?? usedUnknownEnumVals?.firstOrNull;
+          final unknownEnumValue = jsonKey?.unknownEnumValue?.firstOrNull ?? usedUnknownEnumVals?.firstOrNull;
 
           if (isNullable) {
             final genType = type.removedNullability;
@@ -936,8 +938,12 @@ class DataClassMacro extends MacroGenerator {
         final fromJsonArgTypeProp = fromJsonProp.functionTypeInfo!.params.first;
         final fromJsonReturnTypeProp = fromJsonProp.functionTypeInfo!.returns.first;
 
-        final checkType = hasDefaultValue && !field.isNullable ? '${field.type}?' : field.type;
-        if (!Utils.isValueTypeCanBeOfType(fromJsonReturnTypeProp.type, checkType)) {
+        final expectedType = hasDefaultValue && !field.isNullable ? '${field.type}?' : field.type;
+        if (!Utils.isValueTypeCanBeOfType(
+          fromJsonReturnTypeProp.type,
+          expectedType,
+          valueTypeIsGeneric: fromJsonReturnTypeProp.typeInfo == TypeInfo.generic,
+        )) {
           throw MacroException(
             'The parameter `${field.name}` of type: `${field.type}` in `${state.targetName}` has incompatible fromJson function, '
             'the fromJson return must be type of: `${field.type}` but got: `${fromJsonReturnTypeProp.type}`',
@@ -951,9 +957,9 @@ class DataClassMacro extends MacroGenerator {
             '${field.isNullable ? '$jsonValue == null ? $defaultValue : ' : ''}${'$fromJsonFn($jsonValue$asType)$fromJsonCallFallback'}';
       } else {
         if (hasDefaultValue && !field.isNullable) {
-          value = fieldCast(field.toNullability(), jsonValue, defaultValue: defaultValue);
+          value = fieldCast(field.toNullability(), key, jsonValue, defaultValue: defaultValue);
         } else {
-          value = fieldCast(field, jsonValue, defaultValue: defaultValue);
+          value = fieldCast(field, key, jsonValue, defaultValue: defaultValue);
         }
       }
 
@@ -997,13 +1003,18 @@ class DataClassMacro extends MacroGenerator {
     required CombinedListView<MacroProperty> fields,
     required List<MacroProperty> typeParams,
   }) {
+    final config = _getConfig(state);
     final dcp = state.getOrNull('dartCorePrefix') ?? '';
     final toJsonGenericsArgs = <String>{};
 
-    String fieldEncode(MacroProperty field, String value, bool isNullable) {
+    String fieldEncode(MacroProperty field, JsonKeyConfig? jsonKey, String value, bool isNullable) {
       final typeInfo = field.typeInfo;
       final type = field.type;
       final nullable = isNullable ? '?' : '';
+
+      if (jsonKey?.isLiteral(config, type.removedNullability) == true) {
+        return value;
+      }
 
       switch (typeInfo) {
         case TypeInfo.clazz:
@@ -1071,7 +1082,7 @@ class DataClassMacro extends MacroGenerator {
             return '$value$nullable.toList()';
           }
 
-          final elemTypeStr = fieldEncode(elemType!, 'e', elemType.isNullable);
+          final elemTypeStr = fieldEncode(elemType!, null, 'e', elemType.isNullable);
 
           return '$value$nullable.map((e) => $elemTypeStr).toList()';
         case TypeInfo.list:
@@ -1082,7 +1093,7 @@ class DataClassMacro extends MacroGenerator {
             return value;
           }
 
-          final elemTypeEncoded = fieldEncode(elemType!, 'e', elemType.isNullable);
+          final elemTypeEncoded = fieldEncode(elemType!, null, 'e', elemType.isNullable);
           return '$value$nullable.map((e) => $elemTypeEncoded).toList()';
         case TypeInfo.map:
           final elemType = field.typeArguments?.firstOrNull;
@@ -1099,7 +1110,7 @@ class DataClassMacro extends MacroGenerator {
             );
           }
 
-          final mapElemValue = fieldEncode(elemValueType!, 'e', elemValueType.isNullable);
+          final mapElemValue = fieldEncode(elemValueType!, null, 'e', elemValueType.isNullable);
 
           switch (elemType.typeInfo) {
             case TypeInfo.int:
@@ -1118,7 +1129,7 @@ class DataClassMacro extends MacroGenerator {
                 _ => '$value$nullable.map((k, e) => ${dcp}MapEntry(k, $mapElemValue))',
               };
             case TypeInfo.datetime:
-              final keyType = fieldEncode(elemType, 'k', elemType.isNullable);
+              final keyType = fieldEncode(elemType, null, 'k', elemType.isNullable);
               return '$value$nullable.map((k, e) => ${dcp}MapEntry($keyType, $mapElemValue))';
             case TypeInfo.bigInt:
               return '$value$nullable.map((k, e) => ${dcp}MapEntry(k.toString(), $mapElemValue))';
@@ -1147,7 +1158,7 @@ class DataClassMacro extends MacroGenerator {
 
           if (MacroProperty.isDynamicSet(type)) return '$value$nullable.toList()';
 
-          final elemTypeStr = fieldEncode(elemType!, 'e', elemType.isNullable);
+          final elemTypeStr = fieldEncode(elemType!, null, 'e', elemType.isNullable);
 
           return '$value$nullable.map((e) => $elemTypeStr).toList()';
         case TypeInfo.datetime:
@@ -1182,7 +1193,6 @@ class DataClassMacro extends MacroGenerator {
     }
 
     // default not to include null values
-    final config = _getConfig(state);
     var includeIfNull = config.includeIfNull;
     var fieldRename = config.fieldRename ?? FieldRename.none;
     final prefix = state.importPrefix;
@@ -1215,7 +1225,12 @@ class DataClassMacro extends MacroGenerator {
         final toJsonArgTypeProp = toJsonProp.functionTypeInfo!.params.first;
         final toJsonReturnNullable = toJsonProp.functionTypeInfo!.returns.first.modifier.isNullable;
 
-        if (!Utils.isValueTypeCanBeOfType(field.type, toJsonArgTypeProp.type)) {
+        final expectedType = toJsonArgTypeProp.type;
+        if (!Utils.isValueTypeCanBeOfType(
+          field.type,
+          expectedType,
+          valueTypeIsGeneric: field.typeInfo == TypeInfo.generic,
+        )) {
           throw MacroException(
             'Parameter `${field.name}` of type `${field.type}` in `${state.targetName}` '
             'has an incompatible `toJson` function. Expected argument type: `${field.type}`, '
@@ -1226,7 +1241,7 @@ class DataClassMacro extends MacroGenerator {
         value = '$toJson(v.$fieldPropName)';
         isNullable = toJsonReturnNullable;
       } else {
-        value = fieldEncode(field, 'v.$fieldPropName', isNullable);
+        value = fieldEncode(field, key, 'v.$fieldPropName', isNullable);
       }
 
       if (field.typeArguments?.isNotEmpty == true) {

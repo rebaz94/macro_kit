@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -24,11 +25,9 @@ abstract class MacroServer {
 
   void requestClientToConnect();
 
-  MacroClientConfiguration getMacroConfigFor(String path);
-
   void removeFile(String path);
 
-  int? getClientChannelIdByMacro(String targetMacro);
+  int? getClientChannelIdByMacro(String targetMacro,  String filePath);
 
   Future<RunMacroResultMsg> runMacroGenerator(int channelId, RunMacroMsg message);
 
@@ -59,7 +58,7 @@ abstract class BaseAnalyzer implements MacroServer {
   );
 
   late final ByteStore byteStore = MemoryCachingByteStore(NullByteStore(), 1024 * 1024 * 256);
-  List<String> contexts = <String>[];
+  List<ContextInfo> contexts = [];
   AnalysisContextCollection contextCollection = AnalysisContextCollection(
     includedPaths: [],
     resourceProvider: PhysicalResourceProvider.INSTANCE,
@@ -141,17 +140,17 @@ abstract class BaseAnalyzer implements MacroServer {
   @pragma('vm:prefer-inline')
   MacroClientConfiguration loadMacroConfig(String context, String packageName) {
     try {
-      final content = loadYamlNode(File(p.join(context, '.macro.yaml')).readAsStringSync());
-      return switch (content.value['config']) {
-        YamlMap map => MacroClientConfiguration.fromYaml(context, packageName, map),
-        _ => MacroClientConfiguration.withDefault(context, packageName),
-      };
+      final content = jsonDecode(File(p.join(context, '.macro.json')).readAsStringSync());
+      if (content is Map) {
+        return MacroClientConfiguration.fromJson(newId(), context, packageName, content as Map<String, dynamic>);
+      }
     } on PathNotFoundException {
-      return MacroClientConfiguration.withDefault(context, packageName);
+      //
     } catch (e) {
       logger.error('Failed to read macro configuration for: $context');
-      return MacroClientConfiguration.withDefault(context, packageName);
     }
+
+    return MacroClientConfiguration.withDefault(newId(), context, packageName);
   }
 
   Future<MacroClassDeclaration?> parseClass(

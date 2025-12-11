@@ -1,0 +1,12 @@
+{
+  "config": {
+    "remap_generated_file_to": "",
+    "auto_rebuild_on_connect": true,
+    "always_rebuild_on_connect": false
+  },
+  "macros": {
+    "DataClassMacro": {
+      "as_literal_types": []
+    }
+  }
+}

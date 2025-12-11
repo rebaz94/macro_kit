@@ -9,10 +9,10 @@ import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:analyzer_plugin/plugin/plugin.dart';
 import 'package:analyzer_plugin/protocol/protocol_generated.dart';
 import 'package:collection/collection.dart';
+import 'package:macro_kit/src/analyzer/lock.dart';
 import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/plugin/server_client.dart';
-import 'package:synchronized/synchronized.dart' as sync;
 
 class MacroPlugin extends ServerPlugin implements MacroServerListener {
   MacroPlugin(ResourceProvider provider, this.logger)
@@ -23,14 +23,14 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
 
   final MacroLogger logger;
   final MacroServerClient client;
-  final sync.Lock lock = sync.Lock();
+  final CustomBasicLock lock = CustomBasicLock();
   AnalysisContextCollection? lastContextCollection;
 
   void _initialize() async {
     client.listener = this;
 
     client.listenToManualRequest();
-    if (client.isDisabledAutoStartSever()) {
+    if (client.isDisabledAutoStartServer()) {
       client.autoReconnect = false;
     }
 
@@ -51,7 +51,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
         return;
       }
 
-      final disableAutoStart = client.isDisabledAutoStartSever();
+      final disableAutoStart = client.isDisabledAutoStartServer();
       if (disableAutoStart && !forceStart) {
         logger.info('Auto starting MacroServer is disabled');
         return;
@@ -97,8 +97,8 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
     AnalysisHandleWatchEventsParams parameters,
   ) async {
     // do not trigger any loading file
-    if (client.status != ConnectionStatus.connected && client.autoReconnect) {
-      await Future.delayed(const Duration(seconds: 3));
+    if (client.status != ConnectionStatus.connected) {
+      await Future.delayed(const Duration(seconds: 5));
       reconnectToServer();
     }
 

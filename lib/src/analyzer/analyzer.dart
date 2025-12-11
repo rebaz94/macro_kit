@@ -18,6 +18,10 @@ abstract class MacroAnalyzer extends BaseAnalyzer
   MacroAnalyzer({required super.logger});
 
   Future<void> processDartSource(String path) async {
+    stopWatch
+      ..reset()
+      ..start();
+
     try {
       await _analyzeCodeAndRun(path);
     } catch (e, s) {
