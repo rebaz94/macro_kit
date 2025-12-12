@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://json.schemastore.org/macro.json",
+  "title": "Macro Configuration",
+  "description": "Configuration file for Dart macro system",
+  "type": "object",
+  "properties": {
+    "config": {
+      "type": "object",
+      "description": "Global macro configuration settings",
+      "properties": {
+        "remap_generated_file_to": {
+          "type": "string",
+          "description": "Directory path where generated files should be remapped to",
+          "examples": ["lib/gen", "lib/generated"]
+        },
+        "auto_rebuild_on_connect": {
+          "type": "boolean",
+          "description": "Automatically rebuild when connecting",
+          "default": true
+        },
+        "always_rebuild_on_connect": {
+          "type": "boolean",
+          "description": "Always force rebuild on connect",
+          "default": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "macros": {
+      "type": "object",
+      "description": "Configuration for individual macros",
+      "properties": {
+        "DataClassMacro": {
+          "$ref": "#/definitions/DataClassMacroConfig"
+        }
+      },
+      "additionalProperties": {
+        "type": "object",
+        "description": "Custom macro configuration - structure depends on the macro implementation"
+      }
+    }
+  },
+  "definitions": {
+    "DataClassMacroConfig": {
+      "type": "object",
+      "description": "Configuration for the built-in DataClassMacro",
+      "properties": {
+        "field_rename": {
+          "type": "string",
+          "description": "Field renaming strategy",
+          "enum": ["none", "snake_case", "kebab_case", "camel_case", "pascal_case"],
+          "default": "none"
+        },
+        "create_from_json": {
+          "type": "boolean",
+          "description": "Generate fromJson method"
+        },
+        "create_to_json": {
+          "type": "boolean",
+          "description": "Generate toJson method"
+        },
+        "create_map_to": {
+          "type": "boolean",
+          "description": "Generate mapTo method"
+        },
+        "create_as_cast": {
+          "type": "boolean",
+          "description": "Generate as cast methods"
+        },
+        "create_equal": {
+          "type": "boolean",
+          "description": "Generate equality operator override"
+        },
+        "create_copy_with": {
+          "type": "boolean",
+          "description": "Generate copyWith method"
+        },
+        "create_to_string": {
+          "type": "boolean",
+          "description": "Generate toString override"
+        },
+        "include_if_null": {
+          "type": "boolean",
+          "description": "Include null fields in JSON serialization"
+        },
+        "as_literal_types": {
+          "type": "array",
+          "description": "List of types to be treated as literals",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
