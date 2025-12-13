@@ -1,3 +1,7 @@
+## 0.2.4
+
+- Fixing release tool
+
 ## 0.2.3
 
 - Add automatic macro server upgrade
