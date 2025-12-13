@@ -1,3 +1,7 @@
+## 0.2.6
+
+- Add logging for regeneration
+
 ## 0.2.5
 
 - Force plugin to always connect to MacroServer
