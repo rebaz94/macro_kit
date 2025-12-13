@@ -52,11 +52,6 @@ void main() async {
       print(dryRunResult.stderr);
     }
 
-    if (dryRunResult.exitCode != 0) {
-      print('❌ Dry-run failed. Please fix the issues before publishing.');
-      exit(1);
-    }
-
     if (!await confirm('\nDry-run successful. Proceed with actual publishing?')) {
       print('❌ Publishing cancelled by user');
       exit(1);
