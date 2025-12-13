@@ -228,7 +228,7 @@ class MacroManager {
         final result = AutoRebuildResult(results: msg.results);
 
         for (final ctx in msg.results) {
-          final duration = (ctx.completedInMilliseconds / 1000).toStringAsFixed(2);
+          final duration = (ctx.completedInMilliseconds ~/ 1000).toStringAsFixed(2);
 
           if (ctx.isSuccess) {
             logger.info('Regenerated successfully in ${duration}s: ${ctx.context}');
