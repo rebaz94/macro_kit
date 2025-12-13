@@ -16,29 +16,7 @@ void main() async {
     final pubspec = loadYaml(pubspecContent);
     final versionName = pubspec['version'] as String;
 
-    if (!await confirm('Continue to check git status?')) {
-      print('❌ Aborted by user');
-      exit(1);
-    }
-
-    // Step 4: Check for uncommitted changes
-    print('\n🔍 Checking git status...');
-    final gitStatus = await runCommand('git', ['status', '--porcelain']);
-
-    if (gitStatus.trim().isNotEmpty) {
-      print('❌ You have uncommitted changes:');
-      print(gitStatus);
-      print('\nPlease commit or stash your changes before releasing.');
-      exit(1);
-    }
-    print('✅ No uncommitted changes');
-
-    if (!await confirm('Continue to create git tag and release?')) {
-      print('❌ Aborted by user');
-      exit(1);
-    }
-
-    // Step 5: Extract changelog for this version
+    // Step 2: Extract changelog for this version
     print('\n📋 Extracting changelog...');
     final changelogFile = File('CHANGELOG.md');
     if (!changelogFile.existsSync()) {
@@ -63,25 +41,51 @@ void main() async {
       }
     }
 
-    // Step 6: Create git tag
-    final tagName = 'macro_kit-$versionName';
-    print('\n🏷️  Creating git tag: $tagName');
+    // Step 3: Publish to pub.dev
+    print('\n📦 Publishing package to pub.dev...');
+    print('This will show a dry-run first.\n');
 
-    await runCommand('git', ['tag', '-a', tagName, '-m', 'Release $versionName']);
-    print('✅ Tag created');
+    // First do a dry-run
+    final dryRunResult = await Process.run('dart', ['pub', 'publish', '--dry-run']);
+    print(dryRunResult.stdout);
+    if (dryRunResult.stderr.toString().isNotEmpty) {
+      print(dryRunResult.stderr);
+    }
 
-    if (!await confirm('Push tag to remote?')) {
-      print('❌ Aborted by user');
-      print('⚠️  Tag created locally but not pushed. Run: git push origin $tagName');
+    if (dryRunResult.exitCode != 0) {
+      print('❌ Dry-run failed. Please fix the issues before publishing.');
       exit(1);
     }
 
-    await runCommand('git', ['push', 'origin', tagName]);
-    print('✅ Tag pushed to remote');
+    if (!await confirm('\nDry-run successful. Proceed with actual publishing?')) {
+      print('❌ Publishing cancelled by user');
+      exit(1);
+    }
 
-    // Step 7: Create GitHub release
+    // Actual publish
+    print('\n📤 Publishing to pub.dev...');
+    final publishResult = await Process.run(
+      'dart',
+      ['pub', 'publish', '--force'],
+      runInShell: true,
+    );
+
+    print(publishResult.stdout);
+    if (publishResult.stderr.toString().isNotEmpty) {
+      print(publishResult.stderr);
+    }
+
+    if (publishResult.exitCode != 0) {
+      print('❌ Publishing failed');
+      exit(1);
+    }
+
+    print('✅ Package published successfully');
+
+    // Step 4: Create GitHub release
     print('\n🎉 Creating GitHub release...');
 
+    final tagName = 'macro_kit-$versionName';
     final releaseBody = changelog.isNotEmpty ? changelog : 'Release $versionName';
 
     // Using gh CLI to create release

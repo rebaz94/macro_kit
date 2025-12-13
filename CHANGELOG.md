@@ -1,3 +1,7 @@
+## 0.2.3
+
+- Add automatic macro server upgrade
+
 ## 0.2.2
 
 - Add target file path to `MacroState`

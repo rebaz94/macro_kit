@@ -75,7 +75,7 @@ const pluginVersionName = '$versionName';
             .trim();
 
     versionFile.writeAsStringSync(newVersion);
-    print('✅ Constant version updated to use ^$versionCode');
+    print('✅ Constant version updated to use ^$versionName');
   } catch (e) {
     print('\n❌ Error: $e');
     exit(1);
