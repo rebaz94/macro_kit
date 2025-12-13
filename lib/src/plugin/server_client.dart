@@ -163,7 +163,11 @@ class MacroServerClient {
           final _ = decodeMessage(data);
         },
         onError: (error) => logger.error('WebSocket error occurred', error),
-        onDone: () async => status = ConnectionStatus.disconnected,
+        onDone: () async {
+          status = ConnectionStatus.disconnected;
+          await Future.delayed(const Duration(seconds: 5));
+          listener.reconnectToServer();
+        },
       );
 
       _addMessage(
@@ -174,7 +178,6 @@ class MacroServerClient {
           versionName: pluginVersionName,
         ),
       );
-
     } catch (e) {
       status = ConnectionStatus.disconnected;
       logger.error('Unable to connect to MacroServer');

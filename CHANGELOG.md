@@ -1,3 +1,7 @@
+## 0.2.5
+
+- Force plugin to always connect to MacroServer
+
 ## 0.2.4
 
 - Fixing release tool

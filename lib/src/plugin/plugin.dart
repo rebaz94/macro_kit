@@ -30,9 +30,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
     client.listener = this;
 
     client.listenToManualRequest();
-    if (client.isDisabledAutoStartServer()) {
-      client.autoReconnect = false;
-    }
+    client.autoReconnect = !client.isDisabledAutoStartServer();
 
     reconnectToServer();
   }
@@ -52,6 +50,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
       }
 
       final disableAutoStart = client.isDisabledAutoStartServer();
+      client.autoReconnect = !disableAutoStart;
       if (disableAutoStart && !forceStart) {
         logger.info('Auto starting MacroServer is disabled');
         return;

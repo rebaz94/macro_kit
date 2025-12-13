@@ -52,7 +52,7 @@ class PluginConnectMsg implements Message {
     return PluginConnectMsg(
       id: (json['id'] as num).toInt(),
       initialContexts: (json['contexts'] as List).map((e) => e as String).toList(),
-      versionCode: (json['versionCode'] as num?)?.toInt() ?? 0,
+      versionCode: (json['versionCode'] as num?)?.toInt() ?? 1,
       versionName: json['versionName'] as String? ?? '0.2.2',
     );
   }

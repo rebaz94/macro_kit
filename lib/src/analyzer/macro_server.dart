@@ -347,6 +347,12 @@ class MacroAnalyzerServer extends MacroAnalyzer {
               );
               dispose();
               exit(0);
+            } else if (pluginVersionCode > msg.versionCode) {
+              logger.warn(
+                'Version mismatch detected: Server v$pluginVersionName (code: $pluginVersionCode) '
+                'is newer than Plugin v${msg.versionName} (code: ${msg.versionCode}). '
+                'Please fix version conflict',
+              );
             }
 
           case AnalysisContextsMsg(contexts: var contexts):
