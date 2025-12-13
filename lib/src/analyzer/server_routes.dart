@@ -29,23 +29,10 @@ void startMacroServer() async {
     ..get('/contexts', _getServerContexts)
     ..post('/shutdown', _onShutdown);
 
-  final alreadyInUse = await _serveServer(app);
-  if (alreadyInUse) {
-    final shutdown = await MacroAnalyzerServer.instance.shutdownMacroServer();
-    if (!shutdown) {
-      MacroAnalyzerServer.instance.logger.error('Failed to shutdown existing MacroServer');
-      exit(-1);
-    }
-
-    await Future.delayed(const Duration(seconds: 3));
-    await _serveServer(app, throwErr: true);
-  }
-
-  // final vmUtils = await VmUtils.create(MacroAnalyzerServer.instance.logger, autoGCPerMin: 15);
+  await _serveServer(app, throwErr: true);
 
   // request current context from dart analysis server
   MacroAnalyzerServer.instance
-    // ..vmUtils = vmUtils
     ..requestPluginToConnect()
     ..requestClientToConnect();
 

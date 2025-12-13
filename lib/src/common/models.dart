@@ -44,17 +44,23 @@ class PluginConnectMsg implements Message {
   PluginConnectMsg({
     required this.id,
     required this.initialContexts,
+    required this.versionCode,
+    required this.versionName,
   });
 
   static PluginConnectMsg fromJson(Map<String, dynamic> json) {
     return PluginConnectMsg(
       id: (json['id'] as num).toInt(),
       initialContexts: (json['contexts'] as List).map((e) => e as String).toList(),
+      versionCode: (json['versionCode'] as num?)?.toInt() ?? 0,
+      versionName: json['versionName'] as String? ?? '0.2.2',
     );
   }
 
   final int id;
   final List<String> initialContexts;
+  final int versionCode;
+  final String versionName;
 
   @override
   String get type => 'plugin_connect';
@@ -64,6 +70,8 @@ class PluginConnectMsg implements Message {
     return {
       'id': id,
       'contexts': initialContexts,
+      'versionCode': versionCode,
+      'versionName': versionName,
     };
   }
 }

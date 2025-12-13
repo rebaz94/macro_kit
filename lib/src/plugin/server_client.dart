@@ -7,6 +7,7 @@ import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:macro_kit/src/common/watch_file_request.dart';
+import 'package:macro_kit/src/version/version.dart';
 import 'package:path/path.dart' as p;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -150,7 +151,6 @@ class MacroServerClient {
       wsChannel?.sink.close();
       wsChannel = null;
 
-      Uri.parse('http://localhost:3232').host;
       final wsUrl = Uri.parse('ws://${serverAddress.authority}/plugin/connect');
       final channel = WebSocketChannel.connect(wsUrl);
       await channel.ready;
@@ -170,14 +170,18 @@ class MacroServerClient {
         PluginConnectMsg(
           id: pluginId,
           initialContexts: listener.listAnalysisContexts(),
+          versionCode: pluginVersionCode,
+          versionName: pluginVersionName,
         ),
       );
 
-      logger.info('Connected');
     } catch (e) {
       status = ConnectionStatus.disconnected;
       logger.error('Unable to connect to MacroServer');
+      return;
     }
+
+    logger.info('Connected');
   }
 
   bool _addMessage(Message msg) {

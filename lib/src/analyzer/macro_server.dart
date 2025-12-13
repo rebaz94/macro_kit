@@ -12,9 +12,11 @@ import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyzer.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/lock.dart';
+import 'package:macro_kit/src/analyzer/upgrade.dart';
 import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
+import 'package:macro_kit/src/version/version.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import 'package:web_socket_channel/status.dart';
@@ -59,6 +61,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   final Map<int, Completer<RunMacroResultMsg>> _pendingOperations = {};
   Timer? _autoShutdownTimer;
   bool _scheduleToShutdown = false;
+  bool _upgrading = false;
 
   void _setupAutoShutdown() {
     _autoShutdownTimer = Timer.periodic(const Duration(minutes: 10), _onAutoShutdownCB);
@@ -316,6 +319,35 @@ class MacroAnalyzerServer extends MacroAnalyzer {
             _pluginChannels[pluginId] = current;
 
             _onPluginContextReceived(pluginId, current, msg.initialContexts);
+
+            if (msg.versionCode > pluginVersionCode) {
+              logger.warn(
+                'Version mismatch detected: Plugin v${msg.versionName} (code: ${msg.versionCode}) '
+                'is newer than Server v$pluginVersionName (code: $pluginVersionCode). '
+                '${_upgrading ? '' : 'Attempting automatic upgrade...'}',
+              );
+
+              if (_upgrading) return;
+
+              _upgrading = true;
+              final (upgraded, errMsg) = await upgradedMacroServer(msg.versionName);
+              if (!upgraded) {
+                logger.error(
+                  'MacroServer upgrade failed: $errMsg\n'
+                  'Version conflict: Plugin v${msg.versionName} vs Server v$pluginVersionName\n'
+                  'Please manually update the server by running:\n'
+                  '  dart pub global activate macro_server ${msg.versionName}',
+                );
+                return;
+              }
+
+              logger.info(
+                'MacroServer successfully upgraded to v${msg.versionName}. '
+                'Restarting with new version...',
+              );
+              dispose();
+              exit(0);
+            }
 
           case AnalysisContextsMsg(contexts: var contexts):
             final current = pluginId == -1 ? null : _pluginChannels[pluginId];

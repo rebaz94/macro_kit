@@ -60,11 +60,11 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
       logger.info('Starting MacroServer...');
       final started = await client.startMacroServer();
       if (!started) {
-        Future.delayed(const Duration(seconds: 5)).then((_) => reconnectToServer(forceStart: forceStart));
+        Future.delayed(const Duration(seconds: 10)).then((_) => reconnectToServer(forceStart: forceStart));
         return;
       }
 
-      client.establishWSConnection();
+      await client.establishWSConnection();
     });
   }
 
