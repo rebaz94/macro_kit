@@ -23,7 +23,7 @@ String encodeMessage(Message message) {
       'sync_macros_config' => SyncMacrosConfigMsg.fromJson(data),
       'run_macro' => RunMacroMsg.fromJson(data),
       'run_macro_result' => RunMacroResultMsg.fromJson(data),
-      'auto_rebuild_on_connect_result' => AutoRebuildOnConnectMsg.fromJson(data),
+      'auto_rebuild_on_connect_result' => AutoRebuildOnConnectResultMsg.fromJson(data),
       'general_message' => GeneralMessage.fromJson(data),
       _ => throw 'Unimplemented message type: ${json['type']}',
     };
@@ -395,24 +395,21 @@ class RunMacroResultMsg implements Message {
   }
 }
 
-class AutoRebuildOnConnectMsg implements Message {
-  AutoRebuildOnConnectMsg({
-    required this.contexts,
-    required this.errors,
+class AutoRebuildOnConnectResultMsg implements Message {
+  AutoRebuildOnConnectResultMsg({
+    required this.results,
   });
 
-  static AutoRebuildOnConnectMsg fromJson(Map<String, dynamic> json) {
-    return AutoRebuildOnConnectMsg(
-      contexts: (json['contexts'] as List).map((e) => e as String).toList(),
-      errors: (json['errors'] as List).map((e) => e as String?).toList(),
+  static AutoRebuildOnConnectResultMsg fromJson(Map<String, dynamic> json) {
+    return AutoRebuildOnConnectResultMsg(
+      results: (json['results'] as List)
+          .map((e) => RegeneratedContextResult.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
-  /// The regenerated context
-  final List<String> contexts;
-
-  /// The error message if any
-  final List<String?> errors;
+  /// The regenerated context result
+  final List<RegeneratedContextResult> results;
 
   @override
   String get type => 'auto_rebuild_on_connect_result';
@@ -420,40 +417,92 @@ class AutoRebuildOnConnectMsg implements Message {
   @override
   Map<String, dynamic> toJson() {
     return {
-      'contexts': contexts,
-      'errors': errors,
+      'results': results.map((e) => e.toJson()).toList(),
     };
   }
 }
 
 /// Result of an automatic macro rebuild operation.
 ///
-/// Contains the list of contexts that were processed and any errors that
-/// occurred during regeneration. Errors are aligned with contexts by index.
+/// This class encapsulates the outcome of rebuilding one or more macro contexts,
+/// including success/failure status and timing information for each context.
 class AutoRebuildResult {
-  const AutoRebuildResult({required this.contexts, required this.errors});
+  const AutoRebuildResult({
+    required this.results,
+  });
 
-  /// The contexts (package paths) that were regenerated.
-  ///
-  /// Each context represents a package or directory where macro code was rebuilt.
-  final List<String> contexts;
+  static AutoRebuildResult fromJson(Map<String, dynamic> json) {
+    return AutoRebuildResult(
+      results: (json['results'] as List)
+          .map((e) => RegeneratedContextResult.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 
-  /// Error messages for each context, or null if regeneration succeeded.
+  /// List of individual context rebuild results.
   ///
-  /// This list has the same length as [contexts], with each index corresponding
-  /// to the result for that context. A null value indicates successful regeneration.
+  /// Each entry corresponds to one package/context that was processed during
+  /// the rebuild operation. Results may include both successful and failed rebuilds.
+  final List<RegeneratedContextResult> results;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'results': results.map((e) => e.toJson()).toList(),
+    };
+  }
+}
+
+/// Result of regenerating a single macro context.
+///
+/// Contains the context identifier, any error that occurred, and timing information
+/// for the regeneration operation.
+class RegeneratedContextResult {
+  const RegeneratedContextResult({
+    required this.context,
+    required this.error,
+    required this.completedInMilliseconds,
+  });
+
+  static RegeneratedContextResult fromJson(Map<String, dynamic> json) {
+    return RegeneratedContextResult(
+      context: json['context'] as String,
+      error: json['error'] as String?,
+      completedInMilliseconds: (json['completedInMs'] as num).toInt(),
+    );
+  }
+
+  /// The context (package path) that was regenerated.
   ///
-  /// Example:
-  /// ```dart
-  /// contexts: ['pkg_a', 'pkg_b', 'pkg_c']
-  /// errors:   [null,    'Parse error', null]
-  /// // pkg_a: success, pkg_b: failed, pkg_c: success
-  /// ```
-  final List<String?> errors;
+  /// Typically represents a package or module path where macros were rebuilt.
+  final String context;
+
+  /// The error message if regeneration failed, or null if successful.
+  ///
+  /// When non-null, indicates that the macro regeneration for this context
+  /// encountered an error and may not have completed successfully.
+  final String? error;
+
+  /// Total time taken to regenerate this context, in milliseconds.
+  ///
+  /// This includes all processing time for macro regeneration within the context,
+  /// regardless of whether the operation succeeded or failed.
+  final int completedInMilliseconds;
+
+  /// Converts this result to a JSON-serializable map.
+  Map<String, dynamic> toJson() {
+    return {
+      'context': context,
+      'error': error,
+      'completedInMs': completedInMilliseconds,
+    };
+  }
+
+  /// Returns true if this context was regenerated successfully (no error).
+  bool get isSuccess => error == null;
 
   @override
   String toString() {
-    return 'AutoRebuildResult{contexts: $contexts, errors: $errors}';
+    return 'RegeneratedContextResult{context: $context, error: $error, completedInMilliseconds: $completedInMilliseconds}';
   }
 }
 

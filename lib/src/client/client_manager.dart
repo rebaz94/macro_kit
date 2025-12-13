@@ -221,14 +221,21 @@ class MacroManager {
           _isMacrosConfigSynced.complete(true);
         }
 
-      case AutoRebuildOnConnectMsg msg:
+      case AutoRebuildOnConnectResultMsg msg:
         final list = _waitAutoRebuildCompleteCompleter.toList();
         _waitAutoRebuildCompleteCompleter.clear();
 
-        final result = AutoRebuildResult(
-          contexts: msg.contexts,
-          errors: msg.errors,
-        );
+        final result = AutoRebuildResult(results: msg.results);
+
+        for (final ctx in msg.results) {
+          final duration = (ctx.completedInMilliseconds / 1000).toStringAsFixed(2).padLeft(6);
+
+          if (ctx.isSuccess) {
+            logger.info('Regenerated successfully in ${duration}s: ${ctx.context}');
+          } else {
+            logger.error('Regeneration failed in ${duration}s: ${ctx.context} - ${ctx.error}');
+          }
+        }
 
         for (final c in list) {
           if (c.isCompleted) continue;

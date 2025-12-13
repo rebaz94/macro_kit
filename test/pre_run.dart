@@ -36,9 +36,9 @@ void main() async {
   final result = await waitUntilRebuildCompleted();
   print('full rebuild completed in: ${s.elapsed.inSeconds}s');
 
-  for (final (i, rebuild) in result.contexts.indexed) {
-    if (result.errors[i] != null) {
-      print('context: $rebuild, has error: ${result.errors[i]}');
+  for (final ctx in result.results) {
+    if (!ctx.isSuccess) {
+      print('context: ${ctx.context}, has error: ${ctx.error}');
     }
   }
 }

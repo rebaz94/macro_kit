@@ -663,9 +663,8 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     List<ContextInfo> contextInfos,
   ) async {
     await rebuildLock.synchronized(() async {
+      final results = <RegeneratedContextResult>[];
       final s = Stopwatch();
-      final contexts = <String>[];
-      final errors = <String?>[];
 
       for (final contextInfo in contextInfos) {
         s
@@ -677,8 +676,13 @@ class MacroAnalyzerServer extends MacroAnalyzer {
           contextPath: contextInfo.path,
         );
 
-        contexts.add(contextInfo.path);
-        errors.add(err);
+        results.add(
+          RegeneratedContextResult(
+            context: contextInfo.path,
+            error: err,
+            completedInMilliseconds: s.elapsedMilliseconds,
+          ),
+        );
 
         logger.info('Completed regeneration in ${s.elapsed.inSeconds}s');
         if (err != null) {
@@ -690,7 +694,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
       _addMessageToClient(
         clientId,
-        AutoRebuildOnConnectMsg(contexts: contexts, errors: errors),
+        AutoRebuildOnConnectResultMsg(results: results),
       );
     });
   }
