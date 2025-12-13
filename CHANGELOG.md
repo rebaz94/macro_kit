@@ -1,3 +1,7 @@
+## 0.2.2
+
+- Add target file path to `MacroState`
+
 ## 0.2.1
 
 - Disable linter and formatter for generated files

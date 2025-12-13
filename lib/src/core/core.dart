@@ -1648,6 +1648,7 @@ class MacroState {
     required this.macro,
     required this.remainingMacro,
     required this.globalConfig,
+    required this.targetPath,
     required this.targetType,
     required this.targetName,
     required this.importPrefix,
@@ -1675,6 +1676,9 @@ class MacroState {
   /// Returns `null` unless [MacroGenerator.globalConfigParser] is configured
   /// to parse and return a global config.
   final MacroGlobalConfig? globalConfig;
+
+  /// The absolute path of the file
+  final String targetPath;
 
   /// The type of target this macro is applied to (class, asset, variable,...)
   final TargetType targetType;
