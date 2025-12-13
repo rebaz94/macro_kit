@@ -3,33 +3,35 @@ import 'dart:io';
 import 'package:yaml/yaml.dart';
 
 void main() async {
-  print('🔄 Updating Analyzer Plugin Pubspec\n');
+  // Read main pubspec.yaml
+  final pubspecFile = File('pubspec.yaml');
+  if (!pubspecFile.existsSync()) {
+    throw Exception('pubspec.yaml not found in current directory');
+  }
 
+  final pubspecContent = pubspecFile.readAsStringSync();
+  final pubspec = loadYaml(pubspecContent);
+
+  final packageName = pubspec['name'] as String;
+  final versionName = pubspec['version'] as String;
+  final versionCode = pubspec['version_code'] as int;
+
+  print('📦 Package: $packageName');
+  print('📦 Version: $versionName');
+  print('📦 Code: $versionCode\n');
+
+  _updateAnalyzerPluginVersion(packageName, versionName);
+  _updateConstantVersion(versionName, versionCode);
+}
+
+void _updateAnalyzerPluginVersion(String packageName, String versionName) {
   try {
-    // Read main pubspec.yaml
-    final pubspecFile = File('pubspec.yaml');
-    if (!pubspecFile.existsSync()) {
-      throw Exception('pubspec.yaml not found in current directory');
-    }
+    print('🔄 Updating Analyzer Plugin Pubspec\n');
 
-    final pubspecContent = pubspecFile.readAsStringSync();
-    final pubspec = loadYaml(pubspecContent);
-
-    final versionName = pubspec['version'] as String?;
-    final packageName = pubspec['name'] as String;
-
-    if (versionName == null) {
-      throw Exception('version not found in pubspec.yaml');
-    }
-
-    print('📦 Package: $packageName');
-    print('📦 Version: $versionName\n');
-
-    // Update tools/analyzer_plugin/pubspec.yaml
     print('📝 Updating tools/analyzer_plugin/pubspec.yaml...');
     final pluginPubspecFile = File('tools/analyzer_plugin/pubspec.yaml');
     if (!pluginPubspecFile.existsSync()) {
-      throw Exception('tools/analyzer_plugin/pubspec.yaml not found');
+      throw Exception('${pluginPubspecFile.path} not found');
     }
 
     final newVersion =
@@ -49,6 +51,31 @@ dev_dependencies:
 
     pluginPubspecFile.writeAsStringSync(newVersion);
     print('✅ Analyzer plugin pubspec updated to use $packageName: ^$versionName');
+  } catch (e) {
+    print('\n❌ Error: $e');
+    exit(1);
+  }
+}
+
+void _updateConstantVersion(String versionName, int versionCode) {
+  try {
+    print('🔄 Updating Constant Version\n');
+
+    print('📝 Updating lib/src/version/version.dart...');
+    final versionFile = File('lib/src/version/version.dart');
+    if (!versionFile.existsSync()) {
+      throw Exception('${versionFile.path} not found');
+    }
+
+    final newVersion =
+        '''
+const pluginVersionCode = $versionCode;
+const pluginVersionName = '$versionName';
+    '''
+            .trim();
+
+    versionFile.writeAsStringSync(newVersion);
+    print('✅ Constant version updated to use ^$versionCode');
   } catch (e) {
     print('\n❌ Error: $e');
     exit(1);

@@ -14,62 +14,7 @@ void main() async {
 
     final pubspecContent = pubspecFile.readAsStringSync();
     final pubspec = loadYaml(pubspecContent);
-
-    final versionName = pubspec['version'] as String?;
-    final versionCode = pubspec['version_code'] as int?;
-
-    if (versionName == null || versionCode == null) {
-      throw Exception('version or version_code not found in pubspec.yaml');
-    }
-
-    print('📦 Package Version: $versionName (code: $versionCode)');
-    if (!await confirm('Continue with this version?')) {
-      print('❌ Aborted by user');
-      exit(1);
-    }
-
-    // Step 2: Update lib/src/version.dart
-    print('\n📝 Updating lib/src/version.dart...');
-    final versionFile = File('lib/src/version.dart');
-    if (!versionFile.existsSync()) {
-      throw Exception('lib/src/version.dart not found');
-    }
-
-    final versionContent =
-        '''
-const pluginVersionCode = $versionCode;
-const pluginVersionName = '$versionName';
-''';
-
-    versionFile.writeAsStringSync(versionContent);
-    print('✅ Version file updated');
-
-    if (!await confirm('Continue to update analyzer plugin pubspec?')) {
-      print('❌ Aborted by user');
-      exit(1);
-    }
-
-    // Step 3: Update tools/analyzer_plugin/pubspec.yaml
-    print('\n📝 Updating tools/analyzer_plugin/pubspec.yaml...');
-    final pluginPubspecFile = File('tools/analyzer_plugin/pubspec.yaml');
-    if (!pluginPubspecFile.existsSync()) {
-      throw Exception('tools/analyzer_plugin/pubspec.yaml not found');
-    }
-
-    final pluginPubspecContent = pluginPubspecFile.readAsStringSync();
-    final pluginPubspec = loadYaml(pluginPubspecContent) as Map;
-
-    // Get package name from main pubspec
-    final packageName = pubspec['name'] as String;
-
-    // Update the pubspec to use hosted version instead of path
-    final updatedPluginPubspec = pluginPubspecContent.replaceAllMapped(
-      RegExp('$packageName:\\s*\\n\\s*path:.*', multiLine: true),
-      (match) => '$packageName: ^$versionName',
-    );
-
-    pluginPubspecFile.writeAsStringSync(updatedPluginPubspec);
-    print('✅ Analyzer plugin pubspec updated');
+    final versionName = pubspec['version'] as String;
 
     if (!await confirm('Continue to check git status?')) {
       print('❌ Aborted by user');
