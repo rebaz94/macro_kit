@@ -1,5 +1,5 @@
 import 'package:macro_kit/macro_kit.dart';
-import 'package:macro_test/custom/json_schema_macro.dart';
+import 'package:macro_flutter/custom/json_schema_macro.dart';
 
 part 'example3.g.dart';
 

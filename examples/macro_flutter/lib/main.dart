@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:macro_flutter/custom/form_macro.dart';
+import 'package:macro_flutter/custom/json_schema_macro.dart';
 import 'package:macro_kit/macro_kit.dart';
-import 'package:macro_test/custom/form_macro.dart';
-import 'package:macro_test/custom/json_schema_macro.dart';
 
 import 'example2.dart';
 
@@ -9,7 +9,7 @@ part 'main.g.dart';
 
 void main() async {
   await runMacro(
-    package: PackageInfo('macro_test'),
+    package: PackageInfo('macro_flutter'),
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
       'JsonSchemaMacro': JsonSchemaMacro.initialize,
