@@ -14,11 +14,11 @@ String get homeDir {
 
     final user = Platform.environment['USER'];
     return user != null ? '/Users/$user' : home;
+  } else if (Platform.isWindows) {
+    return Platform.environment['LOCALAPPDATA'] ?? Platform.environment['APPDATA'] ?? '~';
+  } else {
+    return Platform.environment['HOME'] ?? '~';
   }
-
-  final envKey = Platform.operatingSystem == 'windows' ? 'APPDATA' : 'HOME';
-  final envValue = Platform.environment[envKey];
-  return envValue ?? '~';
 }
 
 String get macroDirectory {
