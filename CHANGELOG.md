@@ -1,3 +1,7 @@
+## 0.2.9
+
+- fea
+
 ## 0.2.8
 
 - Fix example folder to use `lib` directory

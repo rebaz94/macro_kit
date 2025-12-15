@@ -5,8 +5,17 @@ import 'package:macro_kit/src/common/common.dart';
 
 Future<(bool, String?)> upgradedMacroServer(String toVersion) async {
   try {
+    final path = getSystemVariableWithDartIncluded();
     final args = [dartBinary, 'pub', 'global', 'activate', 'macro_kit', toVersion];
-    final process = await Process.start(args.first, args.sublist(1));
+    final process = await Process.start(
+      args.first,
+      args.sublist(1),
+      environment: {
+        ...Platform.environment,
+        'PATH': path,
+      },
+      runInShell: Platform.isWindows,
+    );
     final output = await process.stdout.transform(utf8.decoder).toList();
 
     if (output.contains('Activated macro_kit $toVersion.')) {

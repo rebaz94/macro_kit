@@ -346,8 +346,9 @@ class MacroAnalyzerServer implements MacroServerInterface {
                   'MacroServer upgrade failed: $errMsg\n'
                   'Version conflict: Plugin v${msg.versionName} vs Server v$pluginVersionName\n'
                   'Please manually update the server by running:\n'
-                  '  dart pub global activate macro_server ${msg.versionName}',
+                  'dart pub global activate macro_kit ${msg.versionName}',
                 );
+                _upgrading = false;
                 return;
               }
 
@@ -361,7 +362,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
               logger.warn(
                 'Version mismatch detected: Server v$pluginVersionName (code: $pluginVersionCode) '
                 'is newer than Plugin v${msg.versionName} (code: ${msg.versionCode}). '
-                'Please fix version conflict',
+                'Please update macro_kit package in your pubspec.yaml into: $pluginVersionName',
               );
             }
 
@@ -402,10 +403,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   Future<void> _onPluginContextReceived(int pluginId, PluginChannelInfo plugin, List<String> contexts) async {
-    const excluded = [
-      '.dart_tool', '.pub-cache', '.idea', '.vscode', 'build/intermediates', //
-      '.symlinks/plugins', 'Intermediates.noindex', 'build/macos', //
-    ];
+    final excluded = excludedDirectory;
     contexts = contexts.where((path) => !excluded.any((word) => path.contains(word))).toList();
 
     // Remove auto-rebuild state for these contexts to trigger rebuild on reconnect
@@ -639,7 +637,9 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     if (autoRebuildConfigs.isNotEmpty) {
       sendMessageMacroClients(
-        GeneralMessage(message: 'Rebuilding macro generated code for: ${autoRebuildConfigs.map((e) => e.packageName).join(', ')}'),
+        GeneralMessage(
+          message: 'Rebuilding macro generated code for: ${autoRebuildConfigs.map((e) => e.packageName).join(', ')}',
+        ),
       );
       await _runAutoRebuildOnConnect(clientId, autoRebuildConfigs);
     }

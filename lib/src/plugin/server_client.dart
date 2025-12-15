@@ -101,24 +101,27 @@ class MacroServerClient {
   }
 
   Future<bool> startMacroServer() async {
-    final home = homeDir;
-    var path = Platform.environment['PATH'] ?? '';
-    final addToPath = [
-      'fvm/default/bin',
-      'fvm/default/.pub-cache/bin',
-      '.pub-cache/bin',
-    ].map((e) => p.join(home, e)).join(':');
-    path += ':$sdkBin:$addToPath';
-
+    final path = getSystemVariableWithDartIncluded();
     logger.info('System path: $path');
 
     try {
+      _process?.kill();
+
       const args = ['macro'];
       _process = await Process.start(
         args.first,
         args.sublist(1),
         environment: {...Platform.environment, 'PATH': path},
+        runInShell: Platform.isWindows,
       );
+
+      // _process?.stdout.transform(utf8.decoder).listen((e) {
+      //   logger.info("process info: out: $e");
+      // });
+
+      // _process?.stderr.transform(utf8.decoder).listen((e) {
+      //   logger.info("process error: out: $e");
+      // });
 
       // wait until macro server initialize itself
       await Future.delayed(const Duration(seconds: 3));
@@ -159,7 +162,7 @@ class MacroServerClient {
       wsChannel = channel;
 
       _wsSubs = channel.stream.listen(
-        (data) {
+            (data) {
           final _ = decodeMessage(data);
         },
         onError: (error) => logger.error('WebSocket error occurred', error),
