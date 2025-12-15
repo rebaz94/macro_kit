@@ -1,3 +1,8 @@
+## 0.2.8
+
+- Fix example folder to use `lib` directory
+- Use LocalAppData in windows
+
 ## 0.2.7
 
 - Add support for Dart `Type` information in macros
