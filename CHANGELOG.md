@@ -1,6 +1,6 @@
 ## 0.2.9
 
-- fea
+- Fix issue where macro server was unable to start automatically on Windows
 
 ## 0.2.8
 
