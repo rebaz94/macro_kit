@@ -86,6 +86,11 @@ class User with UserData {
 }
 ```
 
+> [!NOTE]
+> Dart source code must be placed inside the `lib` directory for the macro to generate code
+> properly. However, for testing purposes, you can pass an absolute path instead of a package name to
+> force it to load into the analysis context.
+
 ### 2. Save and generate
 
 Press **Ctrl+S** to save. Generation happens instantly!
@@ -239,7 +244,8 @@ For CI/CD and testing environments, you'll need to set up manual generation:
 
 1. Install macro_kit: `dart pub global activate macro_kit`
 2. Start the macro server in a separate process: `macro` (normally handled by the plugin).
-   Alternatively, you can import internal functions like `startMacroServer` directly if you prefer not
+   Alternatively, you can import internal functions like `startMacroServer` directly if you prefer
+   not
    to activate the plugin globally (CI only)
 3. Add absolute paths for directories to regenerate—context is loaded dynamically without requiring
    the analyzer plugin
