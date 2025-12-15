@@ -26,8 +26,13 @@ import 'base.dart';
 
 typedef _AssetDirInfo = ({AssetMacroInfo macro, String relativeBasePath, String absoluteOutputPath});
 
-class MacroAnalyzerServer extends MacroAnalyzer {
-  MacroAnalyzerServer({required super.logger});
+class MacroAnalyzerServer implements MacroServerInterface {
+  MacroAnalyzerServer({
+    required this.logger,
+    required this.analyzer,
+  }) {
+    _setupAutoShutdown();
+  }
 
   static final MacroAnalyzerServer instance = () {
     final sink = MacroLogger.getFileAppendLogger('server.log');
@@ -37,9 +42,14 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     final logger = MacroLogger.createLogger(name: 'MacroAnalyzer', into: logTo);
-    return MacroAnalyzerServer(logger: logger).._setupAutoShutdown();
+    final analyzer = MacroAnalyzer(logger: logger);
+    final server = MacroAnalyzerServer(logger: logger, analyzer: analyzer);
+    analyzer.server = server;
+    return server;
   }();
 
+  final MacroLogger logger;
+  final MacroAnalyzer analyzer;
   final CustomBasicLock lock = CustomBasicLock();
   final CustomBasicLock rebuildLock = CustomBasicLock();
   final Map<String, StreamSubscription<WatchEvent>> _subs = {};
@@ -68,13 +78,13 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   void _onAutoShutdownCB(Timer timer) async {
-    if (_scheduleToShutdown || contexts.isNotEmpty) return;
+    if (_scheduleToShutdown || analyzer.contexts.isNotEmpty) return;
 
     _scheduleToShutdown = true;
     await Future.delayed(const Duration(minutes: 5));
 
     // if there is context, return with activated timer
-    if (contexts.isNotEmpty) {
+    if (analyzer.contexts.isNotEmpty) {
       _scheduleToShutdown = false;
       return;
     }
@@ -121,35 +131,35 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
       // Check if contexts actually changed
       final contextsChanged = !const DeepCollectionEquality().equals(
-        contexts.map((e) => e.path).toList(),
+        analyzer.contexts.map((e) => e.path).toList(),
         analysisContextPaths,
       );
 
       if (!contextsChanged) {
         // Even if contexts didn't change, we need to update asset config and watchers
-        fileCaches.clear();
+        analyzer.fileCaches.clear();
         final assetContexts = _setupAssetMacroConfiguration();
         await _reWatchContexts(CombinedListView([watchPaths, assetContexts]));
         await _prepareAutoRebuildForAllClient(connectedClient: connectedClient);
         return;
       }
 
-      _sendMessageMacroClients(
+      sendMessageMacroClients(
         GeneralMessage(message: 'Loading analysis context:\n${analysisContextPaths.map((e) => '-> $e').join('\n')}'),
       );
       // Create new analysis context collection
-      var old = contextCollection;
-      contextCollection = AnalysisContextCollectionImpl(
+      var old = analyzer.contextCollection;
+      analyzer.contextCollection = AnalysisContextCollectionImpl(
         includedPaths: analysisContextPaths,
-        byteStore: byteStore,
+        byteStore: analyzer.byteStore,
         resourceProvider: PhysicalResourceProvider.INSTANCE,
       );
 
       // Update contexts list
-      contexts = _contextRegistry.values.map((info) => info).toList();
+      analyzer.contexts = _contextRegistry.values.map((info) => info).toList();
 
       // Clear caches and setup watchers
-      fileCaches.clear();
+      analyzer.fileCaches.clear();
       final assetContexts = _setupAssetMacroConfiguration();
       await _reWatchContexts(CombinedListView([watchPaths, assetContexts]));
       await _prepareAutoRebuildForAllClient(connectedClient: connectedClient);
@@ -181,8 +191,8 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       // Preserve auto-rebuild state if context already exists
       final existingInfo = _contextRegistry[contextPath];
 
-      final packageName = loadContextPackageName(contextPath);
-      final config = loadMacroConfig(contextPath, packageName);
+      final packageName = analyzer.loadContextPackageName(contextPath);
+      final config = analyzer.loadMacroConfig(contextPath, packageName);
 
       final contextInfo = ContextInfo(
         path: contextPath,
@@ -238,7 +248,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
                   'Skipping output directory "${macro.output}" for macro "${macro.macroName}": must be a relative path';
               logger.warn(msg);
 
-              _sendMessageMacroClients(
+              sendMessageMacroClients(
                 clientId: clientChannel.id,
                 GeneralMessage(message: msg, level: Level.WARNING),
               );
@@ -267,7 +277,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
             'Skipping asset directory "$inputDir": output directory cannot be the same as input '
             '(would cause infinite regeneration loop)';
 
-        _sendMessageMacroClients(
+        sendMessageMacroClients(
           GeneralMessage(message: msg, level: Level.WARNING),
         );
         logger.warn(msg);
@@ -553,7 +563,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     final msg = 'No client found for macro "$targetMacro" in context "${contextInfo.packageName}" for file: $filePath';
-    _sendMessageMacroClients(
+    sendMessageMacroClients(
       GeneralMessage(
         message: msg,
         level: Level.WARNING,
@@ -605,7 +615,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       for (final pkgName in clientChannel.package.values) {
         if (!pkgName.contains('/') && !pkgName.contains('\\')) continue;
 
-        final config = loadMacroConfig(pkgName, pkgName);
+        final config = analyzer.loadMacroConfig(pkgName, pkgName);
 
         if (!config.autoRebuildOnConnect && !config.alwaysRebuildOnConnect) continue;
         if (config.alwaysRebuildOnConnect && !isSameClient) continue;
@@ -628,8 +638,8 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     }
 
     if (autoRebuildConfigs.isNotEmpty) {
-      _sendMessageMacroClients(
-        GeneralMessage(message: 'Rebuilding macro generated for: ${clientChannel.package.values.join(', ')}'),
+      sendMessageMacroClients(
+        GeneralMessage(message: 'Rebuilding macro generated code for: ${autoRebuildConfigs.map((e) => e.packageName).join(', ')}'),
       );
       await _runAutoRebuildOnConnect(clientId, autoRebuildConfigs);
     }
@@ -643,7 +653,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
     var pluginInfo = _pluginChannels.entries.firstOrNull;
     if (pluginInfo == null) {
-      _pluginChannels[newId()] = PluginChannelInfo(
+      _pluginChannels[analyzer.newId()] = PluginChannelInfo(
         channel: null,
         contextPaths: newContextPaths,
       );
@@ -678,6 +688,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
         results.add(
           RegeneratedContextResult(
+            package: contextInfo.packageName,
             context: contextInfo.path,
             error: err,
             completedInMilliseconds: s.elapsedMilliseconds,
@@ -708,7 +719,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
     (AnalysisContext?, StateError?) getContext(String path) {
       try {
-        final context = contextCollection.contextFor(contextPath);
+        final context = analyzer.contextCollection.contextFor(contextPath);
         return (context, null);
       } on StateError catch (e) {
         return (null, e);
@@ -728,7 +739,7 @@ class MacroAnalyzerServer extends MacroAnalyzer {
     _processNext();
 
     // wait until receive completed event
-    await pendingAnalyzeCompleted.stream.first;
+    await analyzer.pendingAnalyzeCompleted.stream.first;
     return null;
   }
 
@@ -742,31 +753,33 @@ class MacroAnalyzerServer extends MacroAnalyzer {
 
   void _onFileChanged(String path, ChangeType changeType, {bool startProcessing = true}) {
     const minimumThreshold = 30;
-    if (lastAnalyzingPath == path && lastChangeType == changeType && minimumThreshold > getDiffFromLastExecution()) {
+    if (analyzer.lastAnalyzingPath == path &&
+        analyzer.lastChangeType == changeType &&
+        minimumThreshold > analyzer.getDiffFromLastExecution()) {
       // duplicate event, ignore it
       return;
     }
 
-    lastAnalyzingPath = path;
-    lastChangeType = changeType;
+    analyzer.lastAnalyzingPath = path;
+    analyzer.lastChangeType = changeType;
 
     final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
     if (assetMacros == null && (p.extension(path, 2) != '.dart')) {
       logger.fine('Ignored: $path');
       return;
     } else if (assetMacros == null && changeType == ChangeType.REMOVE) {
-      mayContainsMacroCache.remove(path);
+      analyzer.mayContainsMacroCache.remove(path);
       final (:genFilePath, relativePartFilePath: _) = buildGeneratedFileInfo(path);
-      removeFile(genFilePath);
+      analyzer.removeFile(genFilePath);
       return;
     }
 
-    if (currentAnalyzingPath == '' || currentAnalyzingPath == path) {
+    if (analyzer.currentAnalyzingPath == '' || analyzer.currentAnalyzingPath == path) {
       // its first time or file changed during current analyzing, so we have to run it again
-      pendingAnalyze[(path: path, type: changeType, force: true)] = assetMacros == null
-          ? defaultNullPendingAnalyzeValue
+      analyzer.pendingAnalyze[(path: path, type: changeType, force: true)] = assetMacros == null
+          ? analyzer.defaultNullPendingAnalyzeValue
           : (asset: assetMacros);
-    } else if (pendingAnalyze.containsKey((path: path, type: changeType, force: false))) {
+    } else if (analyzer.pendingAnalyze.containsKey((path: path, type: changeType, force: false))) {
       // its already in pending list, so no duplicate, next time it process it
       return;
     }
@@ -814,44 +827,33 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   Future<void> _processNext() async {
-    if (isAnalyzingFile) return;
+    if (analyzer.isAnalyzingFile) return;
 
-    if (pendingAnalyze.isEmpty) {
+    if (analyzer.pendingAnalyze.isEmpty) {
       // broadcast no work(currently used only for force generation)
-      if (pendingAnalyzeCompleted.hasListener) {
-        pendingAnalyzeCompleted.sink.add(true);
+      if (analyzer.pendingAnalyzeCompleted.hasListener) {
+        analyzer.pendingAnalyzeCompleted.sink.add(true);
       }
       return;
     }
 
-    isAnalyzingFile = true;
-    final key = pendingAnalyze.keys.first;
-    final currentAnalyze = pendingAnalyze.remove(key)!;
+    analyzer.isAnalyzingFile = true;
+    final key = analyzer.pendingAnalyze.keys.first;
+    final currentAnalyze = analyzer.pendingAnalyze.remove(key)!;
 
     try {
       if (currentAnalyze.asset != null) {
-        await processAssetSource(key.path, currentAnalyze.asset!, key.type);
+        await analyzer.processAssetSource(key.path, currentAnalyze.asset!, key.type);
       } else {
-        await processDartSource(key.path);
+        await analyzer.processDartSource(key.path);
       }
     } catch (e, s) {
       logger.error('Failed to parse source code', e, s);
     } finally {
-      iterationCaches.clear();
-      isAnalyzingFile = false;
+      analyzer.iterationCaches.clear();
+      analyzer.isAnalyzingFile = false;
       // continue with next
       _processNext();
-    }
-  }
-
-  @override
-  void removeFile(String path) {
-    try {
-      (fileCaches[path] ?? File(path)).deleteSync();
-    } on PathNotFoundException {
-      return;
-    } catch (e) {
-      logger.error('Failed to delete file', e);
     }
   }
 
@@ -915,7 +917,8 @@ class MacroAnalyzerServer extends MacroAnalyzer {
   }
 
   /// send message to all client or only specific one if [clientId] is provided
-  void _sendMessageMacroClients(GeneralMessage message, {int? clientId}) {
+  @override
+  void sendMessageMacroClients(GeneralMessage message, {int? clientId}) {
     if (clientId != null) {
       _addMessageToClient(clientId, message);
       return;
@@ -958,6 +961,6 @@ class MacroAnalyzerServer extends MacroAnalyzer {
       tryFn(() => channel.channel.sink.close(normalClosure, 'Server is closing').catchError((_) {}));
     }
 
-    tryFn(contextCollection.dispose);
+    tryFn(analyzer.contextCollection.dispose);
   }
 }

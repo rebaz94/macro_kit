@@ -1,3 +1,10 @@
+## 0.2.7
+
+- Add support for Dart `Type` information in macros
+- Fix metadata extraction from const variable annotations
+- Refactor and improve internal API structure
+- Change macro server to opt-out behavior: starts by default unless disabled
+
 ## 0.2.6
 
 - Add logging for regeneration

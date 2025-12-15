@@ -67,7 +67,7 @@ void _onNewCodeGeneratorConnection(WebSocketChannel webSocket) async {
 
 Future<Response> _getServerContexts(Request request) async {
   return Response.ok(
-    jsonEncode(MacroAnalyzerServer.instance.contexts.map((e) => e.path).toList()),
+    jsonEncode(MacroAnalyzerServer.instance.analyzer.contexts.map((e) => e.path).toList()),
     headers: {
       HttpHeaders.contentTypeHeader: ContentType.json.value,
     },

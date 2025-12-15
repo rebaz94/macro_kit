@@ -3,7 +3,6 @@ import 'package:collection/collection.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
-import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/core/modifier.dart';
 
@@ -224,7 +223,7 @@ mixin AnalyzeClass on BaseAnalyzer {
 
     for (final tp in typeParameterElements) {
       if (tp.bound != null) {
-        final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+        final typeBoundRes = await getTypeInfoFrom(
           tp.bound,
           allTypeParams,
           capability.filterClassMethodMetadata,
@@ -234,13 +233,13 @@ mixin AnalyzeClass on BaseAnalyzer {
         typeParams.add(
           MacroProperty(
             name: tp.name ?? '',
-            importPrefix: importPrefix,
-            type: type,
-            typeInfo: typeInfo,
-            functionTypeInfo: fnInfo,
-            deepEquality: deepEq,
-            classInfo: classInfo,
-            typeArguments: typeArguments,
+            importPrefix: typeBoundRes.importPrefix,
+            type: typeBoundRes.type,
+            typeInfo: typeBoundRes.typeInfo,
+            functionTypeInfo: typeBoundRes.fnInfo,
+            classInfo: typeBoundRes.classInfo,
+            typeArguments: typeBoundRes.typeArguments,
+            typeRefType: typeBoundRes.typeRefType,
             modifier: const MacroModifier({}),
             // constantValue: tp.element.bound!.getDisplayString(), // not needed since type has it
           ),
@@ -253,7 +252,6 @@ mixin AnalyzeClass on BaseAnalyzer {
             type: '',
             typeInfo: TypeInfo.generic,
             functionTypeInfo: null,
-            deepEquality: null,
             classInfo: null,
             typeArguments: null,
             modifier: const MacroModifier({}),

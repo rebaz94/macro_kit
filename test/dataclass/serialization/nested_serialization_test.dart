@@ -36,7 +36,7 @@ void main() {
         PersonData.fromJson({
           'name': 'Max',
           'age': 18,
-          'car': {'drivenKm': 1000, 'brand': 'audi'},
+          'car': {'drivenKm': 1000, 'brand': 'Audi'},
         }),
         equals(Person('Max', car: const Car(1000, Brand.Audi))),
       );

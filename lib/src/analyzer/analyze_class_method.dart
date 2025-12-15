@@ -1,6 +1,5 @@
 import 'package:analyzer/dart/element/element.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
-import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/core/core.dart';
 
 mixin AnalyzeClassMethod on BaseAnalyzer {

@@ -1,7 +1,6 @@
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
-import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/core/modifier.dart';
 
@@ -54,7 +53,7 @@ mixin AnalyzeClassField on BaseAnalyzer {
         }
       }
 
-      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final fieldTypeRes = await getTypeInfoFrom(
         fieldElem,
         classTypeParams,
         capability.filterClassMethodMetadata,
@@ -90,13 +89,13 @@ mixin AnalyzeClassField on BaseAnalyzer {
       classFields.add(
         MacroProperty(
           name: field.name ?? '',
-          importPrefix: importPrefix,
-          type: type,
-          typeInfo: typeInfo,
-          functionTypeInfo: fnInfo,
-          deepEquality: deepEq,
-          classInfo: classInfo,
-          typeArguments: typeArguments,
+          importPrefix: fieldTypeRes.importPrefix,
+          type: fieldTypeRes.type,
+          typeInfo: fieldTypeRes.typeInfo,
+          functionTypeInfo: fieldTypeRes.fnInfo,
+          classInfo: fieldTypeRes.classInfo,
+          typeRefType: fieldTypeRes.typeRefType,
+          typeArguments: fieldTypeRes.typeArguments,
           fieldInitializer: null,
           modifier: MacroModifier.getModifierInfoFrom(
             fieldElem,

@@ -1424,7 +1424,7 @@ class DataClassMacro extends MacroGenerator {
             .map((field) {
               final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
 
-              return field.deepEquality == true
+              return field.deepEquality
                   ? '     const DeepCollectionEquality().equals(other.$fieldPropName, v.$fieldPropName)'
                   : '     (${dcp}identical(other.$fieldPropName, v.$fieldPropName) || other.$fieldPropName == v.$fieldPropName)';
             })
@@ -1448,7 +1448,7 @@ class DataClassMacro extends MacroGenerator {
               .map(
                 (field) {
                   final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
-                  return field.deepEquality == true
+                  return field.deepEquality
                       ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
                       : 'v.$fieldPropName';
                 },
@@ -1475,7 +1475,7 @@ class DataClassMacro extends MacroGenerator {
               .map(
                 (field) {
                   final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
-                  return field.deepEquality == true
+                  return field.deepEquality
                       ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
                       : 'v.$fieldPropName';
                 },
@@ -1859,6 +1859,15 @@ class DataClassMacro extends MacroGenerator {
     }
 
     return ('$importPrefix${t.substring(0, start)}$mixinSuffix', (t.substring(start, end + 1)));
+  }
+}
+
+extension on MacroProperty {
+  bool get deepEquality {
+    return switch (typeInfo) {
+      TypeInfo.list || TypeInfo.map || TypeInfo.iterable || TypeInfo.set => true,
+      _ => false,
+    };
   }
 }
 

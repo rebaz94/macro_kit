@@ -4,6 +4,8 @@ import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
+// ignore: implementation_imports
+import 'package:analyzer/src/dart/constant/value.dart';
 import 'package:collection/collection.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
@@ -13,15 +15,18 @@ import 'package:macro_kit/src/core/modifier.dart';
 
 typedef TypeInfoResult = ({
   String importPrefix,
-  MacroClassDeclaration? classInfo,
-  bool? deepEq,
-  MacroMethod? fnInfo,
   String type,
-  List<MacroProperty>? typeArguments,
   TypeInfo typeInfo,
+  MacroClassDeclaration? classInfo,
+  MacroMethod? fnInfo,
+  List<MacroProperty>? typeArguments,
+
+  /// The type that assigned to [Type] from dart
+  MacroProperty? typeRefType,
 });
 
-extension Types on BaseAnalyzer {
+mixin Types on BaseAnalyzer {
+  @override
   bool isValidAnnotation(
     ElementAnnotation? annotation, {
     required String className,
@@ -44,6 +49,7 @@ extension Types on BaseAnalyzer {
     return a == b;
   }
 
+  @override
   Future<MacroConfig?> computeMacroMetadata(ElementAnnotation macroMetadata) async {
     final macro = macroMetadata.computeConstantValue();
     if (macro == null) return null;
@@ -55,13 +61,7 @@ extension Types on BaseAnalyzer {
     final cap = generator.peek('capability');
     if (cap == null) return null;
 
-    List<String> fields;
-    if (generator.type?.element case ClassElement cls) {
-      fields = cls.fields.map((e) => e.name ?? '').toList();
-    } else {
-      return null;
-    }
-
+    final fields = (generator as DartObjectImpl).fields?.keys.toList() ?? const [];
     final capability = MacroCapability(
       classFields: cap.peek('classFields')?.toBoolValue() ?? false,
       filterClassInstanceFields: cap.peek('filterClassInstanceFields')?.toBoolValue() ?? false,
@@ -90,28 +90,23 @@ extension Types on BaseAnalyzer {
       final fieldValue = generator.peek(fieldName);
       if (fieldValue == null) continue;
 
-      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
-        fieldValue.type,
-        const [],
-        '',
-        capability,
-      );
-      final (:constantValue, :reqConversion, :modifier) = await computeMacroKeyValue(fieldName, fieldValue, capability);
+      final typeRes = await getTypeInfoFrom(fieldValue, const [], '', capability);
+      final valueRes = await computeMacroKeyValue(fieldName, fieldValue, capability);
 
       props.add(
         MacroProperty(
           name: fieldName,
-          importPrefix: importPrefix,
-          type: type,
-          typeInfo: typeInfo,
-          typeArguments: typeArguments,
-          classInfo: classInfo,
-          deepEquality: deepEq,
-          functionTypeInfo: fnInfo,
+          importPrefix: typeRes.importPrefix,
+          type: typeRes.type,
+          typeInfo: typeRes.typeInfo,
+          typeArguments: typeRes.typeArguments,
+          classInfo: typeRes.classInfo,
+          functionTypeInfo: typeRes.fnInfo,
+          typeRefType: typeRes.typeRefType,
           fieldInitializer: null,
-          constantModifier: modifier,
-          constantValue: constantValue,
-          requireConversionToLiteral: reqConversion ? true : null,
+          constantModifier: valueRes.modifier,
+          constantValue: valueRes.constantValue,
+          requireConversionToLiteral: valueRes.reqConversion ? true : null,
         ),
       );
     }
@@ -119,75 +114,71 @@ extension Types on BaseAnalyzer {
     return MacroConfig(
       capability: capability,
       combine: combineGeneratedClasses,
-      key: MacroKey(name: generator.type?.element?.displayName ?? '', properties: props),
+      key: MacroKey(name: generator.type.element?.displayName ?? '', properties: props),
     );
   }
 
-  Future<List<MacroKey>?> computeMacroKeys(
-    String filter,
-    Metadata metadata,
-    MacroCapability capability,
-  ) async {
-    List<MacroKey>? macroKeys;
-    if (filter == '*') {
-      final keys = metadata.annotations.map((e) => computeMacroKey(e, capability));
-      macroKeys = (await Future.wait(keys)).nonNulls.toList();
-    } else if (filter.isNotEmpty) {
-      final targetKeys = filter.split(',');
-      final keys = metadata.annotations
-          .where((elem) => targetKeys.contains(elem.element?.displayName))
-          .map((e) => computeMacroKey(e, capability));
-      macroKeys = (await Future.wait(keys)).nonNulls.toList();
+  @override
+  Future<List<MacroKey>?> computeMacroKeys(String filter, Metadata metadata, MacroCapability capability) async {
+    if (filter.isEmpty) return null;
+
+    final targetKeys = filter == '*' ? null : filter.split(',');
+    final keys = <MacroKey>[];
+
+    for (final elem in metadata.annotations) {
+      final name = switch (elem.element) {
+        GetterElement getterElement => getterElement.returnType.element?.displayName ?? '',
+        _ => elem.element?.displayName ?? '',
+      };
+      if (targetKeys?.contains(name) == false) continue;
+
+      final res = await computeMacroKey(name, elem, capability);
+      if (res != null) {
+        keys.add(res);
+      }
     }
 
-    return macroKeys;
+    return keys.isEmpty ? null : keys;
   }
 
-  Future<MacroKey?> computeMacroKey(ElementAnnotation macroMetadata, MacroCapability capability) async {
-    final frag = macroMetadata.element?.firstFragment;
-    if (frag is! ConstructorFragment) return null;
+  @override
+  Future<MacroKey?> computeMacroKey(String keyName, ElementAnnotation macroMetadata, MacroCapability capability) async {
+    final DartObject? value = macroMetadata.computeConstantValue();
+    if (value == null) return null;
 
-    final fields = frag.formalParameters.map((e) => e.name ?? '').toList();
-
-    final value = macroMetadata.computeConstantValue();
-    if (value == null) {
-      return null;
-    }
-
+    // use dart analyzer internal fields property
+    final fields = (value as DartObjectImpl).fields?.keys.toList() ?? const [];
     final List<MacroProperty> props = [];
+
     for (final fieldName in fields) {
       final fieldValue = value.peek(fieldName);
       if (fieldValue == null) continue;
 
-      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
-        fieldValue.type,
-        const [],
-        '',
-        capability,
-      );
-      final (:constantValue, :reqConversion, :modifier) = await computeMacroKeyValue(fieldName, fieldValue, capability);
+      final typeRes = await getTypeInfoFrom(fieldValue, const [], '', capability);
+      final valueRes = await computeMacroKeyValue(fieldName, fieldValue, capability);
 
       props.add(
         MacroProperty(
           name: fieldName,
-          importPrefix: importPrefix,
-          type: type,
-          typeInfo: typeInfo,
-          typeArguments: typeArguments,
-          classInfo: classInfo,
-          deepEquality: deepEq,
-          functionTypeInfo: fnInfo,
+          importPrefix: typeRes.importPrefix,
+          type: typeRes.type,
+          typeInfo: typeRes.typeInfo,
+          typeArguments: typeRes.typeArguments,
+          classInfo: typeRes.classInfo,
+          functionTypeInfo: typeRes.fnInfo,
+          typeRefType: typeRes.typeRefType,
           fieldInitializer: null,
-          constantValue: constantValue,
-          constantModifier: modifier,
-          requireConversionToLiteral: reqConversion ? true : null,
+          constantValue: valueRes.constantValue,
+          constantModifier: valueRes.modifier,
+          requireConversionToLiteral: valueRes.reqConversion ? true : null,
         ),
       );
     }
 
-    return MacroKey(name: macroMetadata.element?.displayName ?? '', properties: props);
+    return MacroKey(name: keyName, properties: props);
   }
 
+  @override
   Future<({Object? constantValue, MacroModifier modifier, bool reqConversion})?> computeConstantInitializerValue(
     String fieldName,
     DartObject fieldValue,
@@ -198,6 +189,7 @@ extension Types on BaseAnalyzer {
 
   /// return a tuple of dart representation of the literal along with
   /// regular value for the constant that can be encoded
+  @override
   Future<({Object? constantValue, MacroModifier modifier, bool reqConversion})> computeMacroKeyValue(
     String fieldName,
     DartObject fieldValue,
@@ -208,7 +200,6 @@ extension Types on BaseAnalyzer {
     }
 
     final fieldFnValue = fieldValue.toFunctionValue();
-
     if (fieldFnValue != null && fieldFnValue.displayName.isNotEmpty) {
       // field value is a function or constructor
       final isConstructor = fieldFnValue is ConstructorElement;
@@ -219,29 +210,6 @@ extension Types on BaseAnalyzer {
         reqConversion: false,
         modifier: MacroModifier.create(isStatic: fieldFnValue.isStatic),
       );
-    }
-    // check maybe its Type
-    else if (fieldValue.toTypeValue() case DartType typeValue) {
-      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
-        typeValue,
-        [],
-        '',
-        capability,
-      );
-
-      final typeProp = MacroProperty(
-        name: '',
-        importPrefix: importPrefix,
-        type: type,
-        typeInfo: typeInfo,
-        functionTypeInfo: fnInfo,
-        deepEquality: deepEq,
-        classInfo: classInfo,
-        typeArguments: typeArguments,
-        modifier: MacroModifier.getModifierInfoFrom(typeValue),
-        fieldInitializer: null,
-      );
-      return (constantValue: typeProp, reqConversion: false, modifier: typeProp.modifier);
     }
     // check maybe its enum
     else if (fieldValue.type?.element?.kind == ElementKind.ENUM) {
@@ -256,8 +224,8 @@ extension Types on BaseAnalyzer {
         // final result = 'const ${fieldValue.constructorInvocation!.constructor.qualifiedName}()';
         // library developer should use type information to build a literal dart constant value
         // we encode it, so that can be transferred between process
-        final object = runZoneGuarded(
-          fn: () => fieldValue.literalForObject(fieldName, []),
+        final object = await runZoneGuarded(
+          fn: () => fieldValue.literalForObject(fieldName, [], analyzer: this, capability: capability),
           values: {#imports: importPrefixByElements},
         );
         return (
@@ -266,8 +234,8 @@ extension Types on BaseAnalyzer {
           modifier: MacroModifier.create(isConst: true),
         );
       } else {
-        final object = runZoneGuarded(
-          fn: () => fieldValue.literalForObject(fieldName, []),
+        final object = await runZoneGuarded(
+          fn: () => fieldValue.literalForObject(fieldName, [], analyzer: this, capability: capability),
           values: {#imports: importPrefixByElements},
         );
         if (object != null) {
@@ -279,13 +247,15 @@ extension Types on BaseAnalyzer {
     }
   }
 
+  @override
   Future<TypeInfoResult> getTypeInfoFrom(
     Object? /*Element?|DartType*/ elem,
     List<MacroProperty> genericParams,
     String filterMethodMetadata,
     MacroCapability capability,
   ) async {
-    final type = switch (elem) {
+    final DartType? type = switch (elem) {
+      DartObject() => elem.type,
       FieldElement() => elem.type,
       FormalParameterElement() => elem.type,
       PropertyInducingElement() => elem.type,
@@ -307,7 +277,7 @@ extension Types on BaseAnalyzer {
         typeArguments: null,
         fnInfo: null,
         classInfo: null,
-        deepEq: false,
+        typeRefType: null,
       );
     }
 
@@ -318,7 +288,7 @@ extension Types on BaseAnalyzer {
     List<MacroProperty>? macroTypeArguments;
     MacroMethod? fnTypeInfo;
     MacroClassDeclaration? classInfo;
-    bool? deepEquality;
+    MacroProperty? typeRefType;
 
     if (type.isDartCoreInt) {
       typeInfo = TypeInfo.int;
@@ -332,7 +302,6 @@ extension Types on BaseAnalyzer {
       typeInfo = TypeInfo.boolean;
     } else if (type.isDartCoreIterable) {
       typeInfo = TypeInfo.iterable;
-      deepEquality = true;
 
       final typeArguments = getTypeArguments(type, 'iterable');
       macroTypeArguments = await createMacroTypeArguments(
@@ -344,7 +313,6 @@ extension Types on BaseAnalyzer {
       );
     } else if (type.isDartCoreList) {
       typeInfo = TypeInfo.list;
-      deepEquality = true;
 
       final typeArguments = getTypeArguments(type, 'list');
       macroTypeArguments = await createMacroTypeArguments(
@@ -356,7 +324,6 @@ extension Types on BaseAnalyzer {
       );
     } else if (type.isDartCoreMap) {
       typeInfo = TypeInfo.map;
-      deepEquality = true;
 
       final typeArguments = getTypeArguments(type, 'map');
       macroTypeArguments = await createMacroTypeArguments(
@@ -368,7 +335,6 @@ extension Types on BaseAnalyzer {
       );
     } else if (type.isDartCoreSet) {
       typeInfo = TypeInfo.set;
-      deepEquality = true;
 
       final typeArguments = getTypeArguments(type, 'set');
       macroTypeArguments = await createMacroTypeArguments(
@@ -393,6 +359,23 @@ extension Types on BaseAnalyzer {
       typeInfo = TypeInfo.nullType;
     } else if (type.isDartCoreType) {
       typeInfo = TypeInfo.type;
+
+      final mainType = type;
+      if (elem is DartObject) {
+        final typeRes = await getTypeInfoFrom(elem.toTypeValue(), [], '', capability);
+        typeRefType = MacroProperty(
+          name: typeRes.type,
+          importPrefix: typeRes.importPrefix,
+          type: typeRes.type,
+          typeInfo: typeRes.typeInfo,
+          functionTypeInfo: typeRes.fnInfo,
+          classInfo: typeRes.classInfo,
+          typeRefType: typeRes.typeRefType,
+          typeArguments: typeRes.typeArguments,
+          modifier: MacroModifier.getModifierInfoFrom(mainType),
+          fieldInitializer: null,
+        );
+      }
     } else if (type.isDartCoreObject) {
       typeInfo = TypeInfo.object;
     } else if (type is VoidType) {
@@ -485,10 +468,11 @@ extension Types on BaseAnalyzer {
       typeArguments: macroTypeArguments,
       fnInfo: fnTypeInfo,
       classInfo: classInfo,
-      deepEq: deepEquality,
+      typeRefType: typeRefType,
     );
   }
 
+  @override
   Future<MacroMethod> getFunctionInfo(
     Object? method,
     List<MacroProperty> genericParams, {
@@ -536,25 +520,24 @@ extension Types on BaseAnalyzer {
 
     // parameters
     for (final param in fnType.formalParameters) {
-      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final typeRes = await getTypeInfoFrom(
         param,
         CombinedListView([typeParams, genericParams]),
         filterMethodMetadata,
         capability,
       );
-
       final macroKeys = await computeMacroKeys(filterMethodMetadata, param.metadata, capability);
 
       params.add(
         MacroProperty(
           name: param.name ?? '',
-          importPrefix: importPrefix,
-          type: type,
-          typeInfo: typeInfo,
-          deepEquality: deepEq,
-          typeArguments: typeArguments,
-          classInfo: classInfo,
-          functionTypeInfo: fnInfo,
+          importPrefix: typeRes.importPrefix,
+          type: typeRes.type,
+          typeInfo: typeRes.typeInfo,
+          typeArguments: typeRes.typeArguments,
+          classInfo: typeRes.classInfo,
+          functionTypeInfo: typeRes.fnInfo,
+          typeRefType: typeRes.typeRefType,
           modifier: MacroModifier.getModifierInfoFrom(
             param,
             isNullable: param.type.nullabilitySuffix != NullabilitySuffix.none,
@@ -566,7 +549,7 @@ extension Types on BaseAnalyzer {
     }
 
     // return type
-    final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+    final returnTypeRes = await getTypeInfoFrom(
       returnType,
       CombinedListView([typeParams, genericParams]),
       filterMethodMetadata,
@@ -574,13 +557,13 @@ extension Types on BaseAnalyzer {
     );
     final returnTypeProp = MacroProperty(
       name: '',
-      importPrefix: importPrefix,
-      type: type,
-      typeInfo: typeInfo,
-      deepEquality: deepEq,
-      classInfo: classInfo,
-      functionTypeInfo: fnInfo,
-      typeArguments: typeArguments,
+      importPrefix: returnTypeRes.importPrefix,
+      type: returnTypeRes.type,
+      typeInfo: returnTypeRes.typeInfo,
+      classInfo: returnTypeRes.classInfo,
+      functionTypeInfo: returnTypeRes.fnInfo,
+      typeRefType: returnTypeRes.typeRefType,
+      typeArguments: returnTypeRes.typeArguments,
       modifier: MacroModifier.getModifierInfoFrom(
         returnType!,
         isNullable: returnType.nullabilitySuffix != NullabilitySuffix.none,
@@ -608,6 +591,7 @@ extension Types on BaseAnalyzer {
     );
   }
 
+  @override
   List<DartType> getTypeArguments(DartType type, String forName) {
     if (type is ParameterizedType) {
       return type.typeArguments;
@@ -625,6 +609,7 @@ extension Types on BaseAnalyzer {
     return const [];
   }
 
+  @override
   Future<List<MacroProperty>> createMacroTypeArguments(
     List<DartType> types,
     List<MacroProperty> genericParams,
@@ -634,22 +619,18 @@ extension Types on BaseAnalyzer {
   }) async {
     final macroTypeArguments = <MacroProperty>[];
     for (final genericType in (mustTake == null ? types : types.take(mustTake))) {
-      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
-        genericType,
-        genericParams,
-        filterMethodMetadata,
-        capability,
-      );
+      final typeRes = await getTypeInfoFrom(genericType, genericParams, filterMethodMetadata, capability);
+
       macroTypeArguments.add(
         MacroProperty(
           name: '',
-          importPrefix: importPrefix,
-          type: type,
-          typeInfo: typeInfo,
-          deepEquality: deepEq,
-          classInfo: classInfo,
-          typeArguments: typeArguments,
-          functionTypeInfo: fnInfo,
+          importPrefix: typeRes.importPrefix,
+          type: typeRes.type,
+          typeInfo: typeRes.typeInfo,
+          classInfo: typeRes.classInfo,
+          typeArguments: typeRes.typeArguments,
+          functionTypeInfo: typeRes.fnInfo,
+          typeRefType: typeRes.typeRefType,
           fieldInitializer: null,
         ),
       );
@@ -657,7 +638,7 @@ extension Types on BaseAnalyzer {
 
     if (mustTake != null) {
       for (int i = macroTypeArguments.length; i < mustTake; i++) {
-        final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+        final typeRes = await getTypeInfoFrom(
           null,
           genericParams,
           filterMethodMetadata,
@@ -667,13 +648,13 @@ extension Types on BaseAnalyzer {
         macroTypeArguments.add(
           MacroProperty(
             name: '',
-            importPrefix: importPrefix,
-            type: type,
-            typeInfo: typeInfo,
-            deepEquality: deepEq,
-            classInfo: classInfo,
-            typeArguments: typeArguments,
-            functionTypeInfo: fnInfo,
+            importPrefix: typeRes.importPrefix,
+            type: typeRes.type,
+            typeInfo: typeRes.typeInfo,
+            classInfo: typeRes.classInfo,
+            typeArguments: typeRes.typeArguments,
+            functionTypeInfo: typeRes.fnInfo,
+            typeRefType: typeRes.typeRefType,
             fieldInitializer: null,
           ),
         );
@@ -683,6 +664,7 @@ extension Types on BaseAnalyzer {
     return macroTypeArguments;
   }
 
+  @override
   Future<MacroProperty?> inspectStaticFromJson(
     DartType type,
     List<MacroProperty> genericParams,
@@ -698,21 +680,22 @@ extension Types on BaseAnalyzer {
         return null;
       }
 
-      final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+      final paramTypeRes = await getTypeInfoFrom(
         firstParam.type,
         genericParams,
         filterMethodMetadata,
         capability,
       );
+
       return MacroProperty(
         name: '',
-        importPrefix: importPrefix,
-        type: type,
-        typeInfo: typeInfo,
-        deepEquality: deepEq,
-        classInfo: classInfo,
-        functionTypeInfo: fnInfo,
-        typeArguments: typeArguments,
+        importPrefix: paramTypeRes.importPrefix,
+        type: paramTypeRes.type,
+        typeInfo: paramTypeRes.typeInfo,
+        classInfo: paramTypeRes.classInfo,
+        functionTypeInfo: paramTypeRes.fnInfo,
+        typeRefType: paramTypeRes.typeRefType,
+        typeArguments: paramTypeRes.typeArguments,
         fieldInitializer: null,
       );
     }

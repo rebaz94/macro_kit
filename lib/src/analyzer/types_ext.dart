@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:macro_kit/macro_kit.dart';
+import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:source_helper/source_helper.dart' show escapeDartString;
@@ -75,19 +77,19 @@ extension DartObjectExt on DartObject {
     return null;
   }
 
-  Object? literalForObject(
+  FutureOr<Object?> literalForObject(
     String fieldName,
-    Iterable<String> typeInformation,
-  ) {
+    Iterable<String> typeInformation, {
+    required BaseAnalyzer analyzer,
+    required MacroCapability capability,
+  }) async {
     if (isNull || this.type == null) {
       return null;
     }
 
     String? badType;
     final type = this.type!;
-    if (type.isDartCoreType) {
-      badType = 'Type';
-    } else if (type is FunctionType) {
+    if (type is FunctionType) {
       badType = 'Function';
     }
 
@@ -96,6 +98,7 @@ extension DartObjectExt on DartObject {
       throw MacroException('`$fieldName` is `$badType`, it must be a literal.');
     }
 
+    // checking if statement order is matter: primitive first and finally class
     if (type.isDartCoreDouble) {
       return toDoubleValue();
     } else if (type.isDartCoreInt) {
@@ -106,23 +109,70 @@ extension DartObjectExt on DartObject {
       return toBoolValue();
     } else if (type.isDartCoreSymbol) {
       return toSymbolValue();
+    } else if (type.isDartCoreType) {
+      final dartType = toTypeValue();
+      final typeRes = await analyzer.getTypeInfoFrom(dartType, [], '', capability);
+
+      return MacroProperty(
+        name: typeRes.type,
+        importPrefix: typeRes.importPrefix,
+        type: typeRes.type,
+        typeInfo: typeRes.typeInfo,
+        functionTypeInfo: typeRes.fnInfo,
+        typeArguments: typeRes.typeArguments,
+        classInfo: typeRes.classInfo,
+        typeRefType: typeRes.typeRefType,
+        modifier: dartType != null ? MacroModifier.getModifierInfoFrom(dartType) : const MacroModifier({}),
+        fieldInitializer: null,
+      );
     } else if (type.isDartCoreList) {
-      return [
-        for (var e in toListValue() ?? const <DartObject>[])
-          e.literalForObject(fieldName, [...typeInformation, 'List']),
-      ];
-    } else if (type.isDartCoreSet) {
-      return {
-        for (var e in toSetValue() ?? const <DartObject>{}) e.literalForObject(fieldName, [...typeInformation, 'Set']),
-      };
+      final res = <Object?>[];
+      for (final e in toListValue() ?? const <DartObject>[]) {
+        final resolved = await e.literalForObject(
+          fieldName,
+          [...typeInformation, 'List'],
+          analyzer: analyzer,
+          capability: capability,
+        );
+
+        res.add(resolved);
+      }
+      return res;
     } else if (type.isDartCoreMap) {
       final mapTypeInformation = [...typeInformation, 'Map'];
-      return toMapValue()?.map(
-        (k, v) => MapEntry(
-          k!.literalForObject(fieldName, mapTypeInformation),
-          v!.literalForObject(fieldName, mapTypeInformation),
-        ),
-      );
+      final result = <Object?, Object?>{};
+      for (final entry in (toMapValue() ?? const <DartObject?, DartObject?>{}).entries) {
+        final key = await entry.key!.literalForObject(
+          fieldName,
+          mapTypeInformation,
+          analyzer: analyzer,
+          capability: capability,
+        );
+        final value = await entry.value!.literalForObject(
+          fieldName,
+          mapTypeInformation,
+          analyzer: analyzer,
+          capability: capability,
+        );
+
+        result[key] = value;
+      }
+      return result;
+    } else if (type.isDartCoreSet) {
+      final res = <Object?>['__type::set__'];
+      for (final e in toSetValue() ?? const <DartObject>{}) {
+        final resolved = await e.literalForObject(
+          fieldName,
+          [...typeInformation, 'List'],
+          analyzer: analyzer,
+          capability: capability,
+        );
+        res.add(resolved);
+      }
+
+      return res;
+    } else if (type.element case EnumElement v) {
+      return '${v.name}.${variable!.name}';
     } else if (type.element?.kind == ElementKind.CLASS) {
       final classElement = type.element! as ClassElement;
       final imports = getZoneAnalysisImports();
@@ -136,11 +186,23 @@ extension DartObjectExt on DartObject {
         final positionalArgs = <Object?>[];
         final namedArgs = <String, Object?>{};
         for (final (i, arg) in constructorInvocation!.positionalArguments.indexed) {
-          positionalArgs.add(arg.literalForObject('argPos$i', typeInformation));
+          positionalArgs.add(
+            await arg.literalForObject(
+              'argPos$i',
+              typeInformation,
+              analyzer: analyzer,
+              capability: capability,
+            ),
+          );
         }
 
         for (final entry in constructorInvocation!.namedArguments.entries) {
-          namedArgs[entry.key] = entry.value.literalForObject(entry.key, typeInformation);
+          namedArgs[entry.key] = await entry.value.literalForObject(
+            entry.key,
+            typeInformation,
+            analyzer: analyzer,
+            capability: capability,
+          );
         }
 
         classConfig['__use_ctor__'] = constructorInvocation!.constructor.name;
@@ -151,31 +213,29 @@ extension DartObjectExt on DartObject {
 
       // fallback to get all value from class
       classConfig['__ctor__'] = classElement.constructors
-          .where((e) => e.isGenerative || e.isConst)
+          .where((e) => (e.isGenerative || e.isConst) && !e.isSynthetic)
           .map((e) => '${e.name}:${e.formalParameters.length}')
           .toList();
 
       for (final field in classElement.fields) {
-        if (field.isPrivate || field.isStatic || field.isExternal) continue;
+        if (field.isPrivate || field.isStatic || field.isExternal || field.isSynthetic) continue;
 
         final fieldName = field.name ?? '';
         final obj = peek(fieldName);
-        classConfig[fieldName] = obj?.literalForObject(fieldName, [
+        classConfig[fieldName] = await obj?.literalForObject(fieldName, analyzer: analyzer, capability: capability, [
           ...typeInformation,
           classElement.displayName,
         ]);
       }
 
       return classConfig;
-    } else if (type.element case EnumElement v) {
-      return '${v.name}.${variable!.name}';
     }
 
     badType = typeInformation.followedBy(['$this']).join(' > ');
 
     throw UnsupportedError(
       'The provided value is not supported: $badType. '
-      'This may be an error in package:macro. ',
+      'This may be an error in package:macro.',
     );
   }
 }
@@ -202,8 +262,9 @@ String jsonLiteralAsDart(Object? value) {
   if (value is bool || value is num) return value.toString();
 
   if (value is List) {
+    final isSet = value.remove('__type::set__');
     final listItems = value.map(jsonLiteralAsDart).join(', ');
-    return '[$listItems]';
+    return isSet ? '{$listItems}' : '[$listItems]';
   }
 
   if (value is Set) {
@@ -265,7 +326,10 @@ Object? encodeDartObject(Object? value) {
   }
 
   if (value is Set) {
-    return value.map(encodeDartObject).toList();
+    return [
+      '__type::set__',
+      for (final value in value) encodeDartObject(value),
+    ];
   }
 
   if (value is Map) {

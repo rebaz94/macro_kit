@@ -6,7 +6,6 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:collection/collection.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
-import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/core/modifier.dart';
 
@@ -89,7 +88,7 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
     required List<MacroProperty>? classFields,
     required ConstructorDeclaration? constructorDec,
   }) async {
-    final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+    final paramTypeRes = await getTypeInfoFrom(
       paramElem,
       classTypeParams,
       capability.filterClassMethodMetadata,
@@ -161,13 +160,13 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
 
     final macroParam = MacroProperty(
       name: paramName,
-      importPrefix: importPrefix,
-      type: type,
-      typeInfo: typeInfo,
-      classInfo: classInfo,
-      functionTypeInfo: fnInfo,
-      deepEquality: deepEq,
-      typeArguments: typeArguments,
+      importPrefix: paramTypeRes.importPrefix,
+      type: paramTypeRes.type,
+      typeInfo: paramTypeRes.typeInfo,
+      classInfo: paramTypeRes.classInfo,
+      functionTypeInfo: paramTypeRes.fnInfo,
+      typeArguments: paramTypeRes.typeArguments,
+      typeRefType: paramTypeRes.typeRefType,
       modifier: MacroModifier.getModifierInfoFrom(
         paramElem,
         isNullable: paramElem.type.nullabilitySuffix != NullabilitySuffix.none,
@@ -287,7 +286,7 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
     if (fieldInitializer == null) return null;
 
     final fieldName = fieldInitializer.name ?? '';
-    final (:importPrefix, :type, :typeInfo, :typeArguments, :fnInfo, :classInfo, :deepEq) = await getTypeInfoFrom(
+    final fieldInitializerTypeRes = await getTypeInfoFrom(
       fieldInitializer,
       classTypeParams,
       capability.filterClassMethodMetadata,
@@ -296,13 +295,13 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
 
     return MacroProperty(
       name: fieldName,
-      importPrefix: importPrefix,
-      type: type,
-      typeInfo: typeInfo,
-      typeArguments: typeArguments,
-      functionTypeInfo: fnInfo,
-      classInfo: classInfo,
-      deepEquality: deepEq,
+      importPrefix: fieldInitializerTypeRes.importPrefix,
+      type: fieldInitializerTypeRes.type,
+      typeInfo: fieldInitializerTypeRes.typeInfo,
+      typeArguments: fieldInitializerTypeRes.typeArguments,
+      functionTypeInfo: fieldInitializerTypeRes.fnInfo,
+      classInfo: fieldInitializerTypeRes.classInfo,
+      typeRefType: fieldInitializerTypeRes.typeRefType,
       fieldInitializer: null,
       constantValue: fieldInitializer.constantInitializer?.toSource(),
     );

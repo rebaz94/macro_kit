@@ -458,6 +458,7 @@ class AutoRebuildResult {
 /// for the regeneration operation.
 class RegeneratedContextResult {
   const RegeneratedContextResult({
+    required this.package,
     required this.context,
     required this.error,
     required this.completedInMilliseconds,
@@ -465,11 +466,15 @@ class RegeneratedContextResult {
 
   static RegeneratedContextResult fromJson(Map<String, dynamic> json) {
     return RegeneratedContextResult(
+      package: json['package'] as String,
       context: json['context'] as String,
       error: json['error'] as String?,
       completedInMilliseconds: (json['completedInMs'] as num).toInt(),
     );
   }
+
+  /// The name of the package
+  final String package;
 
   /// The context (package path) that was regenerated.
   ///
@@ -491,6 +496,7 @@ class RegeneratedContextResult {
   /// Converts this result to a JSON-serializable map.
   Map<String, dynamic> toJson() {
     return {
+      'package': package,
       'context': context,
       'error': error,
       'completedInMs': completedInMilliseconds,
@@ -502,7 +508,7 @@ class RegeneratedContextResult {
 
   @override
   String toString() {
-    return 'RegeneratedContextResult{context: $context, error: $error, completedInMilliseconds: $completedInMilliseconds}';
+    return 'RegeneratedContextResult{package: $package, context: $context, error: $error, completedInMilliseconds: $completedInMilliseconds}';
   }
 }
 

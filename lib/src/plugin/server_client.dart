@@ -12,7 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 abstract class MacroServerListener {
-  void reconnectToServer({bool forceStart = false});
+  void reconnectToServer();
 
   List<String> listAnalysisContexts();
 }
@@ -92,7 +92,7 @@ class MacroServerClient {
         final [_, request] = content;
         switch (request) {
           case 'reconnect':
-            listener.reconnectToServer(forceStart: true);
+            listener.reconnectToServer();
         }
       },
       onError: (Object? err, StackTrace? s) => logger.info('An error occurred in watching plugin request file', err, s),

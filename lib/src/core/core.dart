@@ -7,6 +7,7 @@ import 'package:macro_kit/src/analyzer/base_macro.dart';
 import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:macro_kit/src/core/constant.dart';
 import 'package:macro_kit/src/core/extension.dart';
 import 'package:macro_kit/src/core/modifier.dart';
 import 'package:macro_kit/src/macro/data_class/helpers.dart';
@@ -246,10 +247,10 @@ class MacroProperty {
     required this.importPrefix,
     required this.type,
     required this.typeInfo,
-    this.deepEquality,
     this.typeArguments,
     this.classInfo,
     this.functionTypeInfo,
+    this.typeRefType,
     this.extraMetadata,
     this.modifier = const MacroModifier({}),
     this.keys,
@@ -261,14 +262,13 @@ class MacroProperty {
 
   static MacroProperty fromJson(Map<String, dynamic> json) {
     final typeInfo = TypeInfo.values.byIdOr((json['ti'] as num).toInt(), defaultValue: TypeInfo.dynamic);
-    final constantValue = json['cv'] as Object?;
 
     return MacroProperty(
       name: (json['n'] as String?) ?? '',
       importPrefix: (json['ip'] as String?) ?? '',
       type: (json['t'] as String?) ?? '',
       typeInfo: typeInfo,
-      deepEquality: json['dq'] as bool?,
+      typeRefType: json['trt'] != null ? MacroProperty.fromJson(json['trt'] as Map<String, dynamic>) : null,
       typeArguments: (json['ta'] as List?)?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>)).toList(),
       classInfo: json['ci'] == null ? null : MacroClassDeclaration.fromJson(json['ci'] as Map<String, dynamic>),
       functionTypeInfo: json['fti'] == null ? null : MacroMethod.fromJson(json['fti'] as Map<String, dynamic>),
@@ -282,13 +282,7 @@ class MacroProperty {
           : MacroModifier((json['m'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
       keys: (json['k'] as List?)?.map((e) => MacroKey.fromJson(e as Map<String, dynamic>)).toList(),
       fieldInitializer: json['fi'] == null ? null : MacroProperty.fromJson(json['fi'] as Map<String, dynamic>),
-      constantValue: switch (constantValue) {
-        _ when json['cvType'] == 'set' && constantValue is List => constantValue.toSet(),
-        _ when json['cvType'] == 'macro_property' && constantValue is Map => MacroProperty.fromJson(
-          constantValue as Map<String, dynamic>,
-        ),
-        _ => constantValue,
-      },
+      constantValue: decodeConstantPropertyType(json['cvType'] as String? ?? '', json['cv'] as Object?),
       constantModifier: json['cm'] == null
           ? null
           : MacroModifier((json['cm'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
@@ -588,14 +582,22 @@ class MacroProperty {
   /// Class declaration details when [typeInfo] is a class or enum type.
   final MacroClassDeclaration? classInfo;
 
-  /// Whether deep equality should be used for this property.
-  final bool? deepEquality;
-
   /// Type arguments for generic types (e.g., `T` in `List<T>`).
   final List<MacroProperty>? typeArguments;
 
   /// Function signature details when [typeInfo] is a function type.
   final MacroMethod? functionTypeInfo;
+
+  /// The actual type information for the type assigned to [Type]
+  ///
+  /// The [typeInfo] will be [TypeInfo.type], and the referenced value is the actual type.
+  ///
+  /// For example, if you have a property like the one below and assign UserProfile to it:
+  /// ```dart
+  ///  final Type DataType
+  /// ```
+  ///
+  final MacroProperty? typeRefType;
 
   /// Additional metadata annotations applied to this property.
   final Map<String, MacroProperty>? extraMetadata;
@@ -640,7 +642,7 @@ class MacroProperty {
       typeArguments: typeArguments,
       functionTypeInfo: functionTypeInfo,
       classInfo: classInfo ?? this.classInfo,
-      deepEquality: deepEquality,
+      typeRefType: typeRefType,
       keys: keys,
       fieldInitializer: fieldInitializer,
       constantValue: constantValue ?? this.constantValue,
@@ -757,7 +759,7 @@ class MacroProperty {
       typeArguments: typeArguments,
       functionTypeInfo: functionTypeInfo,
       classInfo: classInfo,
-      deepEquality: deepEquality,
+      typeRefType: typeRefType,
       keys: keys,
       fieldInitializer: fieldInitializer,
       constantValue: constantValue,
@@ -799,7 +801,8 @@ class MacroProperty {
 
   /// Returns the constant value as a MacroProperty representing a Dart Type from an annotation.
   MacroProperty? asTypeValue() {
-    if (constantValue case MacroProperty v) return v;
+    if (typeInfo == TypeInfo.type && typeRefType != null) return typeRefType!;
+    if (constantValue case MacroProperty v) return v; // todo: remove it
     return null;
   }
 
@@ -928,27 +931,23 @@ class MacroProperty {
   }
 
   Map<String, dynamic> toJson() {
+    final (typeId, constantValueEncoded) = encodeConstantPropertyType(typeInfo, constantValue);
+
     return {
       if (name.isNotEmpty) 'n': name,
       if (importPrefix.isNotEmpty) 'ip': importPrefix,
       if (type.isNotEmpty) 't': type,
       'ti': typeInfo.id,
-      if (deepEquality == true) 'dq': true,
       if (typeArguments?.isNotEmpty == true) 'ta': typeArguments!.map((e) => e.toJson()).toList(),
       if (classInfo != null) 'ci': classInfo!.toJson(),
       if (functionTypeInfo != null) 'fti': functionTypeInfo!.toJson(),
+      if (typeRefType != null) 'trt': typeRefType!.toJson(),
       if (extraMetadata?.isNotEmpty == true) 'em': extraMetadata!.map((k, v) => MapEntry(k, v.toJson())),
       if (modifier.isNotEmpty) 'm': modifier,
       if (keys?.isNotEmpty == true) 'k': keys!.map((e) => e.toJson()).toList(),
       if (fieldInitializer != null) 'fi': fieldInitializer!.toJson(),
-      if (constantValue case Set val) ...{
-        'cv': val.toList(),
-        'cvType': 'set',
-      } else if (constantValue case MacroProperty val) ...{
-        'cv': val.toJson(),
-        'cvType': 'macro_property',
-      } else if (constantValue != null)
-        'cv': constantValue,
+      if (typeId != '') 'cvType': typeId,
+      if (constantValueEncoded != null) 'cv': constantValueEncoded,
       if (constantModifier?.isNotEmpty == true) 'cm': constantModifier!,
       if (requireConversionToLiteral == true) 'rcl': true,
     };
@@ -956,7 +955,7 @@ class MacroProperty {
 
   @override
   String toString() {
-    return 'MacroProperty{name: $name, importPrefix: $importPrefix, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, deepEquality: $deepEquality, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, fieldInitializer: $fieldInitializer, constantValue: $constantValue, constantModifier: $constantModifier, requireConversionToLiteral: $requireConversionToLiteral}';
+    return 'MacroProperty{name: $name, importPrefix: $importPrefix, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, typeRefType: $typeRefType, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, fieldInitializer: $fieldInitializer, constantValue: $constantValue, constantModifier: $constantModifier, requireConversionToLiteral: $requireConversionToLiteral}';
   }
 }
 

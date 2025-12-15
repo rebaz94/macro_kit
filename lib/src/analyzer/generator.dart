@@ -38,7 +38,7 @@ mixin Generator on BaseAnalyzer {
     }
 
     // step:2 configure the generated file path
-    final (:genFilePath, :relativePartFilePath) = buildGeneratedFileInfo(path);
+    final (:genFilePath, :relativePartFilePath) = server.buildGeneratedFileInfo(path);
     // step:3 run the macro generator
 
     final generated = StringBuffer("part of '$relativePartFilePath';");
@@ -53,24 +53,24 @@ mixin Generator on BaseAnalyzer {
         continue;
       }
 
-      var clientChannelId = getClientChannelIdByMacro(macroName, path);
+      var clientChannelId = server.getClientChannelIdByMacro(macroName, path);
 
       if (clientChannelId == null) {
-        requestClientToConnect();
+        server.requestClientToConnect();
         await Future.delayed(const Duration(seconds: 3));
 
-        clientChannelId = getClientChannelIdByMacro(macroName, path);
+        clientChannelId = server.getClientChannelIdByMacro(macroName, path);
         if (clientChannelId == null) {
           logger.error('No Macro generator found for: $macroName');
-          onClientError(-1, 'No Macro generator found for: $macroName');
+          server.onClientError(-1, 'No Macro generator found for: $macroName');
           return;
         }
       }
 
       try {
-        final runRes = await runMacroGenerator(clientChannelId, msg);
+        final runRes = await server.runMacroGenerator(clientChannelId, msg);
         if (runRes.error?.isNotEmpty == true) {
-          onClientError(clientChannelId, runRes.error!);
+          server.onClientError(clientChannelId, runRes.error!);
           return;
         }
 
@@ -79,7 +79,7 @@ mixin Generator on BaseAnalyzer {
           ..write(runRes.result)
           ..write('\n');
       } catch (e, s) {
-        onClientError(clientChannelId, e.toString(), e, s);
+        server.onClientError(clientChannelId, e.toString(), e, s);
         return;
       }
     }
@@ -133,30 +133,30 @@ mixin Generator on BaseAnalyzer {
     // step:2 run the macro generator
     // final generatedFiles = <String>[];
     for (final msg in runConfigs) {
-      var clientChannelId = getClientChannelIdByMacro(msg.macroName, path);
+      var clientChannelId = server.getClientChannelIdByMacro(msg.macroName, path);
 
       if (clientChannelId == null) {
-        requestClientToConnect();
+        server.requestClientToConnect();
         await Future.delayed(const Duration(seconds: 3));
 
-        clientChannelId = getClientChannelIdByMacro(msg.macroName, path);
+        clientChannelId = server.getClientChannelIdByMacro(msg.macroName, path);
         if (clientChannelId == null) {
           logger.error('No Macro generator found for: ${msg.macroName}');
-          onClientError(-1, 'No Macro generator found for: ${msg.macroName}');
+          server.onClientError(-1, 'No Macro generator found for: ${msg.macroName}');
           return;
         }
       }
 
       try {
-        final runRes = await runMacroGenerator(clientChannelId, msg);
+        final runRes = await server.runMacroGenerator(clientChannelId, msg);
         if (runRes.error?.isNotEmpty == true) {
-          onClientError(clientChannelId, runRes.error!);
+          server.onClientError(clientChannelId, runRes.error!);
           return;
         }
 
         // generatedFiles.addAll(runRes.generatedFiles ?? const []);
       } catch (e, s) {
-        onClientError(clientChannelId, e.toString(), e, s);
+        server.onClientError(clientChannelId, e.toString(), e, s);
         return;
       }
     }

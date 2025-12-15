@@ -36,7 +36,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
   }
 
   @override
-  Future<void> reconnectToServer({bool forceStart = false}) async {
+  Future<void> reconnectToServer() async {
     logger.info('Reconnecting to MacroServer, lock: ${lock.locked}');
 
     return lock.synchronized(() async {
@@ -51,7 +51,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
 
       final disableAutoStart = client.isDisabledAutoStartServer();
       client.autoReconnect = !disableAutoStart;
-      if (disableAutoStart && !forceStart) {
+      if (disableAutoStart) {
         logger.info('Auto starting MacroServer is disabled');
         return;
       }
@@ -59,7 +59,7 @@ class MacroPlugin extends ServerPlugin implements MacroServerListener {
       logger.info('Starting MacroServer...');
       final started = await client.startMacroServer();
       if (!started) {
-        Future.delayed(const Duration(seconds: 10)).then((_) => reconnectToServer(forceStart: forceStart));
+        Future.delayed(const Duration(seconds: 10)).then((_) => reconnectToServer());
         return;
       }
 

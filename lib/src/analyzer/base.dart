@@ -5,7 +5,9 @@ import 'dart:math';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/session.dart';
+import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
 // ignore: implementation_imports
 import 'package:analyzer/src/dart/analysis/byte_store.dart';
@@ -13,28 +15,13 @@ import 'package:dart_style/dart_style.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
+import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
-
-abstract class MacroServer {
-  void requestPluginToConnect();
-
-  void requestClientToConnect();
-
-  void removeFile(String path);
-
-  int? getClientChannelIdByMacro(String targetMacro,  String filePath);
-
-  Future<RunMacroResultMsg> runMacroGenerator(int channelId, RunMacroMsg message);
-
-  ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path);
-
-  void onClientError(int channelId, String message, [Object? err, StackTrace? trace]);
-}
 
 typedef PendingPath = ({String path, ChangeType type, bool force});
 typedef PendingAnalyze = ({List<AnalyzingAsset>? asset});
@@ -46,10 +33,64 @@ typedef AnalyzingAsset = ({
   String absoluteOutputPath,
 });
 
-abstract class BaseAnalyzer implements MacroServer {
-  BaseAnalyzer({required this.logger});
+abstract class MacroServerInterface {
+  void requestPluginToConnect();
+
+  void requestClientToConnect();
+
+  int? getClientChannelIdByMacro(String targetMacro, String filePath);
+
+  Future<RunMacroResultMsg> runMacroGenerator(int channelId, RunMacroMsg message);
+
+  ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path);
+
+  void sendMessageMacroClients(GeneralMessage message, {int? clientId});
+
+  void onClientError(int channelId, String message, [Object? err, StackTrace? trace]);
+}
+
+class DefaultFakeServerInterface implements MacroServerInterface {
+  const DefaultFakeServerInterface();
+
+  static final exception = Exception('Server is not initiated yet!');
+
+  @override
+  ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path) {
+    throw exception;
+  }
+
+  @override
+  int? getClientChannelIdByMacro(String targetMacro, String filePath) {
+    throw exception;
+  }
+
+  @override
+  void onClientError(int channelId, String message, [Object? err, StackTrace? trace]) {}
+
+  @override
+  void requestClientToConnect() {}
+
+  @override
+  void requestPluginToConnect() {}
+
+  @override
+  Future<RunMacroResultMsg> runMacroGenerator(int channelId, RunMacroMsg message) {
+    throw exception;
+  }
+
+  @override
+  void sendMessageMacroClients(GeneralMessage message, {int? clientId}) {}
+}
+
+abstract class BaseAnalyzer {
+  BaseAnalyzer({
+    required this.logger,
+    required this.server,
+  });
 
   final MacroLogger logger;
+  MacroServerInterface server;
+
   final Random random = Random();
   final DartFormatter formatter = DartFormatter(
     languageVersion: DartFormatter.latestLanguageVersion,
@@ -153,6 +194,16 @@ abstract class BaseAnalyzer implements MacroServer {
     return MacroClientConfiguration.withDefault(newId(), context, packageName);
   }
 
+  void removeFile(String path) {
+    try {
+      (fileCaches[path] ?? File(path)).deleteSync();
+    } on PathNotFoundException {
+      return;
+    } catch (e) {
+      logger.error('Failed to delete file', e);
+    }
+  }
+
   Future<MacroClassDeclaration?> parseClass(
     ClassFragment classFragment, {
     List<MacroConfig>? collectSubTypeConfig,
@@ -239,6 +290,70 @@ abstract class BaseAnalyzer implements MacroServer {
 
     return result;
   }
+
+  // --- internal ----
+  bool isValidAnnotation(
+    ElementAnnotation? annotation, {
+    required String className,
+    required String pkgName,
+  });
+
+  Future<MacroConfig?> computeMacroMetadata(ElementAnnotation macroMetadata);
+
+  Future<List<MacroKey>?> computeMacroKeys(String filter, Metadata metadata, MacroCapability capability);
+
+  Future<MacroKey?> computeMacroKey(String keyName, ElementAnnotation macroMetadata, MacroCapability capability);
+
+  Future<({Object? constantValue, MacroModifier modifier, bool reqConversion})?> computeConstantInitializerValue(
+    String fieldName,
+    DartObject fieldValue,
+    MacroCapability capability,
+  );
+
+  Future<({Object? constantValue, MacroModifier modifier, bool reqConversion})> computeMacroKeyValue(
+    String fieldName,
+    DartObject fieldValue,
+    MacroCapability capability,
+  );
+
+  Future<TypeInfoResult> getTypeInfoFrom(
+    Object? /*Element?|DartType*/ elem,
+    List<MacroProperty> genericParams,
+    String filterMethodMetadata,
+    MacroCapability capability,
+  );
+
+  Future<MacroMethod> getFunctionInfo(
+    Object? method,
+    List<MacroProperty> genericParams, {
+    required MacroCapability capability,
+    required String filterMethodMetadata,
+    required List<MacroKey>? macroKeys,
+    String? fnName,
+    bool isAsynchronous = false,
+    bool isSynchronous = false,
+    bool isGenerator = false,
+    bool isAugmentation = false,
+  });
+
+  List<DartType> getTypeArguments(DartType type, String forName);
+
+  Future<List<MacroProperty>> createMacroTypeArguments(
+    List<DartType> types,
+    List<MacroProperty> genericParams,
+    MacroCapability capability,
+    String filterMethodMetadata, {
+    int? mustTake,
+  });
+
+  Future<MacroProperty?> inspectStaticFromJson(
+    DartType type,
+    List<MacroProperty> genericParams,
+    String filterMethodMetadata,
+    MacroCapability capability,
+  );
+
+  // --- internal ----
 
   bool _isSubTypeOf(InterfaceElement type, ClassElement target, LibraryFragment libraryFragment) {
     final superType = type.supertype;

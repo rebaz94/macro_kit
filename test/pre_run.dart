@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:path/path.dart' as p;
 
+import 'macro/dart_type_param_macro.dart';
+
 void main() async {
   // in ci you need to:
   // 1. install macro_kit -> dart pub global activate macro_kit
@@ -19,6 +21,7 @@ void main() async {
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
       'AssetPathMacro': AssetPathMacro.initialize,
+      'CustomMacro': CustomMacro.initialize,
     },
     assetMacros: {
       'assets': [

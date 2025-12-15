@@ -228,12 +228,12 @@ class MacroManager {
         final result = AutoRebuildResult(results: msg.results);
 
         for (final ctx in msg.results) {
-          final duration = (ctx.completedInMilliseconds ~/ 1000).toStringAsFixed(2);
+          final duration = (ctx.completedInMilliseconds ~/ 1000);
 
           if (ctx.isSuccess) {
-            logger.info('Regenerated successfully in ${duration}s: ${ctx.context}');
+            logger.info('Regenerated successfully in ${duration}s for: ${ctx.package}');
           } else {
-            logger.error('Regeneration failed in ${duration}s: ${ctx.context} - ${ctx.error}');
+            logger.error('Regeneration failed in ${duration}s: ${ctx.package} - ${ctx.error}');
           }
         }
 

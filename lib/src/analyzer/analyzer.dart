@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
+import 'package:logging/logging.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyze_class.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_ctor.dart';
@@ -10,12 +11,17 @@ import 'package:macro_kit/src/analyzer/analyze_enum.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
 import 'package:macro_kit/src/analyzer/hash.dart';
+import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:macro_kit/src/common/models.dart';
 import 'package:watcher/watcher.dart';
 
-abstract class MacroAnalyzer extends BaseAnalyzer
-    with AnalyzeClass, AnalyzeClassField, AnalyzeClassCtor, AnalyzeClassMethod, AnalyzeEnum, Generator {
-  MacroAnalyzer({required super.logger});
+class MacroAnalyzer extends BaseAnalyzer
+    with Types, AnalyzeClass, AnalyzeClassField, AnalyzeClassCtor, AnalyzeClassMethod, AnalyzeEnum, Generator {
+  MacroAnalyzer({
+    required super.logger,
+    super.server = const DefaultFakeServerInterface(),
+  });
 
   Future<void> processDartSource(String path) async {
     stopWatch
@@ -26,6 +32,7 @@ abstract class MacroAnalyzer extends BaseAnalyzer
       await _analyzeCodeAndRun(path);
     } catch (e, s) {
       logger.error('Processing code failed', e, s);
+      server.sendMessageMacroClients(GeneralMessage(message: 'Processing code failed\n$e\n$s', level: Level.SEVERE));
     } finally {
       importPrefixByElements.clear();
       imports.clear();
@@ -191,41 +198,10 @@ abstract class MacroAnalyzer extends BaseAnalyzer
       await executeAssetMacro(path: path, changeType: assetChangeType, macros: assetMacros);
     } catch (e, s) {
       logger.error('Processing asset failed', e, s);
+      server.sendMessageMacroClients(GeneralMessage(message: 'Processing asset failed\n$e\n$s', level: Level.SEVERE));
     } finally {
       currentAnalyzingPath = '';
       logger.info('Completed in ${stopWatch.elapsedMilliseconds.toString()} ms');
     }
   }
 }
-
-// insert DataClass
-// final r = declaration.withClause?.mixinTypes.any((e) => e.name.lexeme.endsWith('DataClass')) ?? false;
-// if (!r) {
-//   final insertOffset = declaration.name.end;
-//   final text = File(currentAnalyzingPath).readAsStringSync();
-//
-//   if (insertOffset < 0 || insertOffset > text.length) {
-//     print('Offset out of bounds: $insertOffset');
-//   } else {
-//     final updated = '${text.substring(0, insertOffset)} with TestDataClass${text.substring(insertOffset)}';
-//     File(currentAnalyzingPath).writeAsStringSync(updated);
-//     print(insertOffset);
-//   }
-// }
-
-// get sub types
-// final libraries = session.analysisContext.contextRoot.analyzedFiles().where((path) => path.endsWith('.dart'));
-// final libraries = _currentSession!.analysisContext.contextRoot.analyzedFiles().where((path) {
-//   return path.endsWith('.dart') && !path.endsWith('g.dart');
-// });
-
-// for (final path in libraries) {
-//   final unitResult = await session.getUnitElement(path);
-//   if (unitResult is! UnitElementResult) continue;
-//
-//   for (final classElem in unitResult.fragment.element.classes) {
-//     if (_isSubTypeOf(classElem, baseClass, session)) {
-//       result.add(classElem);
-//     }
-//   }
-// }
