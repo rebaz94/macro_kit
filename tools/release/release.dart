@@ -121,7 +121,7 @@ void main() async {
     print('\n🎊 Release process completed successfully!');
     print('   Version: $versionName');
     print('   Tag: $tagName');
-    print('   Release: https://github.com/YOUR_ORG/YOUR_REPO/releases/tag/$tagName');
+    print('   Release: https://github.com/rebaz94/macro_kit/releases/tag/$tagName');
   } catch (e) {
     print('\n❌ Error: $e');
     exit(1);
