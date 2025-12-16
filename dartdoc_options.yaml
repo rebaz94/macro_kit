@@ -1,0 +1,24 @@
+dartdoc:
+  categories:
+    "Introduction":
+      markdown: "doc/intro.md"
+    "Installation":
+      markdown: "doc/install.md"
+    "Models":
+      markdown: "doc/models.md"
+    "DataClassMacro":
+      markdown: "doc/data_class_macro.md"
+    "AssetPathMacro":
+      markdown: "doc/asset_path_macro.md"
+    "Write New Macro":
+      markdown: "doc/write_new_macro.md"
+    "Capability":
+      markdown: "doc/capability.md.md"
+  categoryOrder:
+    - "Introduction"
+    - "Installation"
+    - "Models"
+    - "DataClassMacro"
+    - "AssetPathMacro"
+    - "Write New Macro"
+    - "Capability"

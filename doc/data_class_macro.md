@@ -1,6 +1,4 @@
-# DataClassMacro
-
-## Overview
+## DataClassMacro
 
 `DataClassMacro` is a powerful macro that automatically generates common data class boilerplate code
 for your Dart classes. It eliminates the need to manually write repetitive code for JSON
@@ -311,3 +309,7 @@ Here's a fully configured `.macro.json`:
 
 **Note**: To customize the DataClassMacro behavior globally, you need to add these configuration
 options under `"macros"` → `"DataClassMacro"` in your `.macro.json` file as shown above.
+
+---
+
+<p align="right"><a href="../topics/Asset-Path-Macro-topic.html">Next: AssetPathMacro</a></p>

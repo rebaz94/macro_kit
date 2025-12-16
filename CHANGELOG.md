@@ -1,3 +1,7 @@
+## 0.3.2
+
+- Add documentation
+
 ## 0.3.1
 
 - Added individual log files for each plugin instance loaded in different analysis contexts

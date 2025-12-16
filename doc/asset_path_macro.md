@@ -1,6 +1,4 @@
-# AssetPathMacro Documentation
-
-## Overview
+## AssetPathMacro Documentation
 
 `AssetPathMacro` is a powerful macro that automatically generates type-safe asset path constants
 from your project's directory structure. It watches a specified directory for file changes and
@@ -138,3 +136,7 @@ With `FieldRename.camelCase`:
 | `2d_map.png`       | `asset2dMap`         | Starts with number, prefix added                |
 | `user@avatar.jpg`  | `userAvatar`         | Special char replaced (with custom replacement) |
 | `_private.png`     | `private`            | Leading underscore removed                      |
+
+---
+
+<p align="right"><a href="../topics/Write-New-Macro-topic.html">Next: Write New Macro</a></p>

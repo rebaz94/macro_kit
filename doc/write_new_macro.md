@@ -525,3 +525,5 @@ void onGenerate(MacroState state) {
   // Continue with generation
 }
 ```
+
+<p align="right"><a href="../topics/Capability-topic.html">Next: Capability</a></p>
