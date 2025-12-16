@@ -1,5 +1,3 @@
-
-
 extension MacroExt on Enum {
   /// Returns the key associated with value [source] from [enumValues], if one
   /// exists.
