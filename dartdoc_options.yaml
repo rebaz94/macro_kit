@@ -13,7 +13,7 @@ dartdoc:
     "Write New Macro":
       markdown: "doc/write_new_macro.md"
     "Capability":
-      markdown: "doc/capability.md.md"
+      markdown: "doc/capability.md"
   categoryOrder:
     - "Introduction"
     - "Installation"
