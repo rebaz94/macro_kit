@@ -212,7 +212,6 @@ class MacroServerClient {
   }
 
   void dispose() {
-    _process?.kill(ProcessSignal.sighup);
     _pluginRequestWatcher.close();
     _wsSubs?.cancel();
     _wsSubs = null;
