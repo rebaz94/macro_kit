@@ -162,7 +162,7 @@ class MacroServerClient {
       wsChannel = channel;
 
       _wsSubs = channel.stream.listen(
-            (data) {
+        (data) {
           final _ = decodeMessage(data);
         },
         onError: (error) => logger.error('WebSocket error occurred', error),

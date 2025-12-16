@@ -9,6 +9,4 @@ class Person with PersonData {
   Person(this.firstName);
 }
 
-enum MyEnum {
-  a, b, c
-}
+enum MyEnum { a, b, c }

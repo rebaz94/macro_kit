@@ -35,7 +35,7 @@ void main() {
     });
 
     test('from json succeeds-2', () {
-      var a = AData.fromJson({'a': 1, 'b': 1,  'c': 3});
+      var a = AData.fromJson({'a': 1, 'b': 1, 'c': 3});
       expect(a, equals(A(1, 1, 3)));
     });
 

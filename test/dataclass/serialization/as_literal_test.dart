@@ -80,8 +80,6 @@ class A with AData {
   final CustomGeoPoint g;
 }
 
-
-
 void main() {
   group(
     'As literal Serialization',

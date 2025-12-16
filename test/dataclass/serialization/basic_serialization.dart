@@ -102,8 +102,18 @@ void main() {
         var a = ClassA({EnumA.a: true, EnumA.aa: false});
         var b = ClassA({EnumA.aa: false, EnumA.a: true});
 
-        expect(ClassAData.fromJson({'someVariable': {'a': true, 'aa': false}}), a);
-        expect(ClassAData.fromJson({'someVariable': {'aa': false, 'a': true}}), b);
+        expect(
+          ClassAData.fromJson({
+            'someVariable': {'a': true, 'aa': false},
+          }),
+          a,
+        );
+        expect(
+          ClassAData.fromJson({
+            'someVariable': {'aa': false, 'a': true},
+          }),
+          b,
+        );
 
         expect(
           ClassAData.fromJson({
@@ -117,8 +127,18 @@ void main() {
         var a = ClassB({EnumA.a: EnumB.a, EnumA.aa: EnumB.aa});
         var b = ClassB({EnumA.aa: EnumB.aa, EnumA.a: EnumB.a});
 
-        expect(ClassBData.fromJson({'someVariable': {'a': 'a', 'aa': 'aa'}}), a);
-        expect(ClassBData.fromJson({'someVariable': {'aa': 'aa', 'a': 'a'}}), b);
+        expect(
+          ClassBData.fromJson({
+            'someVariable': {'a': 'a', 'aa': 'aa'},
+          }),
+          a,
+        );
+        expect(
+          ClassBData.fromJson({
+            'someVariable': {'aa': 'aa', 'a': 'a'},
+          }),
+          b,
+        );
 
         expect(
           ClassBData.fromJson({
@@ -197,7 +217,6 @@ void main() {
         expect(ClassBData.fromJson(a.toJson()), a);
         expect(ClassBData.fromJson(b.toJson()), b);
       });
-
     },
   );
 }

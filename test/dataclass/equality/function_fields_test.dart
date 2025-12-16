@@ -26,7 +26,6 @@ class Example3<T> with Example3Data<T> {
   final $c.int Function($c.int, {$c.String? name, required T? data})? functionField;
 }
 
-
 void main() {
   group('function fields', () {
     test('should check equality with function field', () {
@@ -115,5 +114,4 @@ void main() {
       expect(example.toString(), equals('Example3<int>{functionField: null}'));
     });
   });
-
 }

@@ -444,7 +444,6 @@ void main() {
       expect(b.copyWith(data3: 33)._data3, equals(33));
       expect(b, equals(bDupe));
 
-
       expect(bb.toJson((v) => v), equals({'data': 99, 'name': 'Rebaz', 'age': 30, 'data2': 10, 'data3': 30}));
 
       expect(b, isA<ComplexSub<int>>());

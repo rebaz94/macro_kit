@@ -5,7 +5,6 @@ part 'enum_map_test.g.dart';
 
 enum EnumA { a, aa, unknown }
 
-
 enum EnumB {
   a(0),
   aa(1),
@@ -61,6 +60,5 @@ void main() {
         equals('ClassB{someVariable: {EnumA.a: EnumB.a, EnumA.aa: EnumB.aa}}'),
       );
     });
-
   });
 }
