@@ -1,3 +1,7 @@
+## 0.3.1
+
+- Added individual log files for each plugin instance loaded in different analysis contexts
+
 ## 0.3.0
 
 - **Breaking Change**: Migrated Macro plugin to the new plugin system. To upgrade:
