@@ -31,7 +31,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     required this.logger,
     required this.analyzer,
   }) {
-    _setupAutoShutdown();
+    _init();
   }
 
   static final MacroAnalyzerServer instance = () {
@@ -73,8 +73,9 @@ class MacroAnalyzerServer implements MacroServerInterface {
   bool _scheduleToShutdown = false;
   bool _upgrading = false;
 
-  void _setupAutoShutdown() {
+  void _init() {
     _autoShutdownTimer = Timer.periodic(const Duration(minutes: 10), _onAutoShutdownCB);
+    _clearOldLogs();
   }
 
   void _onAutoShutdownCB(Timer timer) async {
@@ -91,6 +92,34 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     dispose();
     exit(0);
+  }
+
+  void _clearOldLogs() {
+    try {
+      final now = DateTime.now();
+      if (now.weekday != DateTime.monday && now.weekday != DateTime.thursday) return;
+
+      final entities = Directory(macroDirectory).listSync(recursive: false, followLinks: false);
+      for (final f in entities) {
+        if (f is! File) continue;
+
+        final fileName = p.basename(f.path);
+        if (!fileName.startsWith('plugin_') || !fileName.endsWith('.log')) continue;
+        if (isFileOpen(f.path)) continue;
+
+        final lastModified = f.lastModifiedSync();
+        if (now.difference(lastModified).inDays > 7) {
+          try {
+            f.deleteSync();
+            logger.info('Removed old log file: $fileName');
+          } catch (e) {
+            logger.warn('Failed to delete log file $fileName: $e');
+          }
+        }
+      }
+    } catch (e, s) {
+      logger.error('Failed to clear old logs', e, s);
+    }
   }
 
   @override

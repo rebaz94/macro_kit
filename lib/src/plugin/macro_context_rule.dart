@@ -14,7 +14,7 @@ class MacroContextRule extends AnalysisRule {
     required this.logger,
     required this.onNewAnalysisContext,
   }) : super(
-         name: 'macro_context_file',
+         name: 'macro_context',
          description:
              'Allows macros to discover and apply contextual information from analysis contexts during code generation',
        );
@@ -24,9 +24,9 @@ class MacroContextRule extends AnalysisRule {
 
   @override
   DiagnosticCode get diagnosticCode => LintCode(
-    'macro_context_file',
-    'macro context file',
-    uniqueName: 'macro_context_file',
+    'macro_context',
+    'macro context',
+    uniqueName: 'macro_context',
     correctionMessage: '',
     hasPublishedDocs: false,
     severity: DiagnosticSeverity.WARNING,

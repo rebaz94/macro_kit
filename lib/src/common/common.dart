@@ -73,3 +73,16 @@ List<String> get excludedDirectory {
     '.symlinks/plugins', 'Intermediates.noindex', 'build/macos', //
   ];
 }
+
+bool isFileOpen(String filePath) {
+  try {
+    // Try to open the file in write mode with exclusive access
+    final file = File(filePath);
+    final raf = file.openSync(mode: FileMode.append);
+    raf.closeSync();
+    return false; // File is not open by another program
+  } catch (e) {
+    // If we can't open it, it's likely open by another program
+    return true;
+  }
+}
