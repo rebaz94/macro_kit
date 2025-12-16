@@ -37,13 +37,12 @@ dependencies:
   macro_kit: ^latest_version
 ```
 
-### 3. Configure the analyzer plugin
+### 3. Configure the plugin
 
 ```yaml
 # analysis_options.yaml
-analyzer:
-  plugins:
-    - macro_kit
+plugins:
+  macro_kit: ^latest_version
 ```
 
 ### 4. Initialize macros in your app

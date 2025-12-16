@@ -1,3 +1,14 @@
+## 0.3.0
+
+- **Breaking Change**: Migrated Macro plugin to the new plugin system. To upgrade:
+    - Create an empty file named `macro_context.dart` in your `lib` directory
+    - Add the `macro_kit` to the `plugins` section in your `analysis_options.yaml`:
+
+```yaml
+plugins:
+  macro_kit: ^latest version
+```
+
 ## 0.2.9
 
 - Fix issue where macro server was unable to start automatically on Windows

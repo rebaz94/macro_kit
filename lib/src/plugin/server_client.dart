@@ -124,7 +124,7 @@ class MacroServerClient {
       // });
 
       // wait until macro server initialize itself
-      await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(seconds: 5));
       return true;
     } catch (e, s) {
       if (e.toString().contains('Address already in use')) {
