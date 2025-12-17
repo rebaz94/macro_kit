@@ -155,7 +155,8 @@ Create or modify `.macro.json` in your project root:
       "create_copy_with": true,
       "create_to_string": true,
       "include_if_null": false,
-      "as_literal_types": []
+      "as_literal_types": [],
+      "use_map_convention": false
     }
   }
 }

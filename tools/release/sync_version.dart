@@ -37,8 +37,7 @@ void _updateConstantVersion(String versionName, int versionCode) {
         '''
 const pluginVersionCode = $versionCode;
 const pluginVersionName = '$versionName';
-    '''
-            .trim();
+''';
 
     versionFile.writeAsStringSync(newVersion);
     print('✅ Constant version updated to use ^$versionName');
