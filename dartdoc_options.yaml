@@ -1,24 +1,28 @@
 dartdoc:
   categories:
-    "Introduction":
-      markdown: "doc/intro.md"
+    "Get started":
+      markdown: "doc/get_started.md"
     "Installation":
       markdown: "doc/install.md"
     "Models":
       markdown: "doc/models.md"
-    "DataClassMacro":
+    "Data Class Macro":
       markdown: "doc/data_class_macro.md"
-    "AssetPathMacro":
+    "Asset Path Macro":
       markdown: "doc/asset_path_macro.md"
     "Write New Macro":
       markdown: "doc/write_new_macro.md"
     "Capability":
       markdown: "doc/capability.md"
   categoryOrder:
-    - "Introduction"
+    - "Get started"
     - "Installation"
     - "Models"
-    - "DataClassMacro"
-    - "AssetPathMacro"
+    - "Data Class Macro"
+    - "Asset Path Macro"
     - "Write New Macro"
     - "Capability"
+  showUndocumentedCategories: true
+  ignore:
+    - broken-link
+    - missing-from-search-index

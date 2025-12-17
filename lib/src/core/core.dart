@@ -22,6 +22,14 @@ export 'package:macro_kit/src/analyzer/base_macro.dart';
 ///   * which code generator should run, and
 ///   * whether its output should be merged with other macros applied
 ///     to the same declaration.
+///
+/// {@category Get started}
+/// {@category Installation}
+/// {@category Models}
+/// {@category Data Class Macro}
+/// {@category Asset Path Macro}
+/// {@category Write New Macro}
+/// {@category Capability}
 class Macro {
   const Macro(
     this.generator, {
@@ -446,7 +454,8 @@ class MacroProperty {
 
   /// Extracts the base type and type parameters from a generic type string.
   ///
-  /// For example, `List<int>` returns (type: 'List', typeParams: ['int']).
+  /// For example, `List<int>` returns type = 'List' and typeParams = a list with 'int' as value.
+  ///
   /// Non-generic types return empty type parameters.
   static ({String type, List<String> typeParams}) extractTypeArguments(String type) {
     final t = type.removedNullability;

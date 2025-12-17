@@ -1,3 +1,7 @@
+## 0.3.4
+
+- Add documentation topic for pub 
+
 ## 0.3.3
 
 - Fix pub analysis point

@@ -1,4 +1,4 @@
-## 📦 Installation
+## Installation
 
 ### 1. Activate the macro tool globally
 

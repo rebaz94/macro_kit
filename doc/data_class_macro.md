@@ -276,6 +276,22 @@ Example:
 This treats Firebase's `GeoPoint` and `Timestamp`, and Dart's `Duration` as literal types that don't
 need conversion.
 
+#### `use_map_convention`
+
+- **Type**: `bool`
+- **Default**: `false`
+- **Description**: Control the naming convention for serialization methods in generated data classes
+
+When `use_map_convention` is false or not specified, the following method names are generated:
+
+- fromJson - Static method to create instance from Map<String, dynamic>
+- toJson - Instance method to convert to Map<String, dynamic>
+
+When `use_map_convention` is true, the following method names are generated:
+
+- fromMap - Static method to create instance from Map<String, dynamic>
+- toMap - Instance method to convert to Map<String, dynamic>
+
 ### Complete Example
 
 Here's a fully configured `.macro.json`:
@@ -301,7 +317,8 @@ Here's a fully configured `.macro.json`:
       "as_literal_types": [
         "GeoPoint",
         "Timestamp"
-      ]
+      ],
+      "use_map_convention": false
     }
   }
 }
@@ -312,4 +329,4 @@ options under `"macros"` → `"DataClassMacro"` in your `.macro.json` file as sh
 
 ---
 
-<p align="right"><a href="../topics/Asset-Path-Macro-topic.html">Next: AssetPathMacro</a></p>
+<p align="right"><a href="../topics/Asset Path Macro-topic.html">Next: Asset Path Macro</a></p>

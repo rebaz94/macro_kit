@@ -12,7 +12,10 @@
         "remap_generated_file_to": {
           "type": "string",
           "description": "Directory path where generated files should be remapped to",
-          "examples": ["lib/gen", "lib/generated"]
+          "examples": [
+            "lib/gen",
+            "lib/generated"
+          ]
         },
         "auto_rebuild_on_connect": {
           "type": "boolean",
@@ -49,7 +52,13 @@
         "field_rename": {
           "type": "string",
           "description": "Field renaming strategy",
-          "enum": ["none", "snake_case", "kebab_case", "camel_case", "pascal_case"],
+          "enum": [
+            "none",
+            "snake_case",
+            "kebab_case",
+            "camel_case",
+            "pascal_case"
+          ],
           "default": "none"
         },
         "create_from_json": {
@@ -91,6 +100,10 @@
             "type": "string"
           },
           "default": []
+        },
+        "use_map_convention": {
+          "type": "boolean",
+          "description": "Use 'toMap'/'fromMap' naming convention instead of 'toJson'/'fromJson'. This is configured globally since data classes that depend on other data classes need consistent method names."
         }
       },
       "additionalProperties": false

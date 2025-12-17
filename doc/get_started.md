@@ -1,7 +1,7 @@
-# Macro Kit
+## Get started
 
-A blazingly fast code generation tool for Dart that generates code instantly on save—no build runner
-required.
+**Macro:** A blazingly fast code generation tool for Dart that generates code instantly on save—no
+build runner required.
 
 ## ✨ Features
 

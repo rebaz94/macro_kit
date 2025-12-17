@@ -110,7 +110,7 @@ class JsonKey {
   /// The default value(s) to use when an enum value is not recognized during deserialization.
   ///
   /// Valid only on enum fields. Use [EnumValue(myEnum)] for a single enum type, or
-  /// [EnumValue.values([enum1, enum2])] when working with complex generic types containing
+  /// `[EnumValue.values([enum1, enum2])]` when working with complex generic types containing
   /// multiple different enum types (e.g., `Map<Enum1, Enum2>`). For multiple enums, the order
   /// in the list should match the order they appear in the type definition.
   final EnumValue? unknownEnumValue;
@@ -132,8 +132,8 @@ class JsonKey {
 
 /// Represents a default enum value or multiple enum values for handling unknown cases.
 ///
-/// Use the default constructor [EnumValue()] for a single enum type.
-/// Use [EnumValue.values()] when working with complex generic types that contain
+/// Use the default constructor [EnumValue.new] for a single enum type.
+/// Use [EnumValue.of] when working with complex generic types that contain
 /// multiple different enum types (e.g., `Map<Enum1, Enum2>`), where the order
 /// of enums in the list should match their order in the type definition.
 class EnumValue {

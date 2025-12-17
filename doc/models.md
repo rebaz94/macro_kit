@@ -51,4 +51,4 @@ final updated = user.copyWith(name: 'Bob');
 
 ---
 
-<p align="right"><a href="../topics/Data-Class-Macro-topic.html">Next: DataClassMacro</a></p>
+<p align="right"><a href="../topics/Data Class Macro-topic.html">Next: Data Class Macro</a></p>
