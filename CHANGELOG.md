@@ -1,3 +1,12 @@
+## 0.3.6
+
+- Add support for assigning null values to nullable fields in `copyWith` methods by wrapping
+  parameters in `Option<T>`. This allows distinguishing between "not provided" (keep existing value)
+  and "explicitly set to null" (update to null).
+    - Enable globally via `copy_with_as_option: true` in configuration for **DataClassMacro**
+    - Enable per-class via `@Macro(@DataClassMacro(copyWithAsOption: true))`
+    - Enable per-field via `@JsonKey(copyWithAsOption: true)`
+
 ## 0.3.5
 
 - Added configurable serialization method names: `use_map_convention` option to generate

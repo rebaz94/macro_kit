@@ -153,6 +153,7 @@ Create or modify `.macro.json` in your project root:
       "create_as_cast": true,
       "create_equal": true,
       "create_copy_with": true,
+      "copy_with_as_option": false,
       "create_to_string": true,
       "include_if_null": false,
       "as_literal_types": [],
@@ -234,6 +235,13 @@ mixin ExampleData {
 - **Default**: `true`
 - **Description**: Generates a `copyWith` method for immutable updates.
 
+#### `copy_with_as_option`
+
+- **Type**: `bool`
+- **Default**: `false`
+- **Description**: Whether to use `Option<T>` for fields in the generated copyWith method to support
+  assigning null value to nullable fields.
+
 #### `create_to_string`
 
 - **Type**: `bool`
@@ -313,6 +321,7 @@ Here's a fully configured `.macro.json`:
       "create_as_cast": true,
       "create_equal": true,
       "create_copy_with": true,
+      "copy_with_as_option": false,
       "create_to_string": true,
       "include_if_null": false,
       "as_literal_types": [

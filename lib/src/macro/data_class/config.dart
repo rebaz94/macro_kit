@@ -18,6 +18,7 @@ class JsonKey {
     this.unknownEnumValue,
     this.asRequired,
     this.asLiteral,
+    this.copyWithAsOption,
   });
 
   /// The value to use if the source JSON does not contain this key or if the
@@ -128,6 +129,15 @@ class JsonKey {
   /// If `null`, the field will use the default serialization behavior or inherit from
   /// global `asLiteralTypes` configuration.
   final bool? asLiteral;
+
+  /// Whether to use [Option<T>] for this field in the generated copyWith method.
+  ///
+  /// When true, the field will use [Option<T>] to distinguish between "not provided"
+  /// and "explicitly set to null", enabling proper null assignment in copyWith.
+  /// When null, inherits from the global copy_with_as_option configuration which is false by default.
+  ///
+  /// Note: In a future, `Option<T>`-based copyWith will become the default behavior.
+  final bool? copyWithAsOption;
 }
 
 /// Represents a default enum value or multiple enum values for handling unknown cases.
@@ -176,6 +186,7 @@ class JsonKeyConfig {
     this.unknownEnumValue,
     this.asRequired,
     this.asLiteral,
+    this.copyWithAsOption,
   });
 
   static const defaultKey = JsonKeyConfig();
@@ -251,6 +262,7 @@ class JsonKeyConfig {
           : null,
       asRequired: props['asRequired']?.asBoolConstantValue(),
       asLiteral: props['asLiteral']?.asBoolConstantValue(),
+      copyWithAsOption: props['copyWithAsOption']?.asBoolConstantValue(),
     );
   }
 
@@ -276,6 +288,7 @@ class JsonKeyConfig {
   final List<String>? unknownEnumValue;
   final bool? asRequired;
   final bool? asLiteral;
+  final bool? copyWithAsOption;
 
   bool isLiteral(DataClassMacroConfig config, String type) {
     return switch (asLiteral) {
@@ -300,6 +313,7 @@ class DataClassMacroConfig extends MacroGlobalConfig {
     this.includeIfNull,
     this.asLiteralTypes = const [],
     this.useMapConvention = false,
+    this.copyWithAsOption,
   });
 
   static DataClassMacroConfig fromJson(Map<String, dynamic> json) {
@@ -321,6 +335,7 @@ class DataClassMacroConfig extends MacroGlobalConfig {
       includeIfNull: parseField(json['include_if_null']),
       asLiteralTypes: parseField<List>(json['as_literal_types'])?.map((e) => e as String).toList() ?? const [],
       useMapConvention: parseField(json['use_map_convention']) ?? false,
+      copyWithAsOption: parseField(json['copy_with_as_option']) ?? false,
     );
   }
 
@@ -410,4 +425,13 @@ class DataClassMacroConfig extends MacroGlobalConfig {
   /// Use case: Migration from tools like Dart Data Class Generator VS Code extension
   /// which uses toMap/fromMap convention by default.
   final bool useMapConvention;
+
+  /// Whether to use [Option<T>] for fields in the generated copyWith method.
+  ///
+  /// When true, the fields will use [Option<T>] to distinguish between "not provided"
+  /// and "explicitly set to null", enabling proper null assignment in copyWith.
+  /// When null, inherits from the global copy_with_as_option configuration which is false by default.
+  ///
+  /// Note: In a future, `Option<T>`-based copyWith will become the default behavior.
+  final bool? copyWithAsOption;
 }

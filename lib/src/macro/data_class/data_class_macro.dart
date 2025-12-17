@@ -36,6 +36,7 @@ class DataClassMacro extends MacroGenerator {
     this.asCast,
     this.equal,
     this.copyWith,
+    this.copyWithAsOption,
     this.toStringOverride,
     this.discriminatorKey,
     this.discriminatorValue,
@@ -56,6 +57,7 @@ class DataClassMacro extends MacroGenerator {
       asCast: props['asCast']?.asBoolConstantValue(),
       equal: props['equal']?.asBoolConstantValue(),
       copyWith: props['copyWith']?.asBoolConstantValue(),
+      copyWithAsOption: props['copyWithAsOption']?.asBoolConstantValue(),
       toStringOverride: props['toStringOverride']?.asBoolConstantValue(),
       discriminatorKey: props['discriminatorKey']?.asStringConstantValue(),
       discriminatorValue: props['discriminatorValue']?.constantValue,
@@ -70,23 +72,31 @@ class DataClassMacro extends MacroGenerator {
   ///  2. [primaryConstructor] = '.test' which is same 'Example.test'
   final String? primaryConstructor;
 
-  /// If `true` (the default) based on global config, it implements static fromJson
+  /// If `true` (the default) based on global config, it generate static fromJson
   final bool? fromJson;
 
-  /// If `true` (the default) based on global config, it implements toJson method
+  /// If `true` (the default) based on global config, it generate toJson method
   final bool? toJson;
 
-  /// If `true` (the default) based on global config, it implements map and mapOrNull method on sealed or abstract class
+  /// If `true` (the default) based on global config, it generate map and mapOrNull method on sealed or abstract class
   final bool? mapTo;
 
-  /// If `true` (the default) based on global config, it implements as cast method on sealed or abstract class
+  /// If `true` (the default) based on global config, it generate as cast method on sealed or abstract class
   final bool? asCast;
 
   /// If `true` (the default) based on global config, it implements equality
   final bool? equal;
 
-  /// If `true` (the default) based on global config, it copyWith method
+  /// If `true` (the default) based on global config, it generate copyWith method
   final bool? copyWith;
+
+  /// If `true`. it uses [Option<T>] for all fields in the generated copyWith method.
+  ///
+  /// the fields will use [Option<T>] to distinguish between "not provided"
+  /// and "explicitly set to null", enabling proper null assignment in copyWith.
+  ///
+  /// Note: In a future, `Option<T>`-based copyWith will become the default behavior.
+  final bool? copyWithAsOption;
 
   /// If `true` (the default) based on global config, it toString method
   final bool? toStringOverride;
@@ -225,7 +235,9 @@ class DataClassMacro extends MacroGenerator {
     if (primaryCtor.startsWith('.')) {
       primaryCtor = primaryCtor.substring(1);
     } else if (primaryCtor.contains('.')) {
-      primaryCtor = primaryCtor.split('.').last;
+      primaryCtor = primaryCtor
+          .split('.')
+          .last;
     }
 
     final currentPrimaryConstructor = constructors.firstWhereOrNull((e) => e.constructorName == primaryCtor);
@@ -603,14 +615,13 @@ class DataClassMacro extends MacroGenerator {
     final fromJsonStaticFnName = config.useMapConvention ? 'fromMap' : 'fromJson';
     var fieldRename = config.fieldRename ?? FieldRename.none;
 
-    String fieldCast(
-      MacroProperty field,
-      JsonKeyConfig? jsonKey,
-      String value, {
-      String? defaultValue,
-      MacroProperty? mainType,
-      Iterable<String>? usedUnknownEnumVals,
-    }) {
+    String fieldCast(MacroProperty field,
+        JsonKeyConfig? jsonKey,
+        String value, {
+          String? defaultValue,
+          MacroProperty? mainType,
+          Iterable<String>? usedUnknownEnumVals,
+        }) {
       final isNullable = field.isNullable;
       final typeInfo = field.typeInfo;
       final prefix = field.importPrefix;
@@ -640,7 +651,8 @@ class DataClassMacro extends MacroGenerator {
 
           if (!hasFn) {
             throw MacroException(
-              'The parameter `${field.name}` of type: ${field.type} in `$className` should add macro support or provide custom $fromJsonStaticFnName function',
+              'The parameter `${field.name}` of type: ${field
+                  .type} in `$className` should add macro support or provide custom $fromJsonStaticFnName function',
             );
           }
 
@@ -648,7 +660,8 @@ class DataClassMacro extends MacroGenerator {
             if (fromJsonFn.params.length != 1 ||
                 fromJsonFn.returns.first.type.removedNullability != type.removedNullability) {
               throw MacroException(
-                'The parameter `${field.name}` of type: ${field.type} in `$className` should define $fromJsonStaticFnName function with one argument and return expected value',
+                'The parameter `${field.name}` of type: ${field
+                    .type} in `$className` should define $fromJsonStaticFnName function with one argument and return expected value',
               );
             }
 
@@ -656,7 +669,8 @@ class DataClassMacro extends MacroGenerator {
             final typeParams = MacroProperty.getClassTypeParameter(fromJsonFn.typeParams);
 
             if (isNullable) {
-              return '$value == null ? $defaultValue : $prefix${type.removedNullability}.$fromJsonStaticFnName$typeParams($fromJsonCastValue)';
+              return '$value == null ? $defaultValue : $prefix${type
+                  .removedNullability}.$fromJsonStaticFnName$typeParams($fromJsonCastValue)';
             }
 
             return '$prefix$type.$fromJsonStaticFnName$typeParams($fromJsonCastValue)';
@@ -697,7 +711,8 @@ class DataClassMacro extends MacroGenerator {
 
           final allTypeParamsFromJson = typeParamsFromJson?.join(', ') ?? '';
           final comma = allTypeParamsFromJson.isNotEmpty ? ', ' : '';
-          final fromJsonCall = '$clsName.$fromJsonStaticFnName$typeParam($fromJsonCastValue$comma$allTypeParamsFromJson)';
+          final fromJsonCall =
+              '$clsName.$fromJsonStaticFnName$typeParam($fromJsonCastValue$comma$allTypeParamsFromJson)';
           if (isNullable) {
             return '$value == null ? $defaultValue : $fromJsonCall';
           }
@@ -719,7 +734,9 @@ class DataClassMacro extends MacroGenerator {
 
           if (MacroProperty.isDynamicIterable(type)) {
             if (isNullable) {
-              final firstCast = type.replaceFirst('Iterable', 'List').removedNullability;
+              final firstCast = type
+                  .replaceFirst('Iterable', 'List')
+                  .removedNullability;
               return '$value == null ? $defaultValue : ($value as $prefix$firstCast).iterator';
             }
 
@@ -752,7 +769,8 @@ class DataClassMacro extends MacroGenerator {
 
           if (elemType!.isNullable) {
             throw MacroException(
-              'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri but got nullable type: `${elemType.type}`',
+              'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri but got nullable type: `${elemType
+                  .type}`',
             );
           }
 
@@ -783,7 +801,9 @@ class DataClassMacro extends MacroGenerator {
                 // use first one and provide remaining unknown default value to next type
                 usedUnknownEnumVals: jsonKey?.unknownEnumValue?.skip(1),
               );
-              return '($value as ${dcp}Map<${dcp}String, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(MacroExt.decodeEnum(${elemType.importPrefix}${elemType.type}.values, k, unknownValue: $unknownEnumValue), $mapElemValue))$nullableDefault';
+              return '($value as ${dcp}Map<${dcp}String, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(MacroExt.decodeEnum(${elemType
+                  .importPrefix}${elemType
+                  .type}.values, k, unknownValue: $unknownEnumValue), $mapElemValue))$nullableDefault';
             case TypeInfo.object:
               return '($value as ${dcp}Map<${dcp}Object, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(k, $mapElemValue))$nullableDefault';
             case TypeInfo.dynamic:
@@ -798,7 +818,8 @@ class DataClassMacro extends MacroGenerator {
               return '($value as ${dcp}Map<${dcp}Object?, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry($fromJsonStaticFnName$prefix$genType(k), $mapElemValue))$nullableDefault';
             default:
               throw MacroException(
-                'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri but got: ${elemType.type}',
+                'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri but got: ${elemType
+                    .type}',
               );
           }
         case TypeInfo.set:
@@ -807,7 +828,9 @@ class DataClassMacro extends MacroGenerator {
 
           if (MacroProperty.isDynamicSet(type)) {
             if (isNullable) {
-              final firstCast = type.replaceFirst('Set', 'List').removedNullability;
+              final firstCast = type
+                  .replaceFirst('Set', 'List')
+                  .removedNullability;
               return '$value == null ? $defaultValue : ($value as $prefix$firstCast).toSet()';
             }
 
@@ -900,10 +923,10 @@ class DataClassMacro extends MacroGenerator {
       final hasDefaultValue = defaultValue != null;
       final isConstant = key.defaultValue != null || field.constantModifier?.isConst == true;
       defaultValue =
-          defaultValue != null &&
-              isConstant &&
-              field.typeInfo != TypeInfo.enumData &&
-              !defaultValue.startsWith('const ')
+      defaultValue != null &&
+          isConstant &&
+          field.typeInfo != TypeInfo.enumData &&
+          !defaultValue.startsWith('const ')
           ? 'const $defaultValue'
           : defaultValue;
 
@@ -919,7 +942,8 @@ class DataClassMacro extends MacroGenerator {
           return '$posOrNamedField null';
         } else {
           throw MacroException(
-            "The parameter `${field.name}` of type: `${field.type}` in `${state.targetName}` is non-nullable and does not have default value",
+            "The parameter `${field.name}` of type: `${field.type}` in `${state
+                .targetName}` is non-nullable and does not have default value",
           );
         }
       }
@@ -946,15 +970,19 @@ class DataClassMacro extends MacroGenerator {
           valueTypeIsGeneric: fromJsonReturnTypeProp.typeInfo == TypeInfo.generic,
         )) {
           throw MacroException(
-            'The parameter `${field.name}` of type: `${field.type}` in `${state.targetName}` has incompatible $fromJsonStaticFnName function, '
-            'the $fromJsonStaticFnName return must be type of: `${field.type}` but got: `${fromJsonReturnTypeProp.type}`',
+            'The parameter `${field.name}` of type: `${field.type}` in `${state
+                .targetName}` has incompatible $fromJsonStaticFnName function, '
+                'the $fromJsonStaticFnName return must be type of: `${field.type}` but got: `${fromJsonReturnTypeProp
+                .type}`',
           );
         }
 
         final asType = ' as ${fromJsonArgTypeProp.getDartType(dcp)}';
         final fromJsonCallFallback = fromJsonReturnTypeProp.isNullable && hasDefaultValue ? ' ?? $defaultValue' : '';
         value =
-            '${field.isNullable ? '$jsonValue == null ? $defaultValue : ' : ''}${'$fromJsonFn($jsonValue$asType)$fromJsonCallFallback'}';
+        '${field.isNullable
+            ? '$jsonValue == null ? $defaultValue : '
+            : ''}${'$fromJsonFn($jsonValue$asType)$fromJsonCallFallback'}';
       } else {
         if (hasDefaultValue && !field.isNullable) {
           value = fieldCast(field.toNullability(), key, jsonValue, defaultValue: defaultValue);
@@ -978,21 +1006,15 @@ class DataClassMacro extends MacroGenerator {
     final genericArgs = fromJsonGenericsArgs.join(', ');
     final comma = genericArgs.isNotEmpty ? ', ' : '';
 
-    buff
-      ..write(
-        ' static $prefix$className$clsTypeParams $fromJsonStaticFnName$clsTypeParamsWithBound(${dcp}Map<${dcp}String, ${dcp}dynamic> json$comma$genericArgs) {\n',
-      )
-      ..write('   return $prefix$className$clsTypeParams${ctorName.isNotEmpty ? '.' : ''}$ctorName(\n')
-      ..write(positionalFieldsMapping)
-      ..write(positionalFields.isNotEmpty ? ',\n' : '')
-      ..write(namedFieldsMapping);
+    buff..write(
+      ' static $prefix$className$clsTypeParams $fromJsonStaticFnName$clsTypeParamsWithBound(${dcp}Map<${dcp}String, ${dcp}dynamic> json$comma$genericArgs) {\n',
+    )..write('   return $prefix$className$clsTypeParams${ctorName.isNotEmpty ? '.' : ''}$ctorName(\n')..write(
+        positionalFieldsMapping)..write(positionalFields.isNotEmpty ? ',\n' : '')..write(namedFieldsMapping);
     if (namedFields.isNotEmpty) {
       buff.write(',\n');
     }
 
-    buff
-      ..write('   );\n')
-      ..write('  }\n\n');
+    buff..write('   );\n')..write('  }\n\n');
   }
 
   void _generateToJson({
@@ -1033,7 +1055,7 @@ class DataClassMacro extends MacroGenerator {
           if (!hasFn) {
             throw MacroException(
               'Parameter `${field.name}` of type `${field.type}` in `${state.targetName}` '
-              'must either have macro support enabled or provide a custom `$toJsonFnName` function.',
+                  'must either have macro support enabled or provide a custom `$toJsonFnName` function.',
             );
           }
 
@@ -1041,7 +1063,7 @@ class DataClassMacro extends MacroGenerator {
             if (toJsonFn.params.isNotEmpty || toJsonFn.returns.first.typeInfo == TypeInfo.voidType) {
               throw MacroException(
                 'Parameter `${field.name}` of type `${field.type}` in `${state.targetName}` '
-                'must define a `$toJsonFnName` method with no arguments that returns the expected JSON value.',
+                    'must define a `$toJsonFnName` method with no arguments that returns the expected JSON value.',
               );
             }
           }
@@ -1107,7 +1129,8 @@ class DataClassMacro extends MacroGenerator {
 
           if (elemType!.isNullable) {
             throw MacroException(
-              'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri but got nullable type: `${elemType.type}`',
+              'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri but got nullable type: `${elemType
+                  .type}`',
             );
           }
 
@@ -1234,8 +1257,8 @@ class DataClassMacro extends MacroGenerator {
         )) {
           throw MacroException(
             'Parameter `${field.name}` of type `${field.type}` in `${state.targetName}` '
-            'has an incompatible `$toJsonFnName` function. Expected argument type: `${field.type}`, '
-            'but got: `${toJsonArgTypeProp.type}`.',
+                'has an incompatible `$toJsonFnName` function. Expected argument type: `${field.type}`, '
+                'but got: `${toJsonArgTypeProp.type}`.',
           );
         }
 
@@ -1270,13 +1293,15 @@ class DataClassMacro extends MacroGenerator {
       toJsonGenericsArgs.add('${dcp}Object? Function(${tp.name} v) $toJsonFnName${tp.name}');
     }
 
-    final jsonMapping = fields.map(fieldValue).nonNulls.join(',\n');
+    final jsonMapping = fields
+        .map(fieldValue)
+        .nonNulls
+        .join(',\n');
     final genericArgs = toJsonGenericsArgs.join(', ');
 
-    buff
-      ..write(' ${dcp}Map<${dcp}String, ${dcp}dynamic> $toJsonFnName($genericArgs) {\n')
-      ..write(fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '')
-      ..write('   return <${dcp}String, ${dcp}dynamic> {\n');
+    buff..write(' ${dcp}Map<${dcp}String, ${dcp}dynamic> $toJsonFnName($genericArgs) {\n')..write(
+        fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '')..write(
+        '   return <${dcp}String, ${dcp}dynamic> {\n');
 
     buff.write(jsonMapping);
     if (jsonMapping.isNotEmpty) {
@@ -1304,9 +1329,7 @@ class DataClassMacro extends MacroGenerator {
       }
     }
 
-    buff
-      ..write('   };\n')
-      ..write(' }\n\n');
+    buff..write('   };\n')..write(' }\n\n');
   }
 
   void _generateCopyWith({
@@ -1320,18 +1343,50 @@ class DataClassMacro extends MacroGenerator {
   }) {
     if (state.modifier.isAbstract || state.modifier.isSealed) return;
 
+    final config = _getConfig(state);
+    final globalCopyWithAsOption = copyWithAsOption ?? config.copyWithAsOption;
     final dcp = state.getOrNull<String>('dartCorePrefix') ?? '';
 
     String? fieldParam(MacroProperty field) {
-      final dartType = field.getDartType(dcp);
+      final String dartType;
+      bool useOption = false;
+
+      if (field.isNullable) {
+        final key = field.cacheFirstKeyInto(
+          keyName: 'JsonKey',
+          convertFn: JsonKeyConfig.fromMacroKey,
+          defaultValue: JsonKeyConfig.defaultKey,
+        );
+        final copyWithAsOption = key.copyWithAsOption ?? globalCopyWithAsOption ?? false;
+        useOption = copyWithAsOption;
+        if (copyWithAsOption) {
+          final innerType = field.toNullability(intoNullable: false);
+          final innerTypeDart = innerType.getDartType(dcp);
+          final optionType = MacroProperty(
+            name: '',
+            importPrefix: '',
+            type: 'Option<$innerTypeDart>',
+            typeInfo: TypeInfo.clazz,
+            typeArguments: [innerType],
+          );
+          dartType = optionType.getDartType(dcp);
+        } else {
+          dartType = field.getDartType(dcp);
+        }
+      } else {
+        dartType = field.getDartType(dcp);
+      }
+
       final (fieldPropName, isNullable) = _getFieldInitializerWithSuper(field, field.isNullable);
-      final type = isNullable || field.typeInfo == TypeInfo.dynamic || dartType.endsWith('?') ? dartType : '$dartType?';
+      final type = isNullable || field.typeInfo == TypeInfo.dynamic || dartType.endsWith('?')
+          ? dartType
+          : '$dartType${useOption ? '' : '?'}';
       var fieldName = field.name;
       if (!fieldPropName.startsWith('_')) {
         fieldName = fieldPropName;
       }
 
-      return '   $type $fieldName';
+      return '   $type $fieldName${useOption ? ' = const Option.undefined()' : ''}';
     }
 
     String? fieldParamCopy(MacroProperty field, [bool positional = false]) {
@@ -1340,7 +1395,26 @@ class DataClassMacro extends MacroGenerator {
       if (!fieldPropName.startsWith('_')) {
         fieldName = fieldPropName;
       }
-      return '      ${positional ? '' : '$fieldName: '}$fieldName ?? v.$fieldPropName';
+
+      // either use (field ?? v.field) for non nullable field or when not opt-in into using Option or
+      // (field.isUndefined ? v.field : $fieldName.casted())
+      String? assignedValue;
+
+      if (field.isNullable) {
+        final key = field.cacheFirstKeyInto(
+          keyName: 'JsonKey',
+          convertFn: JsonKeyConfig.fromMacroKey,
+          defaultValue: JsonKeyConfig.defaultKey,
+        );
+        final copyWithAsOption = key.copyWithAsOption ?? globalCopyWithAsOption ?? false;
+        if (copyWithAsOption) {
+          assignedValue = '$fieldName.isUndefined ? v.$fieldPropName : $fieldName.casted()';
+        }
+      }
+
+      // default to null coalescing if not enabled option
+      assignedValue ??= '$fieldName ?? v.$fieldPropName';
+      return '      ${positional ? '' : '$fieldName: '}$assignedValue';
     }
 
     final prefix = state.importPrefix;
@@ -1349,48 +1423,35 @@ class DataClassMacro extends MacroGenerator {
     // copy with params
     buff.write(' $clsWithTypeParams copyWith(');
     if (positionalFields.isNotEmpty || namedFields.isNotEmpty) {
-      buff
-        ..write('{')
-        ..write(positionalFields.map(fieldParam).join(',\n'));
+      buff..write('{')..write(positionalFields.map(fieldParam).join(',\n'));
 
       if (positionalFields.isNotEmpty) {
         buff.write(',');
       }
 
       if (namedFields.isNotEmpty) {
-        buff
-          ..write('\n')
-          ..write(namedFields.map(fieldParam).join(',\n'))
-          ..write(',');
+        buff..write('\n')..write(namedFields.map(fieldParam).join(',\n'))..write(',');
       }
       buff.write('\n }');
     }
 
-    buff
-      ..write(') {\n')
-      ..write(
-        positionalFields.isNotEmpty || namedFields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
-      )
-      ..write('   return $clsWithTypeParams${ctorName.isNotEmpty ? '.' : ''}$ctorName(')
-      ..write(positionalFields.isEmpty ? '' : '\n')
-      ..write(positionalFields.map((field) => fieldParamCopy(field, true)).join(',\n'));
+    buff..write(') {\n')..write(
+      positionalFields.isNotEmpty || namedFields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
+    )..write('   return $clsWithTypeParams${ctorName.isNotEmpty ? '.' : ''}$ctorName(')..write(
+        positionalFields.isEmpty ? '' : '\n')..write(
+        positionalFields.map((field) => fieldParamCopy(field, true)).join(',\n'));
 
     if (positionalFields.isNotEmpty) {
       buff.write(',');
     }
 
     if (namedFields.isNotEmpty) {
-      buff
-        ..write('\n')
-        ..write(namedFields.map((e) => fieldParamCopy(e)).join(',\n'))
-        ..write(',\n');
+      buff..write('\n')..write(namedFields.map((e) => fieldParamCopy(e)).join(',\n'))..write(',\n');
     } else {
       buff.write('\n');
     }
 
-    buff
-      ..write('   );\n')
-      ..write(' }\n');
+    buff..write('   );\n')..write(' }\n');
   }
 
   void _generateEquality({
@@ -1405,57 +1466,43 @@ class DataClassMacro extends MacroGenerator {
     final clsWithTypeParams = '$prefix$className${MacroProperty.getClassTypeParameter(typeParams)}';
 
     /// generate equality
-    buff
-      ..write('\n')
-      ..write(' @${dcp}override\n')
-      ..write(' ${dcp}bool operator ==(${dcp}Object other) {\n')
-      ..write(
-        fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
-      )
-      ..write(
-        '   return ${dcp}identical(this, other) ||\n     (other.runtimeType == runtimeType && other is $clsWithTypeParams',
-      );
+    buff..write('\n')..write(' @${dcp}override\n')..write(' ${dcp}bool operator ==(${dcp}Object other) {\n')..write(
+      fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
+    )..write(
+      '   return ${dcp}identical(this, other) ||\n     (other.runtimeType == runtimeType && other is $clsWithTypeParams',
+    );
     if (fields.isNotEmpty) {
       buff.write(' &&\n');
     }
 
-    buff
-      ..write(
-        fields
-            .map((field) {
-              final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
+    buff..write(
+      fields
+          .map((field) {
+        final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
 
-              return field.deepEquality
-                  ? '     const DeepCollectionEquality().equals(other.$fieldPropName, v.$fieldPropName)'
-                  : '     (${dcp}identical(other.$fieldPropName, v.$fieldPropName) || other.$fieldPropName == v.$fieldPropName)';
-            })
-            .join(' &&\n'),
-      )
-      ..write(');\n')
-      ..write(' }\n\n');
+        return field.deepEquality
+            ? '     const DeepCollectionEquality().equals(other.$fieldPropName, v.$fieldPropName)'
+            : '     (${dcp}identical(other.$fieldPropName, v.$fieldPropName) || other.$fieldPropName == v.$fieldPropName)';
+      })
+          .join(' &&\n'),
+    )..write(');\n')..write(' }\n\n');
 
     /// generate hash
     if (fields.isNotEmpty && fields.length <= 19) {
-      buff
-        ..write(' @${dcp}override\n')
-        ..write(' ${dcp}int get hashCode {\n')
-        ..write(
-          fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
+      buff..write(' @${dcp}override\n')..write(' ${dcp}int get hashCode {\n')..write(
+        fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
+      )..write('  return ${dcp}Object.hash(\n')..write('   runtimeType, ')..write(
+        fields
+            .map(
+              (field) {
+            final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
+            return field.deepEquality
+                ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
+                : 'v.$fieldPropName';
+          },
         )
-        ..write('  return ${dcp}Object.hash(\n')
-        ..write('   runtimeType, ')
-        ..write(
-          fields
-              .map(
-                (field) {
-                  final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
-                  return field.deepEquality
-                      ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
-                      : 'v.$fieldPropName';
-                },
-              )
-              .join(', '),
-        );
+            .join(', '),
+      );
 
       if (fields.isNotEmpty) {
         buff.write(',');
@@ -1463,26 +1510,20 @@ class DataClassMacro extends MacroGenerator {
 
       buff.write('\n  );\n }\n\n');
     } else {
-      buff
-        ..write(' @${dcp}override\n')
-        ..write(' ${dcp}int get hashCode {\n')
-        ..write(
-          fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
+      buff..write(' @${dcp}override\n')..write(' ${dcp}int get hashCode {\n')..write(
+        fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '',
+      )..write('   return ${dcp}Object.hashAll([\n')..write('     runtimeType, ')..write(
+        fields
+            .map(
+              (field) {
+            final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
+            return field.deepEquality
+                ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
+                : 'v.$fieldPropName';
+          },
         )
-        ..write('   return ${dcp}Object.hashAll([\n')
-        ..write('     runtimeType, ')
-        ..write(
-          fields
-              .map(
-                (field) {
-                  final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
-                  return field.deepEquality
-                      ? 'const DeepCollectionEquality().hash(v.$fieldPropName)'
-                      : 'v.$fieldPropName';
-                },
-              )
-              .join(', '),
-        );
+            .join(', '),
+      );
 
       if (fields.isNotEmpty) {
         buff.write(',');
@@ -1504,19 +1545,14 @@ class DataClassMacro extends MacroGenerator {
     final clsWithGenericParam = '$prefix$className${MacroProperty.getClassTypeParameter(typeParams)}';
     final genericParamAsType = typeParams.isNotEmpty == true ? '<\$${typeParams.map((tp) => tp.name).join(',')}>' : '';
 
-    buff
-      ..write(' @${dcp}override\n')
-      ..write(' ${dcp}String toString() {\n')
-      ..write(
-        fields.isNotEmpty ? '   final v = this as $clsWithGenericParam;\n' : '',
-      )
-      ..write(
-        "   return '$prefix$className$genericParamAsType{${fields.map((field) {
-          final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
-          return '${field.name}: \${v.$fieldPropName}';
-        }).join(', ')}}';\n",
-      )
-      ..write(' }\n');
+    buff..write(' @${dcp}override\n')..write(' ${dcp}String toString() {\n')..write(
+      fields.isNotEmpty ? '   final v = this as $clsWithGenericParam;\n' : '',
+    )..write(
+      "   return '$prefix$className$genericParamAsType{${fields.map((field) {
+        final (fieldPropName, _) = _getFieldInitializerWithSuper(field, field.isNullable);
+        return '${field.name}: \${v.$fieldPropName}';
+      }).join(', ')}}';\n",
+    )..write(' }\n');
   }
 
   void _generatePolymorphicFromJson({
@@ -1552,7 +1588,8 @@ class DataClassMacro extends MacroGenerator {
       if (fromJsonFn != null) {
         if (fromJsonFn.params.length != 1 || fromJsonFn.returns.first.classInfo?.className != classSubType.className) {
           throw MacroException(
-            'Subtype `${classSubType.className}` must define a `$fromJsonStaticFnName` function with one parameter and a compatible return type.',
+            'Subtype `${classSubType
+                .className}` must define a `$fromJsonStaticFnName` function with one parameter and a compatible return type.',
           );
         }
 
@@ -1561,15 +1598,15 @@ class DataClassMacro extends MacroGenerator {
       }
 
       final typeParams = MacroProperty.getClassTypeParameter(classTypeParams ?? const []);
-      return '${classSubType.importPrefix}${classSubType.className}$suffixName.$fromJsonStaticFnName$typeParams($value)';
+      return '${classSubType.importPrefix}${classSubType
+          .className}$suffixName.$fromJsonStaticFnName$typeParams($value)';
     }
 
-    String switchCaseValue(
-      MacroClassDeclaration subTypeInfo,
-      MacroProperty? discriminatorValue,
-      List<MacroProperty>? typeParams, {
-      String? customCaseKey,
-    }) {
+    String switchCaseValue(MacroClassDeclaration subTypeInfo,
+        MacroProperty? discriminatorValue,
+        List<MacroProperty>? typeParams, {
+          String? customCaseKey,
+        }) {
       // json argument value
       final jsonValue = typeParams?.isNotEmpty == true
           ? 'json, ${typeParams!.map((tp) => '$fromJsonStaticFnName${tp.name}').join(', ')}'
@@ -1579,7 +1616,8 @@ class DataClassMacro extends MacroGenerator {
       }
 
       if (discriminatorValue.requireConversionToLiteral == true) {
-        return "${jsonLiteralAsDart(discriminatorValue.constantValue)} => ${caseCast(subTypeInfo, typeParams, jsonValue)}";
+        return "${jsonLiteralAsDart(discriminatorValue.constantValue)} => ${caseCast(
+            subTypeInfo, typeParams, jsonValue)}";
       } else if (discriminatorValue.typeInfo == TypeInfo.function) {
         if (discriminatorValue.functionTypeInfo == null ||
             discriminatorValue.functionTypeInfo!.params.length != 1 ||
@@ -1587,8 +1625,8 @@ class DataClassMacro extends MacroGenerator {
             discriminatorValue.functionTypeInfo!.returns.first.typeInfo != TypeInfo.boolean) {
           throw MacroException(
             'Invalid discriminator function. Expected a matcher with signature '
-            'bool Function(Map<String, dynamic> json) that returns true when the subtype should be selected '
-            'but got: ${discriminatorValue.constantValue}.',
+                'bool Function(Map<String, dynamic> json) that returns true when the subtype should be selected '
+                'but got: ${discriminatorValue.constantValue}.',
           );
         }
 
@@ -1604,41 +1642,35 @@ class DataClassMacro extends MacroGenerator {
         ?.map((tp) => tp.copyWith(name: '${discriminatorDefault.className}${tp.name}'))
         .toList();
     final genericArgs = discriminatorTypeParams.isNotEmpty
-        ? ',{${discriminatorTypeParams.map((tp) => 'required ${tp.name} Function(${dcp}Object? v) $fromJsonStaticFnName${tp.name}').join(', ')},}'
+        ? ',{${discriminatorTypeParams.map((tp) => 'required ${tp
+        .name} Function(${dcp}Object? v) $fromJsonStaticFnName${tp.name}').join(', ')},}'
         : '';
 
-    buff
-      ..write(
-        ' static $prefix$className$mainClassTypeParams $fromJsonStaticFnName$discriminatorWithClassTypeParams(${dcp}Map<${dcp}String, ${dcp}dynamic> json$genericArgs) {\n',
-      )
-      ..write("   final type = json['${Utils.escapeQuote(discriminatorKey ?? 'type')}'];\n")
-      ..write('   return switch(type) {\n');
+    buff..write(
+      ' static $prefix$className$mainClassTypeParams $fromJsonStaticFnName$discriminatorWithClassTypeParams(${dcp}Map<${dcp}String, ${dcp}dynamic> json$genericArgs) {\n',
+    )..write("   final type = json['${Utils.escapeQuote(discriminatorKey ?? 'type')}'];\n")..write(
+        '   return switch(type) {\n');
 
     final discriminatorCases = discriminatorValues
         .mapIndexed((i, e) {
-          final range = discriminatorTypeParamsByIndexRange[i];
-          final discriminatorClassTypeParam = range != null
-              ? discriminatorTypeParams.sublist(range.start, range.end)
-              : null;
-          return switchCaseValue(e.$1, e.$2, discriminatorClassTypeParam);
-        })
+      final range = discriminatorTypeParamsByIndexRange[i];
+      final discriminatorClassTypeParam = range != null
+          ? discriminatorTypeParams.sublist(range.start, range.end)
+          : null;
+      return switchCaseValue(e.$1, e.$2, discriminatorClassTypeParam);
+    })
         .join(',\n');
 
-    buff
-      ..write(discriminatorCases)
-      ..write(discriminatorValues.isNotEmpty ? ',\n' : '')
-      ..write(
-        discriminatorDefault != null
-            ? switchCaseValue(discriminatorDefault, null, discriminatorDefaultFromJson, customCaseKey: '_')
-            : '',
-      )
-      ..write(
-        discriminatorDefault == null
-            ? "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$type\" for $className. No default subtype is defined.'),\n"
-            : '',
-      )
-      ..write('   }${mainClassTypeParams.isNotEmpty ? ' as $prefix$className$mainClassTypeParams' : ''};\n')
-      ..write('  }\n\n');
+    buff..write(discriminatorCases)..write(discriminatorValues.isNotEmpty ? ',\n' : '')..write(
+      discriminatorDefault != null
+          ? switchCaseValue(discriminatorDefault, null, discriminatorDefaultFromJson, customCaseKey: '_')
+          : '',
+    )..write(
+      discriminatorDefault == null
+          ? "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$type\" for $className. No default subtype is defined.'),\n"
+          : '',
+    )..write('   }${mainClassTypeParams.isNotEmpty ? ' as $prefix$className$mainClassTypeParams' : ''};\n')..write(
+        '  }\n\n');
   }
 
   void _generatePolymorphicToJson({
@@ -1655,42 +1687,35 @@ class DataClassMacro extends MacroGenerator {
     final toJsonFnName = config.useMapConvention ? 'toMap' : 'toJson';
     final dcp = state.getOrNull('dartCorePrefix') ?? '';
 
-    String switchCaseValue(
-      MacroClassDeclaration subTypeInfo,
-      List<MacroProperty>? typeParams, {
-      String? customCaseKey,
-    }) {
+    String switchCaseValue(MacroClassDeclaration subTypeInfo,
+        List<MacroProperty>? typeParams, {
+          String? customCaseKey,
+        }) {
       final classTypeParam = MacroProperty.getClassTypeParameter(typeParams ?? const []);
       final classType = '${subTypeInfo.importPrefix}${subTypeInfo.className}$classTypeParam';
       return '$classType v => v.$toJsonFnName(${typeParams?.map((e) => '$toJsonFnName${e.name}').join(', ') ?? ''})';
     }
 
     final genericArgs = discriminatorTypeParams.isNotEmpty
-        ? '{${discriminatorTypeParams.map((tp) => 'required ${dcp}Object? Function(${tp.name} value) $toJsonFnName${tp.name}').join(', ')},}'
+        ? '{${discriminatorTypeParams.map((tp) => 'required ${dcp}Object? Function(${tp.name} value) $toJsonFnName${tp
+        .name}').join(', ')},}'
         : '';
 
-    buff
-      ..write(
-        ' ${dcp}Map<${dcp}String, ${dcp}dynamic> ${toJsonFnName}By$discriminatorTypeParamsCombined($genericArgs) {\n',
-      )
-      ..write('   return switch(this) {\n');
+    buff..write(
+      ' ${dcp}Map<${dcp}String, ${dcp}dynamic> ${toJsonFnName}By$discriminatorTypeParamsCombined($genericArgs) {\n',
+    )..write('   return switch(this) {\n');
 
     final cases = discriminatorValues
         .mapIndexed((i, e) {
-          final range = discriminatorTypeParamsByIndexRange[i];
-          final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-          return switchCaseValue(e.$1, typeParams);
-        })
+      final range = discriminatorTypeParamsByIndexRange[i];
+      final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
+      return switchCaseValue(e.$1, typeParams);
+    })
         .join(',\n');
 
-    buff
-      ..write(cases)
-      ..write(discriminatorValues.isNotEmpty ? ',\n' : '')
-      ..write(
-        "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$runtimeType\" for $className.'),\n",
-      )
-      ..write('   };\n')
-      ..write('  }\n\n');
+    buff..write(cases)..write(discriminatorValues.isNotEmpty ? ',\n' : '')..write(
+      "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$runtimeType\" for $className.'),\n",
+    )..write('   };\n')..write('  }\n\n');
   }
 
   void _generatePolymorphicMapTo({
@@ -1707,11 +1732,10 @@ class DataClassMacro extends MacroGenerator {
     // final dcp = state.getOrNull<String>('dartCorePrefix') ?? '';
     final prefix = state.importPrefix;
 
-    String switchCaseValue(
-      MacroClassDeclaration subTypeInfo,
-      List<MacroProperty>? typeParams, {
-      String? customCaseKey,
-    }) {
+    String switchCaseValue(MacroClassDeclaration subTypeInfo,
+        List<MacroProperty>? typeParams, {
+          String? customCaseKey,
+        }) {
       final argName = subTypeInfo.className.toCamelCase();
       final classTypeParam = MacroProperty.getClassTypeParameter(typeParams ?? const []);
       final classType = '${subTypeInfo.importPrefix}${subTypeInfo.className}$classTypeParam';
@@ -1720,43 +1744,36 @@ class DataClassMacro extends MacroGenerator {
 
     final args = discriminatorValues.isNotEmpty
         ? '{${discriminatorValues.mapIndexed((i, e) {
-            final range = discriminatorTypeParamsByIndexRange[i];
-            final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-            final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
-            final classType = '${e.$1.importPrefix}${e.$1.className}$classTypeParams';
-            return '${orNull ? '' : 'required'} Res${orNull ? '?' : ''} Function($classType value)${orNull ? '?' : ''} ${e.$1.className.toCamelCase()}';
-          }).join(',\n')}${orNull ? ',}\n' : ',\nRes Function($prefix$className$mainClassTypeParams value)? fallback,}\n'}'
+      final range = discriminatorTypeParamsByIndexRange[i];
+      final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
+      final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
+      final classType = '${e.$1.importPrefix}${e.$1.className}$classTypeParams';
+      return '${orNull ? '' : 'required'} Res${orNull ? '?' : ''} Function($classType value)${orNull ? '?' : ''} ${e.$1
+          .className.toCamelCase()}';
+    }).join(',\n')}${orNull ? ',}\n' : ',\nRes Function($prefix$className$mainClassTypeParams value)? fallback,}\n'}'
         : '';
 
-    buff
-      ..write(
-        ' Res${orNull ? '?' : ''} map${orNull ? 'OrNull' : ''}$discriminatorTypeParamsCombined($args) {\n',
-      )
-      ..write('   return switch(this) {\n');
+    buff..write(
+      ' Res${orNull ? '?' : ''} map${orNull ? 'OrNull' : ''}$discriminatorTypeParamsCombined($args) {\n',
+    )..write('   return switch(this) {\n');
 
     final discriminatorCases = discriminatorValues
         .mapIndexed((i, e) {
-          final range = discriminatorTypeParamsByIndexRange[i];
-          final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-          return switchCaseValue(e.$1, typeParams);
-        })
+      final range = discriminatorTypeParamsByIndexRange[i];
+      final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
+      return switchCaseValue(e.$1, typeParams);
+    })
         .join(',\n');
 
-    buff
-      ..write(discriminatorCases)
-      ..write(discriminatorValues.isNotEmpty ? ',\n' : '')
-      ..write(
-        orNull || discriminatorValues.isEmpty
-            ? ''
-            : '_  when fallback != null => fallback(this as $className$mainClassTypeParams),\n',
-      )
-      ..write(
-        orNull
-            ? '_ => null'
-            : "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$runtimeType\" for $className.'),\n",
-      )
-      ..write('   };\n')
-      ..write('  }\n\n');
+    buff..write(discriminatorCases)..write(discriminatorValues.isNotEmpty ? ',\n' : '')..write(
+      orNull || discriminatorValues.isEmpty
+          ? ''
+          : '_  when fallback != null => fallback(this as $className$mainClassTypeParams),\n',
+    )..write(
+      orNull
+          ? '_ => null'
+          : "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$runtimeType\" for $className.'),\n",
+    )..write('   };\n')..write('  }\n\n');
   }
 
   void _generatePolymorphicCopyWith({
@@ -1771,11 +1788,10 @@ class DataClassMacro extends MacroGenerator {
   }) {
     // final dcp = state.getOrNull<String>('dartCorePrefix') ?? '';
 
-    String switchCaseValue(
-      MacroClassDeclaration subTypeInfo,
-      List<MacroProperty>? typeParams, {
-      String? customCaseKey,
-    }) {
+    String switchCaseValue(MacroClassDeclaration subTypeInfo,
+        List<MacroProperty>? typeParams, {
+          String? customCaseKey,
+        }) {
       final argName = subTypeInfo.className.toCamelCase();
       final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
       final classType = '${subTypeInfo.className}$classTypeParams';
@@ -1785,36 +1801,30 @@ class DataClassMacro extends MacroGenerator {
     final prefix = state.importPrefix;
     final args = discriminatorValues.isNotEmpty
         ? '{${discriminatorValues.mapIndexed((i, e) {
-            final range = discriminatorTypeParamsByIndexRange[i];
-            final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-            final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
-            final classType = '${e.$1.importPrefix}${e.$1.className}$classTypeParams';
-            return '$classType Function($classType value)? ${e.$1.className.toCamelCase()}';
-          }).join(',\n')},}'
+      final range = discriminatorTypeParamsByIndexRange[i];
+      final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
+      final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
+      final classType = '${e.$1.importPrefix}${e.$1.className}$classTypeParams';
+      return '$classType Function($classType value)? ${e.$1.className.toCamelCase()}';
+    }).join(',\n')},}'
         : '';
 
-    buff
-      ..write(
-        ' $prefix$className$mainClassTypeParams copyWithBy$discriminatorTypeParamsCombined($args) {\n',
-      )
-      ..write('   return switch(this) {\n');
+    buff..write(
+      ' $prefix$className$mainClassTypeParams copyWithBy$discriminatorTypeParamsCombined($args) {\n',
+    )..write('   return switch(this) {\n');
 
     final discriminatorCases = discriminatorValues
         .mapIndexed((i, e) {
-          final range = discriminatorTypeParamsByIndexRange[i];
-          final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-          return switchCaseValue(e.$1, typeParams);
-        })
+      final range = discriminatorTypeParamsByIndexRange[i];
+      final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
+      return switchCaseValue(e.$1, typeParams);
+    })
         .join(',\n');
 
-    buff
-      ..write(discriminatorCases)
-      ..write(discriminatorValues.isNotEmpty ? ',\n' : '')
-      ..write(
-        "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$runtimeType\" for $className.'),\n",
-      )
-      ..write('   }${mainClassTypeParams.isNotEmpty ? ' as $prefix$className$mainClassTypeParams' : ''} ;\n')
-      ..write('  }\n\n');
+    buff..write(discriminatorCases)..write(discriminatorValues.isNotEmpty ? ',\n' : '')..write(
+      "_ => throw InvalidDiscriminatorException('Unrecognized discriminator value \"\$runtimeType\" for $className.'),\n",
+    )..write('   }${mainClassTypeParams.isNotEmpty ? ' as $prefix$className$mainClassTypeParams' : ''} ;\n')..write(
+        '  }\n\n');
   }
 
   void _generatePolymorphicAsCast({
@@ -1843,10 +1853,10 @@ class DataClassMacro extends MacroGenerator {
     buff.write(
       discriminatorValues
           .mapIndexed((i, e) {
-            final range = discriminatorTypeParamsByIndexRange[i];
-            final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-            return asTypeFunction(e.$1, typeParams);
-          })
+        final range = discriminatorTypeParamsByIndexRange[i];
+        final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
+        return asTypeFunction(e.$1, typeParams);
+      })
           .join('\n\n'),
     );
   }

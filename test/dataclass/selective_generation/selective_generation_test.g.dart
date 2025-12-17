@@ -45,3 +45,111 @@ mixin BData {
     return 'B{b: ${v.b}}';
   }
 }
+
+mixin CData {
+  static C fromJson(Map<String, dynamic> json) {
+    return C(
+      json['c'] as String?,
+      json['c2'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as C;
+    return <String, dynamic>{
+      'c': ?v.c,
+      'c2': ?v.c2,
+    };
+  }
+
+  C copyWith({
+    Option<String> c = const Option.undefined(),
+    String? c2,
+  }) {
+    final v = this as C;
+    return C(
+      c.isUndefined ? v.c : c.casted(),
+      c2 ?? v.c2,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as C;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is C &&
+            (identical(other.c, v.c) || other.c == v.c) &&
+            (identical(other.c2, v.c2) || other.c2 == v.c2));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as C;
+    return Object.hash(
+      runtimeType,
+      v.c,
+      v.c2,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as C;
+    return 'C{c: ${v.c}, c2: ${v.c2}}';
+  }
+}
+
+mixin EData {
+  static E fromJson(Map<String, dynamic> json) {
+    return E(
+      json['e'] as String?,
+      json['e2'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as E;
+    return <String, dynamic>{
+      'e': ?v.e,
+      'e2': ?v.e2,
+    };
+  }
+
+  E copyWith({
+    Option<String> e = const Option.undefined(),
+    String? e2,
+  }) {
+    final v = this as E;
+    return E(
+      e.isUndefined ? v.e : e.casted(),
+      e2 ?? v.e2,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as E;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is E &&
+            (identical(other.e, v.e) || other.e == v.e) &&
+            (identical(other.e2, v.e2) || other.e2 == v.e2));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as E;
+    return Object.hash(
+      runtimeType,
+      v.e,
+      v.e2,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as E;
+    return 'E{e: ${v.e}, e2: ${v.e2}}';
+  }
+}

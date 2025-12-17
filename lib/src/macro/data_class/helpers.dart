@@ -119,3 +119,66 @@ extension MacroExt on Enum {
     return input == null ? null : toJson(input);
   }
 }
+
+/// A type-safe wrapper for representing optional values in copyWith methods.
+///
+/// [Option<T>] distinguishes between three states:
+/// - **undefined**: The field was not provided
+/// - **value**: The field was explicitly set to a value (including null)
+/// - **nil**: Shorthand for explicitly setting to null
+///
+/// This enables proper null assignment in copyWith methods for nullable fields.
+///
+/// Example:
+/// ```dart
+/// user.copyWith(
+///   email: .value(null),      // Explicitly set to null
+///   age: .nil(),              // Explicitly set to null
+///   address: .value('US'),    // Explicitly set nullable field value
+/// );
+/// ```
+extension type const Option<T>._(Object? iValue) {
+  /// Creates an Option with an explicit value (including null).
+  ///
+  /// Use this to set a field to a specific value in copyWith.
+  const Option.value(T? value) : iValue = value;
+
+  /// Creates an undefined Option.
+  ///
+  /// Represents "not provided" - the field will keep its existing value.
+  /// This is the default state when a parameter is omitted in copyWith.
+  const Option.undefined() : iValue = _undefinedSentinel;
+
+  /// Creates an Option explicitly set to null.
+  ///
+  /// Shorthand for `Option.value(null)`. Use this to explicitly
+  /// set a nullable field to null in copyWith.
+  const Option.nil() : iValue = null;
+
+  /// Returns the wrapped value if it's of type [T], otherwise null.
+  ///
+  /// Returns null for both undefined options and null values.
+  T? get valueOrNull {
+    if (iValue case T? v) {
+      return v;
+    }
+
+    return null;
+  }
+
+  /// Returns true if this Option is undefined (field not provided).
+  @pragma('vm:prefer-inline')
+  @pragma('dart2js:tryInline')
+  bool get isUndefined => identical(iValue, _undefinedSentinel);
+
+  /// Casts the internal value to type [V].
+  ///
+  /// Used internally by generated code to retrieve the actual value.
+  /// Ensure value is set using [isUndefined] before using this method
+  @pragma('vm:prefer-inline')
+  @pragma('dart2js:tryInline')
+  V casted<V>() => iValue as V;
+
+  /// Sentinel value representing an undefined/not-provided state.
+  static const _undefinedSentinel = Object();
+}

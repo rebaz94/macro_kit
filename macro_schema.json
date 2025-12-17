@@ -63,35 +63,48 @@
         },
         "create_from_json": {
           "type": "boolean",
-          "description": "Generate fromJson method"
+          "description": "Generate fromJson method",
+          "default": true
         },
         "create_to_json": {
           "type": "boolean",
-          "description": "Generate toJson method"
+          "description": "Generate toJson method",
+          "default": true
         },
         "create_map_to": {
           "type": "boolean",
-          "description": "Generate mapTo method"
+          "description": "Generate mapTo method",
+          "default": true
         },
         "create_as_cast": {
           "type": "boolean",
-          "description": "Generate as cast methods"
+          "description": "Generate as cast methods",
+          "default": true
         },
         "create_equal": {
           "type": "boolean",
-          "description": "Generate equality operator override"
+          "description": "Generate equality operator override",
+          "default": true
         },
         "create_copy_with": {
           "type": "boolean",
-          "description": "Generate copyWith method"
+          "description": "Generate copyWith method",
+          "default": true
+        },
+        "copy_with_as_option": {
+          "type": "boolean",
+          "description": "When true, generates copyWith methods using Option<T> to support setting nullable fields to null. Defaults to false. Can be overridden per-field using @JsonKey(copyWithAsOption).",
+          "default": false
         },
         "create_to_string": {
           "type": "boolean",
-          "description": "Generate toString override"
+          "description": "Generate toString override",
+          "default": true
         },
         "include_if_null": {
           "type": "boolean",
-          "description": "Include null fields in JSON serialization"
+          "description": "Include null fields in JSON serialization",
+          "default": false
         },
         "as_literal_types": {
           "type": "array",
@@ -103,7 +116,8 @@
         },
         "use_map_convention": {
           "type": "boolean",
-          "description": "Use 'toMap'/'fromMap' naming convention instead of 'toJson'/'fromJson'. This is configured globally since data classes that depend on other data classes need consistent method names."
+          "description": "Use 'toMap'/'fromMap' naming convention instead of 'toJson'/'fromJson'. This is configured globally since data classes that depend on other data classes need consistent method names.",
+          "default": false
         }
       },
       "additionalProperties": false
