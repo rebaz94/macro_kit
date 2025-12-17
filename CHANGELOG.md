@@ -1,6 +1,14 @@
+## 0.3.5
+
+- Added configurable serialization method names: `use_map_convention` option to generate
+  `fromMap`/`toMap` instead of `fromJson`/`toJson`.
+    - When `false` (default): Generates `fromJson`/`toJson` methods
+    - When `true`: Generates `fromMap`/`toMap` methods
+    - This is configured globally to ensure consistency across nested data classes
+
 ## 0.3.4
 
-- Add documentation topic for pub 
+- Add documentation topic for pub
 
 ## 0.3.3
 

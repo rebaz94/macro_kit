@@ -15,9 +15,9 @@
       <excludeFolder url="file://$MODULE_DIR$/examples/macro_flutter/.dart_tool" />
       <excludeFolder url="file://$MODULE_DIR$/examples/macro_flutter/.pub" />
       <excludeFolder url="file://$MODULE_DIR$/examples/macro_flutter/build" />
-      <excludeFolder url="file://$MODULE_DIR$/tools/analyzer_plugin2/.dart_tool" />
-      <excludeFolder url="file://$MODULE_DIR$/tools/analyzer_plugin2/.pub" />
-      <excludeFolder url="file://$MODULE_DIR$/tools/analyzer_plugin2/build" />
+      <excludeFolder url="file://$MODULE_DIR$/tool/analyzer_plugin2/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/tool/analyzer_plugin2/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/tool/analyzer_plugin2/build" />
     </content>
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="Dart SDK" level="project" />

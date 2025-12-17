@@ -8,7 +8,7 @@ import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/macro/data_class/config.dart';
 import 'package:macro_kit/src/macro/data_class/utils.dart';
 
-/// `DataClassMacro` generates common data-class boilerplate such as
+/// **DataClassMacro** generates common data-class boilerplate such as
 /// `fromJson`, `toJson`, `copyWith`, equality, `toString`, and (in the
 /// future) constructor implementations.
 ///
@@ -600,6 +600,7 @@ class DataClassMacro extends MacroGenerator {
     final config = _getConfig(state);
     final dcp = state.getOrNull<String>('dartCorePrefix') ?? '';
     final fromJsonGenericsArgs = <String>{};
+    final fromJsonStaticFnName = config.useMapConvention ? 'fromMap' : 'fromJson';
     var fieldRename = config.fieldRename ?? FieldRename.none;
 
     String fieldCast(
@@ -632,14 +633,14 @@ class DataClassMacro extends MacroGenerator {
           final (hasFn, fromJsonFn) = hasMethodOf(
             declaration: field.classInfo,
             macroName: 'DataClassMacro',
-            methodName: 'fromJson',
+            methodName: fromJsonStaticFnName,
             configName: 'fromJson',
             staticFunction: true,
           );
 
           if (!hasFn) {
             throw MacroException(
-              'The parameter `${field.name}` of type: ${field.type} in `$className` should add macro support or provide custom fromJson function',
+              'The parameter `${field.name}` of type: ${field.type} in `$className` should add macro support or provide custom $fromJsonStaticFnName function',
             );
           }
 
@@ -647,7 +648,7 @@ class DataClassMacro extends MacroGenerator {
             if (fromJsonFn.params.length != 1 ||
                 fromJsonFn.returns.first.type.removedNullability != type.removedNullability) {
               throw MacroException(
-                'The parameter `${field.name}` of type: ${field.type} in `$className` should define fromJson function with one argument and return expected value',
+                'The parameter `${field.name}` of type: ${field.type} in `$className` should define $fromJsonStaticFnName function with one argument and return expected value',
               );
             }
 
@@ -655,10 +656,10 @@ class DataClassMacro extends MacroGenerator {
             final typeParams = MacroProperty.getClassTypeParameter(fromJsonFn.typeParams);
 
             if (isNullable) {
-              return '$value == null ? $defaultValue : $prefix${type.removedNullability}.fromJson$typeParams($fromJsonCastValue)';
+              return '$value == null ? $defaultValue : $prefix${type.removedNullability}.$fromJsonStaticFnName$typeParams($fromJsonCastValue)';
             }
 
-            return '$prefix$type.fromJson$typeParams($fromJsonCastValue)';
+            return '$prefix$type.$fromJsonStaticFnName$typeParams($fromJsonCastValue)';
           }
 
           final defaultFromJsonArg = MacroProperty(
@@ -679,7 +680,7 @@ class DataClassMacro extends MacroGenerator {
           for (final tp in field.typeArguments ?? const <MacroProperty>[]) {
             typeParamsFromJson ??= [];
 
-            var argFnRef = 'fromJson${tp.type}';
+            var argFnRef = '$fromJsonStaticFnName${tp.type}';
             var argFn = '${tp.importPrefix}${tp.type} Function(${dcp}Object? v) $argFnRef';
 
             // if class already have same generic fn, reuse it,
@@ -687,7 +688,7 @@ class DataClassMacro extends MacroGenerator {
             if (fromJsonGenericsArgs.contains(argFn)) {
               typeParamsFromJson.add(argFnRef);
             } else {
-              argFnRef = 'fromJson ${field.name}'.toCamelCase();
+              argFnRef = '$fromJsonStaticFnName ${field.name}'.toCamelCase();
               argFn = '${tp.importPrefix}${tp.type} Function(${dcp}Object? v) $argFnRef';
               typeParamsFromJson.add(argFnRef);
               fromJsonGenericsArgs.add(argFn);
@@ -696,7 +697,7 @@ class DataClassMacro extends MacroGenerator {
 
           final allTypeParamsFromJson = typeParamsFromJson?.join(', ') ?? '';
           final comma = allTypeParamsFromJson.isNotEmpty ? ', ' : '';
-          final fromJsonCall = '$clsName.fromJson$typeParam($fromJsonCastValue$comma$allTypeParamsFromJson)';
+          final fromJsonCall = '$clsName.$fromJsonStaticFnName$typeParam($fromJsonCastValue$comma$allTypeParamsFromJson)';
           if (isNullable) {
             return '$value == null ? $defaultValue : $fromJsonCall';
           }
@@ -791,10 +792,10 @@ class DataClassMacro extends MacroGenerator {
               final genType = elemType.type.removedNullability;
               final prefix = elemType.importPrefix;
               if (elemType.isNullable) {
-                return '($value as ${dcp}Map<${dcp}Object?, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(MacroExt.decodeNullableGeneric(k, fromJson$prefix$genType), $mapElemValue))$nullableDefault';
+                return '($value as ${dcp}Map<${dcp}Object?, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(MacroExt.decodeNullableGeneric(k, $fromJsonStaticFnName$prefix$genType), $mapElemValue))$nullableDefault';
               }
 
-              return '($value as ${dcp}Map<${dcp}Object?, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry(fromJson$prefix$genType(k), $mapElemValue))$nullableDefault';
+              return '($value as ${dcp}Map<${dcp}Object?, ${dcp}dynamic>$nullable)$nullable.map((k, e) => ${dcp}MapEntry($fromJsonStaticFnName$prefix$genType(k), $mapElemValue))$nullableDefault';
             default:
               throw MacroException(
                 'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri but got: ${elemType.type}',
@@ -879,10 +880,10 @@ class DataClassMacro extends MacroGenerator {
         case TypeInfo.generic:
           if (isNullable) {
             final genType = field.type.removedNullability;
-            return 'MacroExt.decodeNullableGeneric($value, fromJson$prefix$genType)$nullableDefault';
+            return 'MacroExt.decodeNullableGeneric($value, $fromJsonStaticFnName$prefix$genType)$nullableDefault';
           }
 
-          return 'fromJson${field.type}($value)';
+          return '$fromJsonStaticFnName${field.type}($value)';
       }
     }
 
@@ -945,14 +946,13 @@ class DataClassMacro extends MacroGenerator {
           valueTypeIsGeneric: fromJsonReturnTypeProp.typeInfo == TypeInfo.generic,
         )) {
           throw MacroException(
-            'The parameter `${field.name}` of type: `${field.type}` in `${state.targetName}` has incompatible fromJson function, '
-            'the fromJson return must be type of: `${field.type}` but got: `${fromJsonReturnTypeProp.type}`',
+            'The parameter `${field.name}` of type: `${field.type}` in `${state.targetName}` has incompatible $fromJsonStaticFnName function, '
+            'the $fromJsonStaticFnName return must be type of: `${field.type}` but got: `${fromJsonReturnTypeProp.type}`',
           );
         }
 
         final asType = ' as ${fromJsonArgTypeProp.getDartType(dcp)}';
         final fromJsonCallFallback = fromJsonReturnTypeProp.isNullable && hasDefaultValue ? ' ?? $defaultValue' : '';
-        // [json[v] == null ? $default :] fromJsonCall
         value =
             '${field.isNullable ? '$jsonValue == null ? $defaultValue : ' : ''}${'$fromJsonFn($jsonValue$asType)$fromJsonCallFallback'}';
       } else {
@@ -970,7 +970,7 @@ class DataClassMacro extends MacroGenerator {
     final clsTypeParams = MacroProperty.getClassTypeParameter(typeParams);
     final clsTypeParamsWithBound = MacroProperty.getClassTypeParameterWithBound(typeParams);
     for (final tp in typeParams) {
-      fromJsonGenericsArgs.add('${tp.name} Function(${dcp}Object? v) fromJson${tp.name}');
+      fromJsonGenericsArgs.add('${tp.name} Function(${dcp}Object? v) $fromJsonStaticFnName${tp.name}');
     }
 
     final positionalFieldsMapping = positionalFields.map((f) => fieldValue(f, true)).join(',\n');
@@ -980,7 +980,7 @@ class DataClassMacro extends MacroGenerator {
 
     buff
       ..write(
-        ' static $prefix$className$clsTypeParams fromJson$clsTypeParamsWithBound(${dcp}Map<${dcp}String, ${dcp}dynamic> json$comma$genericArgs) {\n',
+        ' static $prefix$className$clsTypeParams $fromJsonStaticFnName$clsTypeParamsWithBound(${dcp}Map<${dcp}String, ${dcp}dynamic> json$comma$genericArgs) {\n',
       )
       ..write('   return $prefix$className$clsTypeParams${ctorName.isNotEmpty ? '.' : ''}$ctorName(\n')
       ..write(positionalFieldsMapping)
@@ -1005,6 +1005,7 @@ class DataClassMacro extends MacroGenerator {
   }) {
     final config = _getConfig(state);
     final dcp = state.getOrNull('dartCorePrefix') ?? '';
+    final toJsonFnName = config.useMapConvention ? 'toMap' : 'toJson';
     final toJsonGenericsArgs = <String>{};
 
     String fieldEncode(MacroProperty field, JsonKeyConfig? jsonKey, String value, bool isNullable) {
@@ -1024,7 +1025,7 @@ class DataClassMacro extends MacroGenerator {
           final (hasFn, toJsonFn) = hasMethodOf(
             declaration: field.classInfo,
             macroName: 'DataClassMacro',
-            methodName: 'toJson',
+            methodName: toJsonFnName,
             configName: 'toJson',
             staticFunction: false,
           );
@@ -1032,7 +1033,7 @@ class DataClassMacro extends MacroGenerator {
           if (!hasFn) {
             throw MacroException(
               'Parameter `${field.name}` of type `${field.type}` in `${state.targetName}` '
-              'must either have macro support enabled or provide a custom `toJson` function.',
+              'must either have macro support enabled or provide a custom `$toJsonFnName` function.',
             );
           }
 
@@ -1040,7 +1041,7 @@ class DataClassMacro extends MacroGenerator {
             if (toJsonFn.params.isNotEmpty || toJsonFn.returns.first.typeInfo == TypeInfo.voidType) {
               throw MacroException(
                 'Parameter `${field.name}` of type `${field.type}` in `${state.targetName}` '
-                'must define a `toJson` method with no arguments that returns the expected JSON value.',
+                'must define a `$toJsonFnName` method with no arguments that returns the expected JSON value.',
               );
             }
           }
@@ -1049,7 +1050,7 @@ class DataClassMacro extends MacroGenerator {
           for (final tp in field.typeArguments ?? const <MacroProperty>[]) {
             typeParamsToJson ??= [];
 
-            var argFnRef = 'toJson${tp.type}';
+            var argFnRef = '$toJsonFnName${tp.type}';
             var argFn = '${dcp}Object? Function(${tp.importPrefix}${tp.type} v) $argFnRef';
 
             // if class already have same generic fn, reuse it,
@@ -1057,7 +1058,7 @@ class DataClassMacro extends MacroGenerator {
             if (toJsonGenericsArgs.contains(argFn)) {
               typeParamsToJson.add(argFnRef);
             } else if (field.typeInfo.isClassLike) {
-              argFnRef = 'toJson ${field.name}'.toCamelCase();
+              argFnRef = '$toJsonFnName ${field.name}'.toCamelCase();
               argFn = '${dcp}Object? Function(${tp.importPrefix}${tp.type} v) $argFnRef';
               typeParamsToJson.add(argFnRef);
               toJsonGenericsArgs.add(argFn);
@@ -1065,7 +1066,7 @@ class DataClassMacro extends MacroGenerator {
           }
 
           final allTypeParamsToJson = typeParamsToJson?.join(', ') ?? '';
-          return '$value$nullable.toJson($allTypeParamsToJson)';
+          return '$value$nullable.$toJsonFnName($allTypeParamsToJson)';
         case TypeInfo.int:
         case TypeInfo.double:
         case TypeInfo.num:
@@ -1143,10 +1144,10 @@ class DataClassMacro extends MacroGenerator {
             case TypeInfo.generic:
               final genType = elemType.type.removedNullability;
               if (elemType.isNullable) {
-                return '$value$nullable.map((k, e) => ${dcp}MapEntry(MacroExt.encodeNullableGeneric(k, toJson$genType), $mapElemValue))';
+                return '$value$nullable.map((k, e) => ${dcp}MapEntry(MacroExt.encodeNullableGeneric(k, $toJsonFnName$genType), $mapElemValue))';
               }
 
-              return '$value$nullable.map((k, e) => ${dcp}MapEntry(toJson$genType(k), $mapElemValue))';
+              return '$value$nullable.map((k, e) => ${dcp}MapEntry($toJsonFnName$genType(k), $mapElemValue))';
             default:
               throw MacroException(
                 'Map keys must be one of: Object, dynamic, enum, String, BigInt, DateTime, int, Uri',
@@ -1186,9 +1187,9 @@ class DataClassMacro extends MacroGenerator {
         case TypeInfo.generic:
           final genType = type.removedNullability;
           if (isNullable) {
-            return 'MacroExt.encodeNullableGeneric($value, toJson$genType)';
+            return 'MacroExt.encodeNullableGeneric($value, $toJsonFnName$genType)';
           }
-          return 'toJson$genType($value)';
+          return '$toJsonFnName$genType($value)';
       }
     }
 
@@ -1233,7 +1234,7 @@ class DataClassMacro extends MacroGenerator {
         )) {
           throw MacroException(
             'Parameter `${field.name}` of type `${field.type}` in `${state.targetName}` '
-            'has an incompatible `toJson` function. Expected argument type: `${field.type}`, '
+            'has an incompatible `$toJsonFnName` function. Expected argument type: `${field.type}`, '
             'but got: `${toJsonArgTypeProp.type}`.',
           );
         }
@@ -1246,13 +1247,13 @@ class DataClassMacro extends MacroGenerator {
 
       if (field.typeArguments?.isNotEmpty == true) {
         for (final tp in field.typeArguments!) {
-          var toJsonArgFnRef = 'toJson${tp.type}';
+          var toJsonArgFnRef = '$toJsonFnName${tp.type}';
           var toJsonArgFn = '${dcp}Object? Function(${tp.importPrefix}${tp.type} v) $toJsonArgFnRef';
           if (toJsonGenericsArgs.contains(toJsonArgFn) || !field.typeInfo.isClassLike) {
             continue;
           }
 
-          toJsonArgFnRef = 'toJson ${field.name}'.toCamelCase();
+          toJsonArgFnRef = '$toJsonFnName ${field.name}'.toCamelCase();
           toJsonArgFn = '${dcp}Object? Function(${tp.importPrefix}${tp.type} v) $toJsonArgFnRef';
           toJsonGenericsArgs.add(toJsonArgFn);
         }
@@ -1266,14 +1267,14 @@ class DataClassMacro extends MacroGenerator {
 
     final clsWithTypeParams = '$prefix$className${MacroProperty.getClassTypeParameter(typeParams)}';
     for (final tp in typeParams) {
-      toJsonGenericsArgs.add('${dcp}Object? Function(${tp.name} v) toJson${tp.name}');
+      toJsonGenericsArgs.add('${dcp}Object? Function(${tp.name} v) $toJsonFnName${tp.name}');
     }
 
     final jsonMapping = fields.map(fieldValue).nonNulls.join(',\n');
     final genericArgs = toJsonGenericsArgs.join(', ');
 
     buff
-      ..write(' ${dcp}Map<${dcp}String, ${dcp}dynamic> toJson($genericArgs) {\n')
+      ..write(' ${dcp}Map<${dcp}String, ${dcp}dynamic> $toJsonFnName($genericArgs) {\n')
       ..write(fields.isNotEmpty ? '   final v = this as $clsWithTypeParams;\n' : '')
       ..write('   return <${dcp}String, ${dcp}dynamic> {\n');
 
@@ -1530,11 +1531,14 @@ class DataClassMacro extends MacroGenerator {
     required String mainClassTypeParams,
     required String discriminatorWithClassTypeParams,
   }) {
+    final config = _getConfig(state);
+    final fromJsonStaticFnName = config.useMapConvention ? 'fromMap' : 'fromJson';
+
     String caseCast(MacroClassDeclaration classSubType, List<MacroProperty>? classTypeParams, String value) {
       final (hasFn, fromJsonFn) = hasMethodOf(
         declaration: classSubType,
         macroName: 'DataClassMacro',
-        methodName: 'fromJson',
+        methodName: fromJsonStaticFnName,
         configName: 'fromJson',
         staticFunction: true,
       );
@@ -1548,16 +1552,16 @@ class DataClassMacro extends MacroGenerator {
       if (fromJsonFn != null) {
         if (fromJsonFn.params.length != 1 || fromJsonFn.returns.first.classInfo?.className != classSubType.className) {
           throw MacroException(
-            'Subtype `${classSubType.className}` must define a `fromJson` function with one parameter and a compatible return type.',
+            'Subtype `${classSubType.className}` must define a `$fromJsonStaticFnName` function with one parameter and a compatible return type.',
           );
         }
 
         final typeParams = MacroProperty.getClassTypeParameter(fromJsonFn.typeParams);
-        return '${classSubType.importPrefix}${classSubType.className}.fromJson$typeParams($value)';
+        return '${classSubType.importPrefix}${classSubType.className}.$fromJsonStaticFnName$typeParams($value)';
       }
 
       final typeParams = MacroProperty.getClassTypeParameter(classTypeParams ?? const []);
-      return '${classSubType.importPrefix}${classSubType.className}$suffixName.fromJson$typeParams($value)';
+      return '${classSubType.importPrefix}${classSubType.className}$suffixName.$fromJsonStaticFnName$typeParams($value)';
     }
 
     String switchCaseValue(
@@ -1568,7 +1572,7 @@ class DataClassMacro extends MacroGenerator {
     }) {
       // json argument value
       final jsonValue = typeParams?.isNotEmpty == true
-          ? 'json, ${typeParams!.map((tp) => 'fromJson${tp.name}').join(', ')}'
+          ? 'json, ${typeParams!.map((tp) => '$fromJsonStaticFnName${tp.name}').join(', ')}'
           : 'json';
       if (discriminatorValue == null) {
         return '${customCaseKey ?? "'${subTypeInfo.className}'"} => ${caseCast(subTypeInfo, typeParams, jsonValue)}';
@@ -1600,12 +1604,12 @@ class DataClassMacro extends MacroGenerator {
         ?.map((tp) => tp.copyWith(name: '${discriminatorDefault.className}${tp.name}'))
         .toList();
     final genericArgs = discriminatorTypeParams.isNotEmpty
-        ? ',{${discriminatorTypeParams.map((tp) => 'required ${tp.name} Function(${dcp}Object? v) fromJson${tp.name}').join(', ')},}'
+        ? ',{${discriminatorTypeParams.map((tp) => 'required ${tp.name} Function(${dcp}Object? v) $fromJsonStaticFnName${tp.name}').join(', ')},}'
         : '';
 
     buff
       ..write(
-        ' static $prefix$className$mainClassTypeParams fromJson$discriminatorWithClassTypeParams(${dcp}Map<${dcp}String, ${dcp}dynamic> json$genericArgs) {\n',
+        ' static $prefix$className$mainClassTypeParams $fromJsonStaticFnName$discriminatorWithClassTypeParams(${dcp}Map<${dcp}String, ${dcp}dynamic> json$genericArgs) {\n',
       )
       ..write("   final type = json['${Utils.escapeQuote(discriminatorKey ?? 'type')}'];\n")
       ..write('   return switch(type) {\n');
@@ -1647,6 +1651,8 @@ class DataClassMacro extends MacroGenerator {
     required Map<int, _RangeInfo> discriminatorTypeParamsByIndexRange,
     required String discriminatorTypeParamsCombined,
   }) {
+    final config = _getConfig(state);
+    final toJsonFnName = config.useMapConvention ? 'toMap' : 'toJson';
     final dcp = state.getOrNull('dartCorePrefix') ?? '';
 
     String switchCaseValue(
@@ -1656,16 +1662,16 @@ class DataClassMacro extends MacroGenerator {
     }) {
       final classTypeParam = MacroProperty.getClassTypeParameter(typeParams ?? const []);
       final classType = '${subTypeInfo.importPrefix}${subTypeInfo.className}$classTypeParam';
-      return '$classType v => v.toJson(${typeParams?.map((e) => 'toJson${e.name}').join(', ') ?? ''})';
+      return '$classType v => v.$toJsonFnName(${typeParams?.map((e) => '$toJsonFnName${e.name}').join(', ') ?? ''})';
     }
 
     final genericArgs = discriminatorTypeParams.isNotEmpty
-        ? '{${discriminatorTypeParams.map((tp) => 'required ${dcp}Object? Function(${tp.name} value) toJson${tp.name}').join(', ')},}'
+        ? '{${discriminatorTypeParams.map((tp) => 'required ${dcp}Object? Function(${tp.name} value) $toJsonFnName${tp.name}').join(', ')},}'
         : '';
 
     buff
       ..write(
-        ' ${dcp}Map<${dcp}String, ${dcp}dynamic> toJsonBy$discriminatorTypeParamsCombined($genericArgs) {\n',
+        ' ${dcp}Map<${dcp}String, ${dcp}dynamic> ${toJsonFnName}By$discriminatorTypeParamsCombined($genericArgs) {\n',
       )
       ..write('   return switch(this) {\n');
 

@@ -299,6 +299,7 @@ class DataClassMacroConfig extends MacroGlobalConfig {
     this.createToStringOverride,
     this.includeIfNull,
     this.asLiteralTypes = const [],
+    this.useMapConvention = false,
   });
 
   static DataClassMacroConfig fromJson(Map<String, dynamic> json) {
@@ -319,6 +320,7 @@ class DataClassMacroConfig extends MacroGlobalConfig {
       createToStringOverride: parseField(json['create_to_string']),
       includeIfNull: parseField(json['include_if_null']),
       asLiteralTypes: parseField<List>(json['as_literal_types'])?.map((e) => e as String).toList() ?? const [],
+      useMapConvention: parseField(json['use_map_convention']) ?? false,
     );
   }
 
@@ -391,4 +393,21 @@ class DataClassMacroConfig extends MacroGlobalConfig {
   /// useful for types that are already serializable or have custom serialization
   /// handled elsewhere, such as Firebase's `GeoPoint` or `Timestamp`.
   final List<String> asLiteralTypes;
+
+  /// Whether to use fromMap/toMap over fromJson/toJson
+  ///
+  /// When `use_map_convention` is false or not specified, the following method names are generated:
+  /// - fromJson - Static method to create instance from `Map<String, dynamic>`
+  /// - toJson - Instance method to convert to `Map<String, dynamic>`
+  ///
+  /// When `use_map_convention` is true, the following method names are generated:
+  /// - fromMap - Static method to create instance from `Map<String, dynamic>`
+  /// - toMap - Instance method to convert to `Map<String, dynamic>`
+  ///
+  /// This setting is configured globally since data classes that depend on other
+  /// data classes need to know which methods to call during nested serialization.
+  ///
+  /// Use case: Migration from tools like Dart Data Class Generator VS Code extension
+  /// which uses toMap/fromMap convention by default.
+  final bool useMapConvention;
 }
