@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' show Random;
 
 import 'package:analysis_server_plugin/plugin.dart';
 import 'package:analysis_server_plugin/registry.dart';
+import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/src/analyzer/lock.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/plugin/macro_context_rule.dart';
@@ -15,8 +17,9 @@ class MacroPlugin extends Plugin implements MacroServerListener {
   }) : client = MacroServerClient(pluginId: pluginId, logger: logger);
 
   factory MacroPlugin() {
-    final pluginId = Random().nextInt(1000);
-    final sink = MacroLogger.getFileAppendLogger('plugin_$pluginId.log');
+    final pluginId = Random().nextInt(100);
+    final pluginLogId = xxh32code(Platform.packageConfig ?? pluginId.toString());
+    final sink = MacroLogger.getFileAppendLogger('plugin_$pluginLogId.log');
     final logger = MacroLogger.createLogger(name: 'MacroPlugin', into: sink.writeln);
     return MacroPlugin._(pluginId: pluginId, logger: logger);
   }

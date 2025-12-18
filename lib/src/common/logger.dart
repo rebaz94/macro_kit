@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:logging/logging.dart';
 import 'package:macro_kit/src/common/common.dart';
+import 'package:path/path.dart' as p;
 
 class MacroLogger {
   MacroLogger._(String name) : logger = Logger.detached(name);
 
   static IOSink getFileAppendLogger(String fileName) {
-    final logFilePath = '$macroDirectory/$fileName';
-
+    final logFilePath = p.join(macroDirectory, fileName);
     final file = File(logFilePath)
       ..createSync(recursive: true)
       ..writeAsStringSync('');
