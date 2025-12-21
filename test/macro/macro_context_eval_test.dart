@@ -1,6 +1,6 @@
 import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
-import 'package:macro_kit/src/analyzer/spawner.dart';
+import 'package:macro_kit/src/analyzer/utils/spawner.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
 

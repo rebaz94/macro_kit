@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:macro_kit/src/analyzer/lock.dart';
+import 'package:macro_kit/src/analyzer/utils/lock.dart';
 import 'package:macro_kit/src/common/common.dart';
 import 'package:path/path.dart' as p;
 

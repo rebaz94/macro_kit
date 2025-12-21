@@ -1,8 +1,8 @@
 import 'package:analyzer/dart/element/element.dart';
 import 'package:collection/collection.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
-import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/core/modifier.dart';
 

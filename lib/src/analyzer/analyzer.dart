@@ -10,9 +10,9 @@ import 'package:macro_kit/src/analyzer/analyze_class_method.dart';
 import 'package:macro_kit/src/analyzer/analyze_enum.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
-import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:watcher/watcher.dart';
 

@@ -4,7 +4,7 @@ import 'package:change_case/change_case.dart';
 import 'package:collection/collection.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:macro_kit/src/analyzer/base_macro.dart';
-import 'package:macro_kit/src/analyzer/hash.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
 import 'package:macro_kit/src/core/constant.dart';
