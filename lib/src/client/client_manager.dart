@@ -197,9 +197,17 @@ class MacroManager {
       );
 
       logger.info('Connected');
-    } catch (e) {
+    } on WebSocketChannelException catch (e) {
+      logger.error(
+        'Unable to connect to MacroServer: Is MacroServer is running?',
+        e.inner is! SocketException ? e.inner : null,
+      );
+
       _status = ConnectionStatus.disconnected;
+      _reconnect();
+    } catch (e) {
       logger.error('Unable to connect to MacroServer', e);
+      _status = ConnectionStatus.disconnected;
       _reconnect();
     }
   }
