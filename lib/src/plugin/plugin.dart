@@ -4,6 +4,7 @@ import 'dart:math' show Random;
 
 import 'package:analysis_server_plugin/plugin.dart';
 import 'package:analysis_server_plugin/registry.dart';
+import 'package:collection/collection.dart';
 import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/src/analyzer/lock.dart';
 import 'package:macro_kit/src/common/logger.dart';
@@ -27,7 +28,7 @@ class MacroPlugin extends Plugin implements MacroServerListener {
   final MacroLogger logger;
   final MacroServerClient client;
   final CustomBasicLock lock = CustomBasicLock();
-  final Set<String> contexts = {};
+  Set<String> contexts = {};
 
   @override
   String get name => 'MacroPlugin';
@@ -48,7 +49,13 @@ class MacroPlugin extends Plugin implements MacroServerListener {
   }
 
   void _onNewAnalysisContextReceived(String contextPath) {
-    contexts.add(contextPath);
+    final newContexts = {...contexts, contextPath};
+    if (const DeepCollectionEquality().equals(contexts, newContexts)) {
+      return;
+    }
+
+    logger.info('Analysis context discovered: $contextPath');
+    contexts = newContexts;
     client.analysisContentChanged();
   }
 

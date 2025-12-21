@@ -105,6 +105,8 @@ class ClientConnectMsg implements Message {
     required this.macros,
     required this.assetMacros,
     required this.runTimeout,
+    required this.autoRunMacro,
+    required this.managedByMacroServer,
   });
 
   static ClientConnectMsg fromJson(Map<String, dynamic> json) {
@@ -121,6 +123,8 @@ class ClientConnectMsg implements Message {
         },
       ),
       runTimeout: Duration(microseconds: (json['runTimeout'] as num).toInt()),
+      autoRunMacro: json['autoRunMacro'] as bool,
+      managedByMacroServer: json['managedByMacroServer'] as bool,
     );
   }
 
@@ -129,6 +133,8 @@ class ClientConnectMsg implements Message {
   final List<String> macros;
   final Map<String, List<AssetMacroInfo>> assetMacros;
   final Duration runTimeout;
+  final bool autoRunMacro;
+  final bool managedByMacroServer;
 
   @override
   String get type => 'client_connect';
@@ -141,6 +147,8 @@ class ClientConnectMsg implements Message {
       'macros': macros,
       'assetMacros': assetMacros.map((k, v) => MapEntry(k, v.map((e) => e.toJson()).toList())),
       'runTimeout': runTimeout.inMicroseconds,
+      'autoRunMacro': autoRunMacro,
+      'managedByMacroServer': managedByMacroServer,
     };
   }
 }

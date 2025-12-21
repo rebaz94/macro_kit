@@ -26,6 +26,21 @@ Future<int?> runMacro({
   /// `PackageInfo.multiple(['pkg1', 'pkg2'])`.
   required PackageInfo package,
 
+  /// Whether to run automatic macro execution.
+  ///
+  /// Set this to `false` when debugging macros in your running process to prevent
+  /// conflicts from concurrent macro execution.
+  ///
+  /// **Important:** This value must match the property defined in `macro_context.dart`:
+  /// ```dart
+  /// // macro_context.dart
+  /// bool get autoRunMacro => true;
+  /// ```
+  ///
+  /// **Warning:** Never run macros automatically and manually at the same time,
+  /// as they share the same execution context and will interfere with each other.
+  required bool autoRunMacro,
+
   /// Map of macro names to their initialization functions.
   ///
   /// Each key is a unique macro name, and each value is a function that
@@ -102,7 +117,11 @@ Future<int?> runMacro({
   if (!enabled) return null;
 
   final isAndroid = Platform.isAndroid || Platform.isFuchsia;
-  final logger = MacroLogger.createLogger(name: 'MacroManager', into: log, level: logLevel);
+  final logger = MacroLogger.createLogger(
+    name: 'MacroManager',
+    into: log,
+    level: logLevel,
+  );
   final manager = MacroManager(
     logger: logger,
     serverAddress: serverAddress ?? 'http://${isAndroid ? '10.0.2.2' : 'localhost'}:3232',
@@ -111,6 +130,7 @@ Future<int?> runMacro({
     assetMacros: assetMacros,
     autoReconnect: autoReconnect,
     generateTimeout: generateTimeout,
+    autoRunMacro: autoRunMacro,
   );
 
   manager.connect();
@@ -124,4 +144,65 @@ Future<int?> runMacro({
 /// before proceeding with dependent operations.
 Future<AutoRebuildResult> waitUntilRebuildCompleted() async {
   return MacroManager.waitUntilRebuildCompleted();
+}
+
+/// Default command to run the macro runner using Dart VM
+///
+/// Use this when your macro has no Flutter dependencies. Runs the macro
+/// context file directly with the Dart runtime.
+///
+/// Command: `dart run lib/macro_context.dart`
+List<String> get macroDartRunnerCommand {
+  return const ['dart', 'run', 'lib/macro_context.dart'];
+}
+
+/// Command to run the macro runner using Flutter test runner
+///
+/// Use this when your macro dependencies include Flutter packages. Runs the
+/// macro context file via the Flutter test runner with no timeout, keeping
+/// the process alive until terminated by the macro server.
+///
+/// Requires [keepMacroRunner] to be called after `setupMacro()` in your
+/// `macro_context.dart` to prevent the test runner from exiting.
+///
+/// Command: `flutter test --timeout none lib/macro_context.dart`
+List<String> get macroFlutterRunnerCommand {
+  return const ['flutter', 'test', '--timeout', 'none', 'lib/macro_context.dart'];
+}
+
+/// Keeps the macro runner process alive when launched via test runners
+///
+/// Use this after `setupMacro()` in your `macro_context.dart` when your macro
+/// dependencies include Flutter packages. This allows running macros with
+/// `flutter test` or `dart test` commands instead of `dart run`.
+///
+/// The function detects if the process was started by a test runner and blocks
+/// to keep it alive until terminated by the macro server. In normal execution,
+/// it completes immediately.
+///
+/// ## Usage
+///
+/// ```dart
+/// bool get autoRunMacro => true;
+///
+/// List<String> get autoRunMacroCommand => const ['flutter', 'test', '--timeout', 'none', 'lib/macro_context.dart'];
+///
+/// void main() async {
+///   await setupMacro();
+///   await keepMacroRunner(); // Add this line too keep the runner process
+/// }
+/// ```
+///
+/// ## Detection
+///
+/// Checks if launched via test runner by looking for:
+/// - `FLUTTER_TEST` environment variable (Flutter test runner)
+/// - `test.declarer` zone value (Dart test runner)
+/// - `test.openChannelCallback` zone value (Dart test runner)
+Future<void> keepMacroRunner() async {
+  if (Platform.environment.containsKey('FLUTTER_TEST') ||
+      Zone.current[const Symbol('test.declarer')] != null ||
+      Zone.current[const Symbol('test.openChannelCallback')] != null) {
+    await Future.delayed(const Duration(days: 33));
+  }
 }

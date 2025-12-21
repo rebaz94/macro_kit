@@ -129,13 +129,13 @@ class Cat extends Animal with CatDataClass {
 
 ## Global Configuration
 
-You can set default behaviors for all classes using the `.macro.json` configuration file. This
+You can set default behaviors for all classes using the `macro.json` configuration file. This
 allows you to customize the macro's behavior project-wide without annotating every class
 individually.
 
 ### Configuration File Structure
 
-Create or modify `.macro.json` in your project root:
+Create or modify `macro.json` in your project root:
 
 ```json
 {
@@ -303,7 +303,7 @@ When `use_map_convention` is true, the following method names are generated:
 
 ### Complete Example
 
-Here's a fully configured `.macro.json`:
+Here's a fully configured `macro.json`:
 
 ```json
 {
@@ -335,7 +335,7 @@ Here's a fully configured `.macro.json`:
 ```
 
 **Note**: To customize the DataClassMacro behavior globally, you need to add these configuration
-options under `"macros"` → `"DataClassMacro"` in your `.macro.json` file as shown above.
+options under `"macros"` → `"DataClassMacro"` in your `macro.json` file as shown above.
 
 ---
 

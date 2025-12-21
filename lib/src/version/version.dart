@@ -1,2 +1,2 @@
-const pluginVersionCode = 14;
-const pluginVersionName = '0.3.6';
+const pluginVersionCode = 15;
+const pluginVersionName = '0.4.0';

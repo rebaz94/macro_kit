@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:macro_flutter/custom/form_macro.dart';
 import 'package:macro_flutter/custom/json_schema_macro.dart';
+import 'package:macro_flutter/macro_context.dart' as macro;
 import 'package:macro_kit/macro_kit.dart';
 
 import 'example2.dart';
@@ -8,26 +9,7 @@ import 'example2.dart';
 part 'main.g.dart';
 
 void main() async {
-  await runMacro(
-    package: PackageInfo('macro_flutter'),
-    macros: {
-      'DataClassMacro': DataClassMacro.initialize,
-      'JsonSchemaMacro': JsonSchemaMacro.initialize,
-      'FormMacro': FormMacro.initialize,
-      'AssetPathMacro': AssetPathMacro.initialize,
-    },
-    assetMacros: {
-      'assets': [
-        AssetMacroInfo(
-          macroName: 'AssetPathMacro',
-          extension: '*',
-          output: 'lib',
-          config: const AssetPathConfig().toJson(),
-        ),
-      ],
-    },
-  );
-
+  await macro.setupMacro();
   runApp(MyApp());
 }
 

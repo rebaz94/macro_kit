@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:macro_kit/src/analyzer/macro_server.dart';
+import 'package:macro_kit/src/common/registered_process.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -9,6 +10,8 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 void startMacroServer() async {
+  setupSignalHandler();
+
   var app = Router();
   app
     ..get('/ping', _onPing) //
@@ -67,7 +70,7 @@ void _onNewCodeGeneratorConnection(WebSocketChannel webSocket) async {
 
 Future<Response> _getServerContexts(Request request) async {
   return Response.ok(
-    jsonEncode(MacroAnalyzerServer.instance.analyzer.contexts.map((e) => e.path).toList()),
+    jsonEncode(MacroAnalyzerServer.instance.analyzer.analysisContextPaths),
     headers: {
       HttpHeaders.contentTypeHeader: ContentType.json.value,
     },

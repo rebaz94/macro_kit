@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/session.dart';
@@ -12,9 +11,11 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 // ignore: implementation_imports
 import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:dart_style/dart_style.dart';
+import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
+import 'package:macro_kit/src/analyzer/spawner.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
@@ -91,7 +92,6 @@ abstract class BaseAnalyzer {
   final MacroLogger logger;
   MacroServerInterface server;
 
-  final Random random = Random();
   final DartFormatter formatter = DartFormatter(
     languageVersion: DartFormatter.latestLanguageVersion,
     pageWidth: 120,
@@ -99,7 +99,7 @@ abstract class BaseAnalyzer {
   );
 
   late final ByteStore byteStore = MemoryCachingByteStore(NullByteStore(), 1024 * 1024 * 256);
-  List<ContextInfo> contexts = [];
+  List<String> analysisContextPaths = [];
   AnalysisContextCollection contextCollection = AnalysisContextCollection(
     includedPaths: [],
     resourceProvider: PhysicalResourceProvider.INSTANCE,
@@ -144,8 +144,6 @@ abstract class BaseAnalyzer {
     return res;
   }
 
-  int newId() => random.nextInt(100000);
-
   bool lockOrReturnInProgressClassFieldsFor(Fragment fragment) {
     final key = 'inProgress:${'${fragment.element.name}:${fragment.element.library?.uri.toString()}'}';
     if (iterationCaches.containsKey(key)) {
@@ -181,7 +179,7 @@ abstract class BaseAnalyzer {
   @pragma('vm:prefer-inline')
   MacroClientConfiguration loadMacroConfig(String context, String packageName) {
     try {
-      final content = jsonDecode(File(p.join(context, '.macro.json')).readAsStringSync());
+      final content = jsonDecode(File(p.join(context, 'macro.json')).readAsStringSync());
       if (content is Map) {
         return MacroClientConfiguration.fromJson(newId(), context, packageName, content as Map<String, dynamic>);
       }
@@ -192,6 +190,37 @@ abstract class BaseAnalyzer {
     }
 
     return MacroClientConfiguration.withDefault(newId(), context, packageName);
+  }
+
+  @pragma('vm:prefer-inline')
+  Future<MacroContextSourceCodeInfo> evaluateMacroContextConfiguration(
+    String filePath, {
+    MacroContextSourceCodeInfo? existingSourceContext,
+  }) async {
+    try {
+      final contextFile = File(filePath);
+      if (!contextFile.existsSync()) {
+        return MacroContextSourceCodeInfo.testContext();
+      }
+
+      final content = contextFile.readAsStringSync();
+      final hashId = xxh3code(content);
+      if (existingSourceContext?.hashId == hashId) {
+        return existingSourceContext!;
+      }
+
+      final result = await MacroContextSourceCodeInfo.fromSource(hashId, content);
+      switch (result) {
+        case SpawnError<MacroContextSourceCodeInfo>():
+          logger.error('Failed to evaluate macro_context.dart for: $filePath', result.error, result.trace);
+          return const MacroContextSourceCodeInfo(hashId: 0, autoRun: false, runCommand: []);
+        case SpawnData<MacroContextSourceCodeInfo>():
+          return result.data;
+      }
+    } catch (e, s) {
+      logger.error('Failed to evaluate macro_context.dart for: $filePath', e, s);
+      return const MacroContextSourceCodeInfo(hashId: 0, autoRun: false, runCommand: []);
+    }
   }
 
   void removeFile(String path) {

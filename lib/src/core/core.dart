@@ -2089,11 +2089,11 @@ abstract class MacroGenerator implements BaseMacroGenerator {
 ///
 /// Providing the correct package path is crucial for auto-rebuild functionality.
 /// When enabled, the macro server monitors the specified package(s) and automatically
-/// regenerates code based on your `.macro.json` configuration.
+/// regenerates code based on your `macro.json` configuration.
 ///
 /// **Auto-Rebuild Behavior:**
 /// - When you call `runMacro()` in your `main.dart` and have `auto_rebuild_on_connect: true`
-///   in `.macro.json`, any macro within the specified package/directory will automatically
+///   in `macro.json`, any macro within the specified package/directory will automatically
 ///   rebuild upon connection.
 /// - If `always_rebuild_on_connect: true`, macros will rebuild on every client connection,
 ///   including when you restart your Flutter app multiple times.

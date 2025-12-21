@@ -1,3 +1,13 @@
+## 0.4.0
+
+- **Automatic Macro Generation**: Added support for running macro generation independently without
+  requiring the app to be running through `macro_context.dart`.
+- **New Global Config**: Added `skip_connect_rebuild_with_auto_run_macro` option to prevent
+  redundant rebuilds when automatic macro generation is enabled via external processes
+- **Rename Configuration File**: Renamed global configuration file from `.macro.json` to
+  `macro.json`
+- **Watch Logs Command**: Added new command to watch macro generation logs from terminal.
+
 ## 0.3.6
 
 - Add support for assigning null values to nullable fields in `copyWith` methods by wrapping
@@ -87,7 +97,7 @@ plugins:
 
 - Introduced a new API for defining project-level global macro configurations.
 - Added support for skipping serialization/deserialization using `asLiteral` in `@JsonKey`, or by
-  defining global `as_literal_types` in `.macro.json` for type configurations.
+  defining global `as_literal_types` in `macro.json` for type configurations.
 - Enabled adding dynamic analysis contexts via project paths, useful for CI environments and testing
   setups.
 - Improved performance and reliability when rebuilding the entire project.

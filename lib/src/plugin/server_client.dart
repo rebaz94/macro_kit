@@ -115,6 +115,8 @@ class MacroServerClient {
         runInShell: Platform.isWindows,
       );
 
+      _process?.stdout.drain().catchError((_){});
+      _process?.stderr.drain().catchError((_){});
       // _process?.stdout.transform(utf8.decoder).listen((e) {
       //   logger.info("process info: out: $e");
       // });

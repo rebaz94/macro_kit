@@ -1,15 +1,10 @@
 import 'package:macro_kit/macro_kit.dart';
+import 'macro_context.dart' as macro;
 
 part 'main.g.dart';
 
 void main() async {
-  await runMacro(
-    package: PackageInfo('example'),
-    macros: {
-      'DataClassMacro': DataClassMacro.initialize,
-    },
-    enabled: true,
-  );
+  await macro.setupMacro();
 
   final profile = UserProfile(name: 'Rebaz', age: 30);
   print(

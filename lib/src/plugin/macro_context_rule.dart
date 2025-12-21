@@ -59,9 +59,15 @@ class _Visitor extends SimpleAstVisitor<void> {
 
     // Get the full file path
     final filePath = element.library.firstFragment.source.fullName;
+    final file = File(filePath);
+
+    if (p.basenameWithoutExtension(file.parent.path) != 'lib') {
+      // Must be in lib folder
+      return;
+    }
 
     // Find the project root
-    final contextRoot = _findProjectRoot(filePath);
+    final contextRoot = _findProjectRoot(file);
     if (contextRoot == null) {
       rule.logger.warn('project root not found');
       rule.reportAtOffset(
@@ -72,13 +78,11 @@ class _Visitor extends SimpleAstVisitor<void> {
       return;
     }
 
-    rule.logger.info('Analysis context discovered: $contextRoot');
     rule.onNewAnalysisContext(contextRoot);
   }
 
-  String? _findProjectRoot(String filePath) {
+  String? _findProjectRoot(File file) {
     const maxLevels = 3;
-    final file = File(filePath);
     var directory = file.parent;
     var levelsChecked = 0;
 

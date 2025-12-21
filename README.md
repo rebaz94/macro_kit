@@ -234,7 +234,7 @@ Simply open `macro.dart` and run it directly.
 
 ### Auto-rebuild configuration
 
-Configuration is defined in the `.macro.json` file. We recommend using CLI-based generation
+Configuration is defined in the `macro.json` file. We recommend using CLI-based generation
 primarily for CI/CD pipelines and automated testing. During regular development, the IDE plugin
 automatically loads context and regenerates code when you save files—no manual code generation
 needed, just like writing regular Dart code.
@@ -251,7 +251,7 @@ For CI/CD and testing environments, you'll need to set up manual generation:
 
 To wait for regeneration to complete, call `waitUntilRebuildCompleted` after `runMacro`.
 
-Enable auto-rebuild in `.macro.json`:
+Enable auto-rebuild in `macro.json`:
 
 ```json
 {

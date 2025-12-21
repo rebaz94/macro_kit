@@ -1,6 +1,5 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://json.schemastore.org/macro.json",
   "title": "Macro Configuration",
   "description": "Configuration file for Dart macro system",
   "type": "object",
@@ -26,6 +25,11 @@
           "type": "boolean",
           "description": "Always force rebuild on connect",
           "default": false
+        },
+        "skip_connect_rebuild_with_auto_run_macro": {
+          "type": "boolean",
+          "description": "Skip connect-triggered rebuilds when external auto-run process is active. Disables auto_rebuild_on_connect and always_rebuild_on_connect if macro generation is being handled by a separate auto-run process. Set to true when autoRunMacro from your macro_context.dart is true",
+          "default": true
         }
       },
       "additionalProperties": true

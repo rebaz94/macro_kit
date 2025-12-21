@@ -10,6 +10,7 @@ import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:macro_kit/src/common/watch_file_request.dart';
 import 'package:path/path.dart' as p;
+import 'package:web_socket_channel/status.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 typedef MacroInitFunction = MacroGenerator Function(MacroConfig config);
@@ -23,6 +24,7 @@ class MacroManager {
     required this.autoReconnect,
     required this.packageInfo,
     required this.generateTimeout,
+    required this.autoRunMacro,
   }) : serverAddress = Uri.parse(serverAddress);
 
   static final List<Completer<AutoRebuildResult>> _waitAutoRebuildCompleteCompleter = [];
@@ -37,11 +39,13 @@ class MacroManager {
   final CustomBasicLock lock = CustomBasicLock();
   final MacroLogger logger;
   final Uri serverAddress;
+  final PackageInfo packageInfo;
   final Map<String, MacroInitFunction> macros;
   final Map<String, List<AssetMacroInfo>> assetMacros;
   final bool autoReconnect;
   final Duration generateTimeout;
-  final PackageInfo packageInfo;
+  final bool autoRunMacro;
+  final bool isManagedByMacroServer = Platform.environment['managed_by_macro_server'] == 'true';
   UserMacroConfig? userMacrosConfig;
   final Map<String, (MacroGlobalConfig?,)> cachedUserMacrosConfig = {};
   Completer<bool> _isMacrosConfigSynced = Completer<bool>();
@@ -140,6 +144,8 @@ class MacroManager {
       if (_wsChannel != null && _wsChannel!.closeCode == null && _wsChannel!.closeReason == null) {
         logger.fine('Using existing active connection..');
         return;
+      } else if (_wsChannel?.closeCode == normalClosure && isManagedByMacroServer) {
+        _onGotClosingMessage();
       }
     } else if (_status == ConnectionStatus.connecting) {
       return;
@@ -168,9 +174,15 @@ class MacroManager {
             _isMacrosConfigSynced.complete(false);
           }
           _isMacrosConfigSynced = Completer();
+          if (_wsChannel?.closeCode == normalClosure && isManagedByMacroServer) {
+            _onGotClosingMessage();
+          }
+
           _reconnect();
         },
       );
+
+      final isAutoRunMacro = autoRunMacro && !isManagedByMacroServer;
 
       _addMessage(
         ClientConnectMsg(
@@ -179,6 +191,8 @@ class MacroManager {
           macros: macros.keys.toList(),
           assetMacros: assetMacros,
           runTimeout: generateTimeout,
+          managedByMacroServer: isManagedByMacroServer,
+          autoRunMacro: isAutoRunMacro,
         ),
       );
 
@@ -188,6 +202,12 @@ class MacroManager {
       logger.error('Unable to connect to MacroServer', e);
       _reconnect();
     }
+  }
+
+  Never _onGotClosingMessage() {
+    logger.info('got closing message');
+    dispose();
+    exit(0);
   }
 
   bool _addMessage(Message msg) {
@@ -210,6 +230,25 @@ class MacroManager {
 
     switch (message) {
       case RunMacroMsg msg:
+        if (autoRunMacro && !isManagedByMacroServer) {
+          logger.warn(
+            'Received macro generation request, but the client is in read-only mode because autoRunMacro is enabled.\n'
+            '\n'
+            'This typically means:\n'
+            '  • The macro is already running in a separate process\n'
+            '  • Manual macro execution is blocked to prevent conflicts\n'
+            '\n'
+            'To resolve this:\n'
+            '  1. Set autoRunMacro to false if you want manual control\n'
+            '  2. Ensure autoRunMacro matches in both configurations\n'
+            '  3. Avoid running macros both automatically and manually\n'
+            '\n'
+            'If this seems incorrect, please file an issue at:\n'
+            'https://github.com/rebaz94/macro_kit',
+          );
+          return;
+        }
+
         if (msg.assetDeclaration != null) {
           _runAssetMacro(message);
         } else {

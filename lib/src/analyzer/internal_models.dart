@@ -1,10 +1,18 @@
 import 'dart:async' as async;
+import 'dart:io';
+import 'dart:math' as m;
 
 import 'package:analyzer/dart/element/element.dart';
 import 'package:collection/collection.dart';
+import 'package:macro_kit/src/analyzer/spawner.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:meta/meta.dart';
+import 'package:path/path.dart' as p;
 import 'package:web_socket_channel/web_socket_channel.dart' show WebSocketChannel;
+
+final m.Random random = m.Random();
+
+int newId() => random.nextInt(100000);
 
 @internal
 class ContextInfo {
@@ -13,12 +21,14 @@ class ContextInfo {
     required this.packageName,
     required this.isDynamic,
     required this.config,
+    required this.sourceContext,
   });
 
   final String path;
   final String packageName;
   final bool isDynamic;
   final MacroClientConfiguration config;
+  final MacroContextSourceCodeInfo sourceContext;
 
   /// Whether this context has executed auto-rebuild on connection
   bool autoRebuildExecuted = false;
@@ -36,7 +46,7 @@ class ContextInfo {
 
   @override
   String toString() {
-    return 'ContextInfo{path: $path, packageName: $packageName, isDynamic: $isDynamic}';
+    return 'ContextInfo{path: $path, packageName: $packageName, isDynamic: $isDynamic, config: $config, sourceContext: $sourceContext, autoRebuildExecuted: $autoRebuildExecuted}';
   }
 }
 
@@ -89,6 +99,8 @@ class ClientChannelInfo {
     required this.macros,
     required this.assetMacros,
     required this.timeout,
+    required this.autoRunMacro,
+    required this.managedByMacroServer,
     required this.sub,
   });
 
@@ -98,6 +110,8 @@ class ClientChannelInfo {
   final List<String> macros;
   final Map<String, List<AssetMacroInfo>> assetMacros;
   final Duration timeout;
+  final bool autoRunMacro;
+  final bool managedByMacroServer;
   final async.StreamSubscription? sub;
 }
 
@@ -129,6 +143,7 @@ class MacroClientConfiguration {
     required this.remapGeneratedFileTo,
     required this.autoRebuildOnConnect,
     required this.alwaysRebuildOnConnect,
+    required this.skipConnectRebuildWithAutoRun,
     required this.userMacrosConfig,
   });
 
@@ -140,6 +155,7 @@ class MacroClientConfiguration {
       remapGeneratedFileTo: '',
       autoRebuildOnConnect: false,
       alwaysRebuildOnConnect: false,
+      skipConnectRebuildWithAutoRun: true,
       userMacrosConfig: const {},
     );
   }
@@ -166,6 +182,7 @@ class MacroClientConfiguration {
       },
       autoRebuildOnConnect: parseField(config['auto_rebuild_on_connect']) ?? false,
       alwaysRebuildOnConnect: parseField(config['always_rebuild_on_connect']) ?? false,
+      skipConnectRebuildWithAutoRun: parseField(config['skip_connect_rebuild_with_auto_run_macro']) ?? true,
       userMacrosConfig: parseField(json['macros']) ?? const {},
     );
   }
@@ -177,6 +194,7 @@ class MacroClientConfiguration {
     remapGeneratedFileTo: '',
     autoRebuildOnConnect: false,
     alwaysRebuildOnConnect: false,
+    skipConnectRebuildWithAutoRun: true,
     userMacrosConfig: const {},
   );
 
@@ -210,6 +228,18 @@ class MacroClientConfiguration {
   /// when new client connect to macro server
   final bool alwaysRebuildOnConnect;
 
+  /// Skip connect-triggered rebuilds when external auto-run process is active
+  ///
+  /// When enabled, disables [autoRebuildOnConnect] and [alwaysRebuildOnConnect]
+  /// if macro generation is being handled by a separate auto-run process.
+  /// This prevents the Flutter app from triggering redundant generation
+  /// when connecting to a server that's already running automatic generation.
+  ///
+  /// Set to `true` when `autoRunMacro` from your macro_context.dart is true.
+  ///
+  /// Defaults to `true` (skip connect-triggered rebuilds when auto-run is active).
+  final bool skipConnectRebuildWithAutoRun;
+
   /// The user macros configuration keyed by macro name
   final Map<String, dynamic> userMacrosConfig;
 
@@ -224,6 +254,7 @@ class MacroClientConfiguration {
           remapGeneratedFileTo == other.remapGeneratedFileTo &&
           autoRebuildOnConnect == other.autoRebuildOnConnect &&
           alwaysRebuildOnConnect == other.alwaysRebuildOnConnect &&
+          skipConnectRebuildWithAutoRun == other.skipConnectRebuildWithAutoRun &&
           userMacrosConfig == other.userMacrosConfig;
 
   @override
@@ -234,6 +265,7 @@ class MacroClientConfiguration {
       remapGeneratedFileTo.hashCode ^
       autoRebuildOnConnect.hashCode ^
       alwaysRebuildOnConnect.hashCode ^
+      skipConnectRebuildWithAutoRun.hashCode ^
       userMacrosConfig.hashCode;
 
   Map<String, dynamic> toJson() {
@@ -242,13 +274,192 @@ class MacroClientConfiguration {
       if (remapGeneratedFileTo.isNotEmpty) 'remap_generated_file_to': remapGeneratedFileTo,
       if (autoRebuildOnConnect) 'auto_rebuild_on_connect': autoRebuildOnConnect,
       if (alwaysRebuildOnConnect) 'always_rebuild_on_connect': alwaysRebuildOnConnect,
+      if (skipConnectRebuildWithAutoRun) 'skip_connect_rebuild_with_auto_run_macro': skipConnectRebuildWithAutoRun,
       'macros': userMacrosConfig,
     };
   }
 
   @override
   String toString() {
-    return 'MacroClientConfiguration{id: $id, context: $context, packageName: $packageName, remapGeneratedFileTo: $remapGeneratedFileTo, autoRebuildOnConnect: $autoRebuildOnConnect, alwaysRebuildOnConnect: $alwaysRebuildOnConnect, userMacrosConfig: $userMacrosConfig}';
+    return 'MacroClientConfiguration{id: $id, context: $context, packageName: $packageName, remapGeneratedFileTo: $remapGeneratedFileTo, autoRebuildOnConnect: $autoRebuildOnConnect, alwaysRebuildOnConnect: $alwaysRebuildOnConnect, skipConnectRebuildWithAutoRun: $skipConnectRebuildWithAutoRun, userMacrosConfig: $userMacrosConfig}';
+  }
+}
+
+class MacroContextSourceCodeInfo {
+  const MacroContextSourceCodeInfo({
+    required this.hashId,
+    this.fromTest = false,
+    required this.autoRun,
+    required this.runCommand,
+  });
+
+  static MacroContextSourceCodeInfo testContext() => const MacroContextSourceCodeInfo(
+    hashId: -1,
+    fromTest: true,
+    autoRun: false,
+    runCommand: [],
+  );
+
+  static Future<SpawnResult<MacroContextSourceCodeInfo>> fromSource(int hashId, String source) async {
+    final (generatedCode, err) = _generateIsolateCode(source);
+    if (err != null) {
+      return SpawnError(err, StackTrace.empty);
+    }
+
+    final genFile = File(p.join(Directory.systemTemp.path, 'macro', 'macro_context_${newId()}.dart'))
+      ..create(recursive: true)
+      ..writeAsStringSync(generatedCode);
+
+    return Spawner.evaluateCode(
+      codeUri: genFile.uri,
+      onData: (data) {
+        if (data is! Map) {
+          throw 'Expected to get execution result but got: ${data.runtimeType}';
+        }
+
+        return MacroContextSourceCodeInfo(
+          hashId: hashId,
+          autoRun: data['autoRunMacro'] as bool,
+          runCommand: (data['autoRunMacroCommand'] as List).map((e) => e as String).toList(),
+        );
+      },
+    );
+  }
+
+  static (String, String?) _generateIsolateCode(String source) {
+    source = _removeComments(source);
+
+    String autoRunGetter = '';
+    String commandGetter = '';
+    try {
+      autoRunGetter = _extractGetter(source, 'autoRunMacro') ?? 'bool get autoRunMacro => true;';
+      commandGetter = _extractGetter(source, 'autoRunMacroCommand') ?? 'List<String> get autoRunMacroCommand => macroDartRunnerCommand;';
+    } on StateError catch (e) {
+      return ('', e.toString());
+    }
+
+    return (
+      '''
+import 'package:macro_kit/macro_kit.dart';
+import 'dart:io';
+import 'dart:async';
+import 'dart:isolate';
+import 'dart:collection';
+import 'dart:convert';
+import 'dart:ffi';
+import 'dart:math';
+
+$autoRunGetter
+  
+$commandGetter
+
+void main(List<String> _, SendPort port) async {
+  port.send({
+    'autoRunMacro': autoRunMacro,
+    'autoRunMacroCommand': autoRunMacroCommand,
+  });
+}
+''',
+      null,
+    );
+  }
+
+  static String? _extractGetter(String source, String getterName) {
+    final getPattern = RegExp(
+      r'\bget\s+' + RegExp.escape(getterName) + r'\b',
+    );
+
+    final match = getPattern.firstMatch(source);
+    if (match == null) {
+      return null;
+    }
+
+    // Walk backwards to line start (this preserves the return type)
+    int start = match.start;
+    while (start > 0 && source[start - 1] != '\n') {
+      start--;
+    }
+
+    final arrowIndex = source.indexOf('=>', match.end);
+    final braceIndex = source.indexOf('{', match.end);
+
+    // Arrow getter
+    if (arrowIndex != -1 && (braceIndex == -1 || arrowIndex < braceIndex)) {
+      final end = source.indexOf(';', arrowIndex);
+      if (end == -1) {
+        throw StateError('Invalid arrow getter for $getterName');
+      }
+      return source.substring(start, end + 1);
+    }
+
+    // Block getter
+    if (braceIndex == -1) {
+      throw StateError('Invalid block getter for $getterName');
+    }
+
+    int braceCount = 0;
+    for (int i = braceIndex; i < source.length; i++) {
+      if (source[i] == '{') braceCount++;
+      if (source[i] == '}') {
+        braceCount--;
+        if (braceCount == 0) {
+          return source.substring(start, i + 1);
+        }
+      }
+    }
+
+    throw StateError('Unterminated getter body for $getterName');
+  }
+
+  static String _removeComments(String source) {
+    final lines = source.split('\n');
+    final buffer = StringBuffer();
+
+    bool inBlockComment = false;
+
+    for (final line in lines) {
+      final trimmed = line.trimLeft();
+
+      if (inBlockComment) {
+        if (trimmed.contains('*/')) {
+          inBlockComment = false;
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('/*')) {
+        if (!trimmed.contains('*/')) {
+          inBlockComment = true;
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('//')) {
+        continue;
+      }
+
+      buffer.writeln(line);
+    }
+
+    return buffer.toString();
+  }
+
+  final int hashId;
+  final bool fromTest;
+  final bool autoRun;
+  final List<String> runCommand;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MacroContextSourceCodeInfo && runtimeType == other.runtimeType && hashId == other.hashId;
+
+  @override
+  int get hashCode => hashId.hashCode;
+
+  @override
+  String toString() {
+    return 'MacroContextSourceCodeInfo{hashId: $hashId, fromTest: $fromTest, autoRun: $autoRun, runCommand: $runCommand}';
   }
 }
 

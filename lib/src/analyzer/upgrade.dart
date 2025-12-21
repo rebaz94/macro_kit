@@ -16,8 +16,10 @@ Future<(bool, String?)> upgradedMacroServer(String toVersion) async {
       },
       runInShell: Platform.isWindows,
     );
-    final output = await process.stdout.transform(utf8.decoder).toList();
 
+    process.stderr.drain().catchError((_){});
+
+    final output = await process.stdout.transform(utf8.decoder).toList();
     if (output.contains('Activated macro_kit $toVersion.')) {
       return (true, null);
     }

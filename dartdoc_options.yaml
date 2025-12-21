@@ -14,6 +14,9 @@ dartdoc:
       markdown: "doc/write_new_macro.md"
     "Capability":
       markdown: "doc/capability.md"
+    "Global Configuration":
+      markdown: "doc/global_macro_config.md"
+
   categoryOrder:
     - "Get started"
     - "Installation"
@@ -22,6 +25,7 @@ dartdoc:
     - "Asset Path Macro"
     - "Write New Macro"
     - "Capability"
+    - "Global Configuration"
   showUndocumentedCategories: true
   ignore:
     - broken-link

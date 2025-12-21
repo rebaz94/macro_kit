@@ -17,6 +17,7 @@ void main() async {
   final testDir = p.join(rootProject, 'test');
 
   await runMacro(
+    autoRunMacro: false,
     package: PackageInfo.path(testDir),
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
