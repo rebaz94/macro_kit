@@ -1,3 +1,7 @@
+## 0.4.1
+
+- Fixed signal handler problems on Windows
+
 ## 0.4.0
 
 - **Automatic Macro Generation**: Added support for running macro generation independently without

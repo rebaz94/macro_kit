@@ -111,7 +111,11 @@ void setupSignalHandler({String? trackedProcessDir}) {
 
   _removeStaleProcess();
   ProcessSignal.sigint.watch().listen((_) => handleCallback(SignalType.sigint));
-  ProcessSignal.sigterm.watch().listen((_) => handleCallback(SignalType.sigterm));
+
+  if (!Platform.isWindows) {
+    ProcessSignal.sigterm.watch().listen((_) => handleCallback(SignalType.sigterm));
+  }
+
   ProcessSignal.sighup.watch().listen((_) => handleCallback(SignalType.sighup));
 }
 
