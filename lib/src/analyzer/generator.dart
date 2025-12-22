@@ -67,21 +67,19 @@ mixin Generator on BaseAnalyzer {
         }
       }
 
-      try {
-        final runRes = await server.runMacroGenerator(clientChannelId, msg);
-        if (runRes.error?.isNotEmpty == true) {
-          server.onClientError(clientChannelId, runRes.error!);
-          return;
-        }
-
-        fileGenerated = true;
-        generated
-          ..write(runRes.result)
-          ..write('\n');
-      } catch (e, s) {
-        server.onClientError(clientChannelId, e.toString(), e, s);
+      final (runRes, err, trace) = await server.runMacroGenerator(clientChannelId, msg).awaitValueTraced();
+      if (err != null) {
+        server.onClientError(clientChannelId, err.toString(), err, trace);
+        return;
+      } else if (runRes!.error?.isNotEmpty == true) {
+        server.onClientError(clientChannelId, runRes.error!);
         return;
       }
+
+      fileGenerated = true;
+      generated
+        ..write(runRes.result)
+        ..write('\n');
     }
 
     if (!fileGenerated) {
@@ -147,18 +145,16 @@ mixin Generator on BaseAnalyzer {
         }
       }
 
-      try {
-        final runRes = await server.runMacroGenerator(clientChannelId, msg);
-        if (runRes.error?.isNotEmpty == true) {
-          server.onClientError(clientChannelId, runRes.error!);
-          return;
-        }
-
-        // generatedFiles.addAll(runRes.generatedFiles ?? const []);
-      } catch (e, s) {
-        server.onClientError(clientChannelId, e.toString(), e, s);
+      final (runRes, err, trace) = await server.runMacroGenerator(clientChannelId, msg).awaitValueTraced();
+      if (err != null) {
+        server.onClientError(clientChannelId, err.toString(), err, trace);
+        return;
+      } else if (runRes?.error?.isNotEmpty == true) {
+        server.onClientError(clientChannelId, runRes!.error!);
         return;
       }
+
+      // generatedFiles.addAll(runRes.generatedFiles ?? const []);
     }
 
     // TODO: process generated file?
@@ -172,7 +168,7 @@ mixin Generator on BaseAnalyzer {
     try {
       return formatter.format(code, uri: path);
     } catch (e) {
-      logger.warn('Formatting generated code fails', e);
+      logger.warn('Formatting generated code failed', e);
       return code;
     }
   }

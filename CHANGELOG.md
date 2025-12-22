@@ -7,6 +7,7 @@
 - **Rename Configuration File**: Renamed global configuration file from `.macro.json` to
   `macro.json`
 - **Watch Logs Command**: Added new command to watch macro generation logs from terminal.
+- Fix web compatibility by handling 'dart:io' imports with conditional exports
 
 ## 0.3.6
 

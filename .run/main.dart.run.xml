@@ -1,6 +1,5 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="main.dart" type="FlutterRunConfigurationType" factoryName="Flutter" nameIsGenerated="true">
-    <option name="additionalArgs" value="--vmservice-out-file=./.dart_tool/macro/macro_vm_url" />
     <option name="filePath" value="$PROJECT_DIR$/examples/flutter_example/lib/main.dart" />
     <method v="2" />
   </configuration>

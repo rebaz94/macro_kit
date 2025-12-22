@@ -11,7 +11,6 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 // ignore: implementation_imports
 import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:dart_style/dart_style.dart';
-import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
@@ -118,7 +117,7 @@ abstract class BaseAnalyzer {
   final PendingAnalyze defaultNullPendingAnalyzeValue = (asset: null);
   final Stopwatch stopWatch = Stopwatch();
   String currentAnalyzingPath = '';
-  String lastAnalyzingPath = '';
+  String lastChangedPath = '';
   ChangeType lastChangeType = ChangeType.MODIFY;
   bool isAnalyzingFile = false;
 
@@ -204,7 +203,7 @@ abstract class BaseAnalyzer {
       }
 
       final content = contextFile.readAsStringSync();
-      final hashId = xxh3code(content);
+      final hashId = generateHash(content);
       if (existingSourceContext?.hashId == hashId) {
         return existingSourceContext!;
       }

@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:logging/logging.dart';
 import 'package:macro_kit/src/client/client_manager.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:macro_kit/src/core/core.dart' show AssetMacroInfo, PackageInfo;
+import 'package:macro_kit/src/core/platform/platform.dart';
 
 // copied from flutter
 const bool _kReleaseMode = bool.fromEnvironment('dart.vm.product');
@@ -114,17 +114,24 @@ Future<int?> runMacro({
   /// Default: `true` in debug mode, `false` in release mode
   bool enabled = _kDebugMode,
 }) async {
-  if (!enabled) return null;
+  if (!enabled) {
+    return null;
+  }
 
-  final isAndroid = Platform.isAndroid || Platform.isFuchsia;
+  if (!currentPlatform.isDesktopPlatform) {
+    return null;
+  }
+
   final logger = MacroLogger.createLogger(
     name: 'MacroManager',
     into: log,
     level: logLevel,
   );
+
+  logger.info('Initializing MacroManager');
   final manager = MacroManager(
     logger: logger,
-    serverAddress: serverAddress ?? 'http://${isAndroid ? '10.0.2.2' : 'localhost'}:3232',
+    serverAddress: serverAddress ?? 'http://localhost:3232',
     packageInfo: package,
     macros: macros,
     assetMacros: assetMacros,
@@ -134,7 +141,7 @@ Future<int?> runMacro({
   );
 
   manager.connect();
-  return manager.clientId;
+  return manager.connection.clientId;
 }
 
 /// Waits until the macro code regeneration process completes
@@ -192,15 +199,8 @@ List<String> get macroFlutterRunnerCommand {
 ///   await keepMacroRunner(); // Add this line too keep the runner process
 /// }
 /// ```
-///
-/// ## Detection
-///
-/// Checks if launched via test runner by looking for:
-/// - `FLUTTER_TEST` environment variable (Flutter test runner)
-/// - `test.declarer` zone value (Dart test runner)
-/// - `test.openChannelCallback` zone value (Dart test runner)
 Future<void> keepMacroRunner() async {
-  if (Platform.environment.containsKey('FLUTTER_TEST') ||
+  if (platformEnvironment.containsKey('FLUTTER_TEST') ||
       Zone.current[const Symbol('test.declarer')] != null ||
       Zone.current[const Symbol('test.openChannelCallback')] != null) {
     await Future.delayed(const Duration(days: 33));

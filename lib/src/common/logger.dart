@@ -25,6 +25,30 @@ class MacroLogger {
     return file.path;
   }
 
+  static MacroLogger createLogger({
+    required String name,
+    void Function(Object? obj)? into,
+    Level level = Level.INFO,
+    bool rawLog = false,
+  }) {
+    final logger = MacroLogger._(name);
+    final log = into ?? print;
+
+    logger.logger.level = level;
+    if (rawLog) {
+      logger.logger.onRecord.listen((e) => log(e.message));
+    } else {
+      logger.logger.onRecord.listen(
+        (e) => log(
+          '[${e.level.name.padRight(7)}] ${e.loggerName}: ${e.message}'
+          '${e.error != null ? ': ${e.error}' : ''}'
+          '${e.stackTrace != null ? '\nStack trace: ${e.stackTrace}' : ''}',
+        ),
+      );
+    }
+    return logger;
+  }
+
   static Future<void> readStreamingLogs(List<String> paths) async {
     final process = await Future.wait(paths.map(_startWatchingLog));
     await Future.wait(process.map(_readLog));
@@ -52,30 +76,6 @@ class MacroLogger {
     await for (final data in process.stdout.transform(utf8.decoder).transform(LineSplitter())) {
       print(data);
     }
-  }
-
-  static MacroLogger createLogger({
-    required String name,
-    void Function(Object? obj)? into,
-    Level level = Level.INFO,
-    bool rawLog = false,
-  }) {
-    final logger = MacroLogger._(name);
-    final log = into ?? print;
-
-    logger.logger.level = level;
-    if (rawLog) {
-      logger.logger.onRecord.listen((e) => log(e.message));
-    } else {
-      logger.logger.onRecord.listen(
-        (e) => log(
-          '[${e.level.name.padRight(7)}] ${e.loggerName}: ${e.message}'
-          '${e.error != null ? ': ${e.error}' : ''}'
-          '${e.stackTrace != null ? '\nStack trace: ${e.stackTrace}' : ''}',
-        ),
-      );
-    }
-    return logger;
   }
 
   final Logger logger;

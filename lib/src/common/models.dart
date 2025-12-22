@@ -3,12 +3,20 @@ import 'dart:convert';
 import 'package:logging/logging.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/core/core.dart';
+import 'package:macro_kit/src/core/platform/platform.dart';
 
 String encodeMessage(Message message) {
   return jsonEncode({
     'type': message.type,
     'data': message.toJson(),
   });
+}
+
+Map<String, dynamic> encodeMessageAsMap(Message message) {
+  return {
+    'type': message.type,
+    'data': message.toJson(),
+  };
 }
 
 (Message?, Object?, StackTrace?) decodeMessage(Object? rawMessage) {
@@ -18,7 +26,11 @@ String encodeMessage(Message message) {
     final msg = switch (json['type']) {
       'plugin_connect' => PluginConnectMsg.fromJson(data),
       'contexts' => AnalysisContextsMsg.fromJson(data),
+      'request_client_to_connect' => RequestClientToConnectMsg.fromJson(data),
+      'request_plugin_to_connect' => RequestPluginToConnectMsg.fromJson(data),
       'client_connect' => ClientConnectMsg.fromJson(data),
+      'accepted_vm_service' => AcceptedVmServiceConnectMsg.fromJson(data),
+      'close_vm_service' => CloseVmServiceConnectMsg.fromJson(data),
       'request_macros_config' => RequestMacrosConfigMsg.fromJson(data),
       'sync_macros_config' => SyncMacrosConfigMsg.fromJson(data),
       'run_macro' => RunMacroMsg.fromJson(data),
@@ -98,9 +110,42 @@ class AnalysisContextsMsg implements Message {
   }
 }
 
+class RequestClientToConnectMsg implements Message {
+  RequestClientToConnectMsg();
+
+  static RequestClientToConnectMsg fromJson(Map<String, dynamic> json) {
+    return RequestClientToConnectMsg();
+  }
+
+  @override
+  String get type => 'request_client_to_connect';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {};
+  }
+}
+
+class RequestPluginToConnectMsg implements Message {
+  RequestPluginToConnectMsg();
+
+  static RequestPluginToConnectMsg fromJson(Map<String, dynamic> json) {
+    return RequestPluginToConnectMsg();
+  }
+
+  @override
+  String get type => 'request_plugin_to_connect';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {};
+  }
+}
+
 class ClientConnectMsg implements Message {
   ClientConnectMsg({
     required this.id,
+    required this.platform,
     required this.package,
     required this.macros,
     required this.assetMacros,
@@ -112,6 +157,7 @@ class ClientConnectMsg implements Message {
   static ClientConnectMsg fromJson(Map<String, dynamic> json) {
     return ClientConnectMsg(
       id: (json['id'] as num).toInt(),
+      platform: MacroPlatform.values.byName(json['platform'] as String),
       package: PackageInfo.fromJson(json['packages'] as Map<String, dynamic>),
       macros: (json['macros'] as List).map((e) => e as String).toList(),
       assetMacros: (json['assetMacros'] as Map).map(
@@ -129,6 +175,7 @@ class ClientConnectMsg implements Message {
   }
 
   final int id;
+  final MacroPlatform platform;
   final PackageInfo package;
   final List<String> macros;
   final Map<String, List<AssetMacroInfo>> assetMacros;
@@ -143,12 +190,57 @@ class ClientConnectMsg implements Message {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'platform': platform.name,
       'packages': package.toJson(),
       'macros': macros,
       'assetMacros': assetMacros.map((k, v) => MapEntry(k, v.map((e) => e.toJson()).toList())),
       'runTimeout': runTimeout.inMicroseconds,
       'autoRunMacro': autoRunMacro,
       'managedByMacroServer': managedByMacroServer,
+    };
+  }
+}
+
+class AcceptedVmServiceConnectMsg implements Message {
+  AcceptedVmServiceConnectMsg();
+
+  static AcceptedVmServiceConnectMsg fromJson(Map<String, dynamic> json) {
+    return AcceptedVmServiceConnectMsg();
+  }
+
+  @override
+  String get type => 'accepted_vm_service';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {};
+  }
+}
+
+class CloseVmServiceConnectMsg implements Message {
+  CloseVmServiceConnectMsg({
+    required this.closeCode,
+    required this.closeReason,
+  });
+
+  static CloseVmServiceConnectMsg fromJson(Map<String, dynamic> json) {
+    return CloseVmServiceConnectMsg(
+      closeCode: (json['closeCode'] as num?)?.toInt(),
+      closeReason: json['closeReason'] as String?,
+    );
+  }
+
+  final int? closeCode;
+  final String? closeReason;
+
+  @override
+  String get type => 'close_vm_service';
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      if (closeCode != null) 'closeCode': closeCode,
+      if (closeReason != null) 'closeReason': closeReason,
     };
   }
 }

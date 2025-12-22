@@ -7,14 +7,16 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 // ignore: implementation_imports
 import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
 import 'package:collection/collection.dart';
-import 'package:hashlib/hashlib.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyzer.dart';
+import 'package:macro_kit/src/analyzer/base.dart';
+import 'package:macro_kit/src/analyzer/channel.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
-import 'package:macro_kit/src/analyzer/lock.dart';
-import 'package:macro_kit/src/analyzer/upgrade.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
+import 'package:macro_kit/src/analyzer/utils/lock.dart';
+import 'package:macro_kit/src/analyzer/utils/upgrade.dart';
 import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
@@ -24,8 +26,6 @@ import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import 'package:web_socket_channel/status.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-
-import 'base.dart';
 
 typedef _AssetDirInfo = ({AssetMacroInfo macro, String relativeBasePath, String absoluteOutputPath});
 
@@ -153,31 +153,27 @@ class MacroAnalyzerServer implements MacroServerInterface {
         analysisContextPaths,
       );
 
-      if (!contextsChanged) {
-        final autoRunMacroContexts = _contextRegistry.values
-            .where((c) => c.sourceContext.autoRun && c.sourceContext.runCommand.isNotEmpty)
-            .toList();
+      if (contextsChanged) {
+        analyzer.analysisContextPaths = analysisContextPaths;
 
-        // Even if contexts didn't change, we need to update asset config and watchers
-        analyzer.fileCaches.clear();
-        final assetContexts = _setupAssetMacroConfiguration();
-        await _reWatchContexts(CombinedListView([watchPaths, assetContexts]), autoRunMacroContexts);
-        await _prepareAutoRebuildForAllClient(connectedClient: connectedClient);
-        return;
+        sendMessageMacroClients(
+          GeneralMessage(
+            message: 'Loading analysis context:\n${analysisContextPaths.map((e) => '\t-> $e').join('\n')}',
+          ),
+        );
+
+        // Create new analysis context collection
+        var old = analyzer.contextCollection;
+        analyzer.contextCollection = AnalysisContextCollectionImpl(
+          includedPaths: analysisContextPaths,
+          byteStore: analyzer.byteStore,
+          resourceProvider: PhysicalResourceProvider.INSTANCE,
+        );
+
+        // Dispose old context after delay
+        Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
       }
 
-      sendMessageMacroClients(
-        GeneralMessage(message: 'Loading analysis context:\n${analysisContextPaths.map((e) => '\t-> $e').join('\n')}'),
-      );
-      // Create new analysis context collection
-      var old = analyzer.contextCollection;
-      analyzer.contextCollection = AnalysisContextCollectionImpl(
-        includedPaths: analysisContextPaths,
-        byteStore: analyzer.byteStore,
-        resourceProvider: PhysicalResourceProvider.INSTANCE,
-      );
-
-      analyzer.analysisContextPaths = analysisContextPaths;
       final autoRunMacroContexts = _contextRegistry.values
           .where((c) => c.sourceContext.autoRun && c.sourceContext.runCommand.isNotEmpty)
           .toList();
@@ -187,9 +183,6 @@ class MacroAnalyzerServer implements MacroServerInterface {
       final assetContexts = _setupAssetMacroConfiguration();
       await _reWatchContexts(CombinedListView([watchPaths, assetContexts]), autoRunMacroContexts);
       await _prepareAutoRebuildForAllClient(connectedClient: connectedClient);
-
-      // Dispose old context after delay
-      Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
     });
   }
 
@@ -197,7 +190,15 @@ class MacroAnalyzerServer implements MacroServerInterface {
   /// For non-dynamic contexts, watch lib/ subdirectory
   /// For dynamic contexts (tests), watch the entire context
   List<String> _getWatchPaths(Iterable<ContextInfo> contexts) {
-    return contexts.map((ContextInfo ctx) => ctx.isDynamic ? ctx.path : p.join(ctx.path, 'lib')).toList();
+    final paths = <String>[];
+    for (final context in contexts) {
+      if (context.isDynamic) {
+        paths.add(context.path);
+      } else {
+        paths.add(p.join(context.path, 'lib'));
+      }
+    }
+    return paths;
   }
 
   /// Rebuild the context registry from plugin channels
@@ -540,9 +541,11 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   void onMacroClientGeneratorConnected(WebSocketChannel webSocket) {
-    int clientId = -1;
+    WsChannel channel = WsChannel(channel: webSocket);
 
+    int clientId = -1;
     StreamSubscription? sub;
+
     sub = webSocket.stream.listen(
       (data) async {
         final (message, err, stackTrace) = decodeMessage(data);
@@ -555,7 +558,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
           case ClientConnectMsg msg:
             final client = ClientChannelInfo(
               id: msg.id,
-              channel: webSocket,
+              channel: channel,
               package: msg.package,
               macros: msg.macros,
               assetMacros: msg.assetMacros,
@@ -569,25 +572,33 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
             // this will trigger auto rebuild if configured
             await onContextChanged(connectedClient: client);
-
-          case RequestMacrosConfigMsg msg:
-            await _syncClientMacrosConfig(msg.clientId, msg.filePath);
-
-          case RunMacroResultMsg msg:
-            final operation = _pendingOperations.remove(msg.id);
-            if (operation == null) {
-              logger.error('No pending operation found for result: ${msg.id}');
-              return;
-            }
-
-            operation.complete(msg);
           default:
-            logger.info('Unhandled message: $message');
+            _handleMessage(message, channel);
         }
       },
       onError: (err) => logger.error('WebSocket channel error occurred', err),
       onDone: () => _clientChannels.remove(clientId),
     );
+  }
+
+  void _handleMessage(Message? message, WsChannel channel) async {
+    switch (message) {
+      case RequestMacrosConfigMsg msg:
+        await _syncClientMacrosConfig(msg.clientId, msg.filePath);
+
+      case RunMacroResultMsg msg:
+        final operation = _pendingOperations.remove(msg.id);
+        if (operation == null) {
+          logger.error('No pending operation found for result: ${msg.id}');
+          return;
+        }
+
+        operation.complete(msg);
+      case RequestPluginToConnectMsg():
+        _onRequestPluginToConnect();
+      default:
+        logger.info('Unhandled message: $message');
+    }
   }
 
   Future<void> _syncClientMacrosConfig(int clientId, String filePath) async {
@@ -607,15 +618,21 @@ class MacroAnalyzerServer implements MacroServerInterface {
         configs: fileContext.config.userMacrosConfig,
       );
     }
-    final sent = _addMessageToClient(clientId, SyncMacrosConfigMsg(config: config));
+    final sent = await _addMessageToClient(clientId, SyncMacrosConfigMsg(config: config));
     if (!sent) {
       logger.error('Failed to send macro configuration to channel: $clientId');
     }
   }
 
-  bool _addMessageToClient(int channelId, Message msg) {
+  void _onRequestPluginToConnect() {
+    File(p.join(macroDirectory, macroPluginRequestFileName))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
+  }
+
+  FutureOr<bool> _addMessageToClient(int channelId, Message msg) async {
     try {
-      _clientChannels[channelId]?.channel.sink.add(encodeMessage(msg));
+      await _clientChannels[channelId]?.channel.addMessage(msg);
       return true;
     } catch (e, s) {
       logger.error('Unable to add message to client', e, s);
@@ -926,14 +943,14 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
   void _onFileChanged(String path, ChangeType changeType, {bool startProcessing = true}) {
     const minimumThreshold = 30;
-    if (analyzer.lastAnalyzingPath == path &&
+    if (analyzer.lastChangedPath == path &&
         analyzer.lastChangeType == changeType &&
         minimumThreshold > analyzer.getDiffFromLastExecution()) {
       // duplicate event, ignore it
       return;
     }
 
-    analyzer.lastAnalyzingPath = path;
+    analyzer.lastChangedPath = path;
     analyzer.lastChangeType = changeType;
 
     final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
@@ -1040,8 +1057,6 @@ class MacroAnalyzerServer implements MacroServerInterface {
     final watchPath = _getWatchPaths([context]).first;
     final sub = _subs[watchPath];
     final process = sub?.autoRunMacroProcess;
-    if (process == null) return;
-
     final macroContextDartFile = File(p.join(filePath));
 
     // if not exist, reload to remove existing process
@@ -1052,20 +1067,24 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     // if hash changed, remove before reloading context so that make new process
     // if required based on new evaluated code
-    final hashId = xxh3code(macroContextDartFile.readAsStringSync());
+    final hashId = generateHash(macroContextDartFile.readAsStringSync());
     if (hashId != _contextRegistry[context.path]?.sourceContext.hashId) {
-      removeProcess(process);
-      process.kill();
-      _subs[watchPath] = (fileSub: sub!.fileSub, autoRunMacroProcess: null);
-      await onContextChanged();
-      return;
+      if (process != null) {
+        removeProcess(process);
+        process.kill();
+        _subs[watchPath] = (fileSub: sub!.fileSub, autoRunMacroProcess: null);
+      }
+
+      analyzer.pendingAnalyze.clear();
+      analyzer.isAnalyzingFile = false;
+      onContextChanged();
     }
   }
 
   @override
   Future<RunMacroResultMsg> runMacroGenerator(int channelId, RunMacroMsg message) async {
     final completer = Completer<RunMacroResultMsg>();
-    if (!_addMessageToClient(channelId, message)) {
+    if (!await _addMessageToClient(channelId, message)) {
       completer.complete(
         RunMacroResultMsg(
           id: message.id,
@@ -1165,7 +1184,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     for (final channel in _clientChannels.values.toList()) {
       tryFn(() => channel.sub?.cancel);
-      tryFn(() => channel.channel.sink.close(normalClosure, 'Server is closing').catchError((_) {}));
+      tryFn(() => channel.channel.close(normalClosure, 'Server is closing').catchError((_) {}));
     }
 
     tryFn(analyzer.contextCollection.dispose);

@@ -1,5 +1,5 @@
-import 'package:hashlib/hashlib.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/analyzer/utils/spawner.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
@@ -11,7 +11,7 @@ void main() {
           'bool get autoRunMacro => true;\n'
           "List<String> get autoRunMacroCommand => const ['dart', 'run', 'lib/macro_context.dart'];";
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -34,7 +34,7 @@ void main() {
           'bool get autoRunMacro => true;\n'
           "List<String> get autoRunMacroCommand => const [];";
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -56,7 +56,7 @@ void main() {
           'bool get autoRunMacro => false;\n'
           "List<String> get autoRunMacroCommand => const ['dart'];";
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -78,7 +78,7 @@ void main() {
           'bool get autoRunMacro => true;\n'
           'List<String> get autoRunMacroCommand => const ["dart"];';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -100,7 +100,7 @@ void main() {
           'bool get autoRunMacro => true;\n'
           "List<String> get autoRunMacroCommand => ['d' + 'a' 'r' + 't'];";
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -122,7 +122,7 @@ void main() {
           'bool get autoRunMacro { return true; }\n'
           'List<String> get autoRunMacroCommand { return const ["dart"]; }';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -148,7 +148,7 @@ void main() {
           ' return const ["dart"];\n'
           '}';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -174,7 +174,7 @@ void main() {
           ' return const ["dart", \'run\'];\n'
           '}';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -202,7 +202,7 @@ void main() {
           '   return const ["dart", \'run\'];\n'
           ' }';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -230,7 +230,7 @@ void main() {
           '   return 10 / 2 == 5 ? const ["dart", \'run\'] : const [];\n'
           ' }';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -352,7 +352,7 @@ Future<void> setupMacro() async {
       
       ''';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
 
       expect(
@@ -380,7 +380,7 @@ Future<void> setupMacro() async {
           '   return const ["dart"]\n' // missing semicolon
           ' }';
 
-      final hashId = xxh3code(source);
+      final hashId = generateHash(source);
       final res = await MacroContextSourceCodeInfo.fromSource(hashId, source);
       final err = res.toString();
 

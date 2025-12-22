@@ -1,31 +1,35 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:macro_kit/macro_kit.dart';
-import 'package:macro_kit/src/analyzer/lock.dart';
-import 'package:macro_kit/src/common/common.dart';
+import 'package:macro_kit/src/client/connection.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
-import 'package:macro_kit/src/common/watch_file_request.dart';
-import 'package:path/path.dart' as p;
-import 'package:web_socket_channel/status.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 typedef MacroInitFunction = MacroGenerator Function(MacroConfig config);
 
-class MacroManager {
+class MacroManager implements ConnectionListener {
   MacroManager({
     required this.logger,
     required String serverAddress,
-    required this.macros,
-    required this.assetMacros,
-    required this.autoReconnect,
-    required this.packageInfo,
-    required this.generateTimeout,
-    required this.autoRunMacro,
-  }) : serverAddress = Uri.parse(serverAddress);
+    required PackageInfo packageInfo,
+    required Map<String, MacroInitFunction> macros,
+    required Map<String, List<AssetMacroInfo>> assetMacros,
+    required bool autoReconnect,
+    required Duration generateTimeout,
+    required bool autoRunMacro,
+  }) : connection = createConnection(
+         logger: logger,
+         packageInfo: packageInfo,
+         macros: macros,
+         assetMacros: assetMacros,
+         autoRunMacro: autoRunMacro,
+         autoReconnect: autoReconnect,
+         generateTimeout: generateTimeout,
+         serverAddress: Uri.parse(serverAddress),
+       ) {
+    connection.listener = this;
+  }
 
   static final List<Completer<AutoRebuildResult>> _waitAutoRebuildCompleteCompleter = [];
 
@@ -35,201 +39,20 @@ class MacroManager {
     return c.future;
   }
 
-  final int clientId = 1000 + Random().nextInt(1000);
-  final CustomBasicLock lock = CustomBasicLock();
   final MacroLogger logger;
-  final Uri serverAddress;
-  final PackageInfo packageInfo;
-  final Map<String, MacroInitFunction> macros;
-  final Map<String, List<AssetMacroInfo>> assetMacros;
-  final bool autoReconnect;
-  final Duration generateTimeout;
-  final bool autoRunMacro;
-  final bool isManagedByMacroServer = Platform.environment['managed_by_macro_server'] == 'true';
-  UserMacroConfig? userMacrosConfig;
   final Map<String, (MacroGlobalConfig?,)> cachedUserMacrosConfig = {};
-  Completer<bool> _isMacrosConfigSynced = Completer<bool>();
-
-  final _clientRequestWatcher = WatchFileRequest(
-    fileName: macroClientRequestFileName,
-    inDirectory: macroDirectory,
-  );
+  UserMacroConfig? userMacrosConfig;
+  late ClientConnection connection;
 
   /// A cache of generator keyed by hash of the json that build MacroGenerator instance
   final Map<int, MacroGenerator> _generatorCaches = {};
-  final _mapStrDynamicTypeArg = [
-    MacroProperty(name: '', importPrefix: '', type: 'String', typeInfo: TypeInfo.string, fieldInitializer: null),
-    MacroProperty(name: '', importPrefix: '', type: 'dynamic', typeInfo: TypeInfo.dynamic, fieldInitializer: null),
-  ];
-
-  ConnectionStatus _status = ConnectionStatus.disconnected;
-
-  ConnectionStatus get status => _status;
-
-  WebSocketChannel? _wsChannel;
-  StreamSubscription? _wsSubs;
-
-  bool get isMobilePlatform {
-    return Platform.isAndroid || Platform.isIOS || Platform.isFuchsia;
-  }
 
   void connect() {
-    logger.info('Initializing MacroManager');
-    _listenToManualRequest();
-    _reconnect(force: true, delay: false);
+    connection.connect();
   }
 
-  /// setup a file watcher to be updated by macro server while in development mode
-  /// so that the plugin establish connection to macro server and send their analysis contexts path
-  void _listenToManualRequest() {
-    if (isMobilePlatform) {
-      // can't listen to file system in mobile
-      return;
-    }
-
-    _clientRequestWatcher.listen(
-      onChanged: (type, data) {
-        final content = data.split(':');
-        if (content.length != 2) {
-          logger.error('invalid client request');
-          return;
-        }
-
-        final [_, request] = content;
-        switch (request) {
-          case 'reconnect':
-            _establishConnection();
-        }
-      },
-    );
-  }
-
-  void _reconnect({bool force = false, bool delay = true}) async {
-    lock.synchronized(
-      () async {
-        if (!autoReconnect && !force) return;
-
-        if (delay) {
-          if (isMobilePlatform) {
-            logger.error(
-              'MacroServer is not running. Restart the analyzer to automatically start the server.'
-              '\nNote: When testing macOS Desktop or Windows applications, the server is started automatically.',
-            );
-          } else if (status == ConnectionStatus.disconnected) {
-            logger.error('Reconnecting to MacroServer in 10 seconds');
-          }
-        }
-
-        _requestPluginToConnect();
-        await Future.delayed(delay ? const Duration(seconds: 10) : const Duration(seconds: 1));
-        _establishConnection();
-      },
-    );
-  }
-
-  void _requestPluginToConnect() {
-    if (isMobilePlatform) {
-      // File system not work here, if auto starting macro server is enabled
-      // restarting analyzer start the server
-      return;
-    }
-
-    File(p.join(macroDirectory, macroPluginRequestFileName))
-      ..createSync(recursive: true)
-      ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
-  }
-
-  Future<void> _establishConnection() async {
-    if (_status == ConnectionStatus.connected) {
-      if (_wsChannel != null && _wsChannel!.closeCode == null && _wsChannel!.closeReason == null) {
-        logger.fine('Using existing active connection..');
-        return;
-      } else if (_wsChannel?.closeCode == normalClosure && isManagedByMacroServer) {
-        _onGotClosingMessage();
-      }
-    } else if (_status == ConnectionStatus.connecting) {
-      return;
-    }
-
-    _status = ConnectionStatus.connecting;
-    logger.fine('Establishing connection to MacroServer...');
-
-    try {
-      _wsChannel?.sink.close();
-      _wsChannel = null;
-
-      final wsUrl = Uri.parse('ws://${serverAddress.authority}/client/connect');
-      final channel = WebSocketChannel.connect(wsUrl);
-      await channel.ready;
-
-      _status = ConnectionStatus.connected;
-      _wsChannel = channel;
-
-      _wsSubs = channel.stream.listen(
-        _handleMessage,
-        onError: (error) => logger.error('WebSocket error occurred', error),
-        onDone: () async {
-          _status = ConnectionStatus.disconnected;
-          if (!_isMacrosConfigSynced.isCompleted) {
-            _isMacrosConfigSynced.complete(false);
-          }
-          _isMacrosConfigSynced = Completer();
-          if (_wsChannel?.closeCode == normalClosure && isManagedByMacroServer) {
-            _onGotClosingMessage();
-          }
-
-          _reconnect();
-        },
-      );
-
-      final isAutoRunMacro = autoRunMacro && !isManagedByMacroServer;
-
-      _addMessage(
-        ClientConnectMsg(
-          id: clientId,
-          package: packageInfo,
-          macros: macros.keys.toList(),
-          assetMacros: assetMacros,
-          runTimeout: generateTimeout,
-          managedByMacroServer: isManagedByMacroServer,
-          autoRunMacro: isAutoRunMacro,
-        ),
-      );
-
-      logger.info('Connected');
-    } on WebSocketChannelException catch (e) {
-      logger.error(
-        'Unable to connect to MacroServer: Is MacroServer is running?',
-        e.inner is! SocketException ? e.inner : null,
-      );
-
-      _status = ConnectionStatus.disconnected;
-      _reconnect();
-    } catch (e) {
-      logger.error('Unable to connect to MacroServer', e);
-      _status = ConnectionStatus.disconnected;
-      _reconnect();
-    }
-  }
-
-  Never _onGotClosingMessage() {
-    logger.info('got closing message');
-    dispose();
-    exit(0);
-  }
-
-  bool _addMessage(Message msg) {
-    try {
-      _wsChannel?.sink.add(encodeMessage(msg));
-      return true;
-    } catch (e, s) {
-      logger.error('Failed to add message', e, s);
-      _reconnect();
-      return false;
-    }
-  }
-
-  void _handleMessage(Object? data) {
+  @override
+  void handleNewMessage(Object? data) {
     final (message, err, stackTrace) = decodeMessage(data);
     if (err != null) {
       logger.error('Failed to decode message from MacroServer', err, stackTrace);
@@ -238,7 +61,7 @@ class MacroManager {
 
     switch (message) {
       case RunMacroMsg msg:
-        if (autoRunMacro && !isManagedByMacroServer) {
+        if (connection.autoRunMacro && !connection.isManagedByMacroServer) {
           logger.warn(
             'Received macro generation request, but the client is in read-only mode because autoRunMacro is enabled.\n'
             '\n'
@@ -264,8 +87,8 @@ class MacroManager {
         }
       case SyncMacrosConfigMsg msg:
         userMacrosConfig = msg.config;
-        if (!_isMacrosConfigSynced.isCompleted) {
-          _isMacrosConfigSynced.complete(true);
+        if (!connection.isMacrosConfigSynced.isCompleted) {
+          connection.isMacrosConfigSynced.complete(true);
         }
 
       case AutoRebuildOnConnectResultMsg msg:
@@ -313,7 +136,7 @@ class MacroManager {
           // initialize or reuse generator
           final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
           if (errMsg != null || macroGenrator == null) {
-            _addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
+            connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
             return;
           }
 
@@ -457,12 +280,12 @@ class MacroManager {
       }
     } catch (e, s) {
       logger.error('Macro execution failed', e, s);
-      _addMessage(RunMacroResultMsg(id: message.id, result: '', error: 'Generation Failed: ${e.toString()}'));
+      connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: 'Generation Failed: ${e.toString()}'));
       return;
     }
 
     // send
-    final sent = _addMessage(RunMacroResultMsg(id: message.id, result: generated.toString()));
+    final sent = connection.addMessage(RunMacroResultMsg(id: message.id, result: generated.toString()));
     if (!sent) {
       logger.error('Failed to publish generated code: MacroServer maybe down!');
     }
@@ -470,6 +293,11 @@ class MacroManager {
     // remove exceeded cache
     _removeExcessCache();
   }
+
+  static final _mapStrDynamicTypeArg = [
+    MacroProperty(name: '', importPrefix: '', type: 'String', typeInfo: TypeInfo.string, fieldInitializer: null),
+    MacroProperty(name: '', importPrefix: '', type: 'dynamic', typeInfo: TypeInfo.dynamic, fieldInitializer: null),
+  ];
 
   void _runAssetMacro(RunMacroMsg message) async {
     List<String> generatedFiles = [];
@@ -497,7 +325,7 @@ class MacroManager {
 
       final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
       if (errMsg != null || macroGenrator == null) {
-        _addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
+        connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
         return;
       }
 
@@ -541,12 +369,12 @@ class MacroManager {
       generatedFiles.addAll(state.generatedFilePaths);
     } catch (e, s) {
       logger.error('Macro execution failed', e, s);
-      _addMessage(RunMacroResultMsg(id: message.id, result: '', error: 'Generation Failed: ${e.toString()}'));
+      connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: 'Generation Failed: ${e.toString()}'));
       return;
     }
 
     // send
-    final sent = _addMessage(RunMacroResultMsg(id: message.id, result: '', generatedFiles: generatedFiles));
+    final sent = connection.addMessage(RunMacroResultMsg(id: message.id, result: '', generatedFiles: generatedFiles));
     if (!sent) {
       logger.error('Failed to publish generated files: MacroServer maybe down!');
     }
@@ -562,9 +390,12 @@ class MacroManager {
         return (generator, null);
       }
 
-      final macroInitFn = macros[config.key.name];
+      final macroInitFn = connection.macros[config.key.name];
       if (macroInitFn == null) {
-        return (null, 'Unrecognized macro: ${config.key.name}, supported macro is: ${macros.keys.join(', ')}');
+        return (
+          null,
+          'Unrecognized macro: ${config.key.name}, supported macro is: ${connection.macros.keys.join(', ')}',
+        );
       }
 
       generator = macroInitFn(config);
@@ -580,12 +411,12 @@ class MacroManager {
   }
 
   Future<bool> _syncMacroConfiguration(String path) async {
-    if (_isMacrosConfigSynced.isCompleted) return true;
+    if (connection.isMacrosConfigSynced.isCompleted) return true;
 
-    _addMessage(RequestMacrosConfigMsg(clientId: clientId, filePath: path));
+    connection.addMessage(RequestMacrosConfigMsg(clientId: connection.clientId, filePath: path));
 
     try {
-      final res = await _isMacrosConfigSynced.future;
+      final res = await connection.isMacrosConfigSynced.future;
       return res;
     } catch (_) {
       return false;
@@ -626,9 +457,6 @@ class MacroManager {
   }
 
   void dispose() {
-    _clientRequestWatcher.close();
-    _wsSubs?.cancel();
-    _wsSubs = null;
-    _wsChannel?.sink.close().catchError((_) {});
+    connection.dispose();
   }
 }

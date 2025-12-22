@@ -4,7 +4,8 @@ import 'dart:math' as m;
 
 import 'package:analyzer/dart/element/element.dart';
 import 'package:collection/collection.dart';
-import 'package:macro_kit/src/analyzer/spawner.dart';
+import 'package:macro_kit/src/analyzer/channel.dart';
+import 'package:macro_kit/src/analyzer/utils/spawner.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
@@ -105,7 +106,7 @@ class ClientChannelInfo {
   });
 
   final int id;
-  final WebSocketChannel channel;
+  final WsChannel channel;
   final PackageInfo package;
   final List<String> macros;
   final Map<String, List<AssetMacroInfo>> assetMacros;
@@ -333,7 +334,9 @@ class MacroContextSourceCodeInfo {
     String commandGetter = '';
     try {
       autoRunGetter = _extractGetter(source, 'autoRunMacro') ?? 'bool get autoRunMacro => true;';
-      commandGetter = _extractGetter(source, 'autoRunMacroCommand') ?? 'List<String> get autoRunMacroCommand => macroDartRunnerCommand;';
+      commandGetter =
+          _extractGetter(source, 'autoRunMacroCommand') ??
+          'List<String> get autoRunMacroCommand => macroDartRunnerCommand;';
     } on StateError catch (e) {
       return ('', e.toString());
     }

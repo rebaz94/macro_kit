@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_example/custom/form_macro.dart';
-import 'package:flutter_example/custom/json_schema_macro.dart';
+import 'package:flutter_example/example_macro/form_macro.dart';
+import 'package:flutter_example/example_macro/json_schema_macro.dart';
 import 'package:flutter_example/macro_context.dart' as macro;
 import 'package:macro_kit/macro_kit.dart';
 
-import 'example2.dart';
+import 'multiple_macro_combined.dart';
 
 part 'main.g.dart';
 

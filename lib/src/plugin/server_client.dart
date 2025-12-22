@@ -6,7 +6,7 @@ import 'package:http/http.dart';
 import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
-import 'package:macro_kit/src/common/watch_file_request.dart';
+import 'package:macro_kit/src/core/platform/io/platform_io.dart';
 import 'package:macro_kit/src/version/version.dart';
 import 'package:path/path.dart' as p;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -28,7 +28,7 @@ class MacroServerClient {
   final MacroLogger logger;
   final Uri serverAddress;
   final Client httpClient = Client();
-  final _pluginRequestWatcher = WatchFileRequest(
+  final _pluginRequestWatcher = WatchFileRequestImpl(
     fileName: macroPluginRequestFileName,
     inDirectory: macroDirectory,
   );
@@ -115,8 +115,8 @@ class MacroServerClient {
         runInShell: Platform.isWindows,
       );
 
-      _process?.stdout.drain().catchError((_){});
-      _process?.stderr.drain().catchError((_){});
+      _process?.stdout.drain().catchError((_) {});
+      _process?.stderr.drain().catchError((_) {});
       // _process?.stdout.transform(utf8.decoder).listen((e) {
       //   logger.info("process info: out: $e");
       // });
