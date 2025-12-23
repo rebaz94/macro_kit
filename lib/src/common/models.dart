@@ -332,7 +332,7 @@ class UserMacroConfig {
       'id': id,
       'context': context,
       'configs': configs,
-      if (remapGeneratedFileTo.isNotEmpty)'remapGeneratedFileTo': remapGeneratedFileTo,
+      if (remapGeneratedFileTo.isNotEmpty) 'remapGeneratedFileTo': remapGeneratedFileTo,
     };
   }
 }
