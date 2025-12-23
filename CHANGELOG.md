@@ -1,6 +1,10 @@
+## 0.4.3
+
+- Expose context root & base relative directory used to rewrite generated files
+
 ## 0.4.2
 
-Expose base relative directory used to rewrite generated files
+- Expose base relative directory used to rewrite generated files
 
 ## 0.4.1
 

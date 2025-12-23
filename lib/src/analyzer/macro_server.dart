@@ -1112,33 +1112,12 @@ class MacroAnalyzerServer implements MacroServerInterface {
   ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path) {
     final contextInfo = getContextInfoForPath(path);
     final config = contextInfo?.config ?? MacroClientConfiguration.defaultConfig;
-    final String relativeToSource;
 
-    if (config.remapGeneratedFileTo.isNotEmpty && contextInfo != null && contextInfo.path.length <= path.length) {
-      var relativePath = p.relative(path, from: contextInfo.path);
-      if (relativePath.startsWith('lib/')) {
-        relativePath = relativePath.substring(4);
-      }
-
-      final newPath = p.absolute(contextInfo.path, config.remapGeneratedFileTo, relativePath);
-      relativeToSource = p.posix.relative(path, from: p.dirname(newPath));
-
-      // Calculate relative path from generated file back to original source file
-      // Add generated suffix
-      final dir = p.dirname(newPath);
-      final fileName = p.basenameWithoutExtension(newPath);
-      final generatedFile = p.join(dir, '$fileName.g.dart');
-
-      return (genFilePath: generatedFile, relativePartFilePath: relativeToSource);
-    } else {
-      // Fallback: just use the filename
-      final fileName = p.basenameWithoutExtension(path);
-      final dir = p.dirname(path);
-      final generatedFile = p.join(dir, '$fileName.g.dart');
-      relativeToSource = '$fileName.dart';
-
-      return (genFilePath: generatedFile, relativePartFilePath: relativeToSource);
-    }
+    return buildGeneratedFileInfoFor(
+      forFilePath: path,
+      inContextPath: contextInfo?.path,
+      remapGeneratedFileTo: config.remapGeneratedFileTo,
+    );
   }
 
   /// send message to all client or only specific one if [clientId] is provided

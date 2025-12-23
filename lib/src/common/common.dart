@@ -73,3 +73,39 @@ List<String> get excludedDirectory {
     '.symlinks/plugins', 'Intermediates.noindex', 'build/macos', //
   ];
 }
+
+/// Builds the generated file path and the relative `part` directive path,
+/// remapping the output base directory using [remapGeneratedFileTo] when provided.
+({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfoFor({
+  required String forFilePath,
+  required String? inContextPath,
+  required String remapGeneratedFileTo,
+}) {
+  final String relativeToSource;
+
+  if (remapGeneratedFileTo.isNotEmpty && inContextPath != null && inContextPath.length <= forFilePath.length) {
+    var relativePath = p.relative(forFilePath, from: inContextPath);
+    if (relativePath.startsWith('lib/')) {
+      relativePath = relativePath.substring(4);
+    }
+
+    final newPath = p.absolute(inContextPath, remapGeneratedFileTo, relativePath);
+    relativeToSource = p.posix.relative(forFilePath, from: p.dirname(newPath));
+
+    // Calculate relative path from generated file back to original source file
+    // Add generated suffix
+    final dir = p.dirname(newPath);
+    final fileName = p.basenameWithoutExtension(newPath);
+    final generatedFile = p.join(dir, '$fileName.g.dart');
+
+    return (genFilePath: generatedFile, relativePartFilePath: relativeToSource);
+  } else {
+    // Fallback: just use the filename
+    final fileName = p.basenameWithoutExtension(forFilePath);
+    final dir = p.dirname(forFilePath);
+    final generatedFile = p.join(dir, '$fileName.g.dart');
+    relativeToSource = '$fileName.dart';
+
+    return (genFilePath: generatedFile, relativePartFilePath: relativeToSource);
+  }
+}
