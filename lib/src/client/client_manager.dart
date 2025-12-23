@@ -143,17 +143,11 @@ class MacroManager implements ConnectionListener {
           }
 
           // get global config if exists
-          MacroGlobalConfig? globalConfig;
-          String? contentPath;
-          String? remapGeneratedFileTo;
-          if (userMacrosConfig != null) {
-            if (macroGenrator.globalConfigParser case final v?) {
-              final res = _getGlobalMacroConfig(macroConfig.key.name, v, userMacrosConfig!);
-              if (res != null) {
-                (globalConfig, contentPath, remapGeneratedFileTo) = res;
-              }
-            }
-          }
+          final (globalConfig, contentPath, remapGeneratedFileTo) = _getGlobalMacroConfig(
+            macroConfig.key.name,
+            macroGenrator.globalConfigParser,
+            userMacrosConfig,
+          );
 
           // if combing generated code & first macro not applied yet, set the suffix and use that for all macro,
           // otherwise its if not combing or value is set, it fallback to MacroGenerator.suffixName
@@ -178,7 +172,7 @@ class MacroManager implements ConnectionListener {
             remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
             globalConfig: globalConfig,
             contentPath: contentPath,
-            remapGeneratedFileTo: remapGeneratedFileTo ?? '',
+            remapGeneratedFileTo: remapGeneratedFileTo,
             targetPath: message.path,
             targetType: TargetType.clazz,
             importPrefix: declaration.importPrefix,
@@ -309,6 +303,9 @@ class MacroManager implements ConnectionListener {
   ];
 
   void _runAssetMacro(RunMacroMsg message) async {
+    final synced = await _syncMacroConfiguration(message.path);
+    if (!synced) return;
+
     List<String> generatedFiles = [];
 
     try {
@@ -343,24 +340,18 @@ class MacroManager implements ConnectionListener {
       assert(message.assetAbsoluteOutputPath != null);
 
       // get global config if exists
-      MacroGlobalConfig? globalConfig;
-      String? contextPath;
-      String? remapGeneratedFileTo;
-      if (userMacrosConfig != null) {
-        if (macroGenrator.globalConfigParser case final v?) {
-          final res = _getGlobalMacroConfig(macroConfig.key.name, v, userMacrosConfig!);
-          if (res != null) {
-            (globalConfig, contextPath, remapGeneratedFileTo) = res;
-          }
-        }
-      }
+      final (globalConfig, contextPath, remapGeneratedFileTo) = _getGlobalMacroConfig(
+        macroConfig.key.name,
+        macroGenrator.globalConfigParser,
+        userMacrosConfig!,
+      );
 
       final state = MacroState(
         macro: macroConfig.key,
         remainingMacro: const [],
         globalConfig: globalConfig,
         contentPath: contextPath,
-        remapGeneratedFileTo: remapGeneratedFileTo ?? '',
+        remapGeneratedFileTo: remapGeneratedFileTo,
         targetPath: message.path,
         targetType: TargetType.asset,
         importPrefix: '',
@@ -445,11 +436,15 @@ class MacroManager implements ConnectionListener {
   }
 
   /// return the global config and relative path of remapping generated file
-  (MacroGlobalConfig?, String, String)? _getGlobalMacroConfig(
+  (MacroGlobalConfig?, String?, String) _getGlobalMacroConfig(
     String macroName,
-    MacroGlobalConfigParser parser,
-    UserMacroConfig rawConfig,
+    MacroGlobalConfigParser? parser,
+    UserMacroConfig? rawConfig,
   ) {
+    if (rawConfig == null) {
+      return const (null, null, '');
+    }
+
     final cacheKey = '${rawConfig.id}_$macroName';
     final cached = cachedUserMacrosConfig[cacheKey];
     if (cached != null) {
@@ -457,7 +452,7 @@ class MacroManager implements ConnectionListener {
     }
 
     final macroConfigValue = rawConfig.configs[macroName];
-    if (macroConfigValue == null || macroConfigValue is! Map<String, dynamic>) {
+    if (macroConfigValue == null || macroConfigValue is! Map<String, dynamic> || parser == null) {
       cachedUserMacrosConfig[cacheKey] = (
         config: null,
         contextPath: rawConfig.context,

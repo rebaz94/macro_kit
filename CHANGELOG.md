@@ -1,3 +1,7 @@
+## 0.4.7
+
+- Fix: synchronize global macro configuration before execution
+
 ## 0.4.6
 
 - Add helper to generate part file
