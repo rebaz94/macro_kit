@@ -4,9 +4,9 @@ import 'package:change_case/change_case.dart';
 import 'package:collection/collection.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:macro_kit/src/analyzer/base_macro.dart';
-import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/core/constant.dart';
 import 'package:macro_kit/src/core/extension.dart';
 import 'package:macro_kit/src/core/modifier.dart';
@@ -1656,6 +1656,7 @@ class MacroState {
     required this.macro,
     required this.remainingMacro,
     required this.globalConfig,
+    required this.contentPath,
     required this.remapGeneratedFileTo,
     required this.targetPath,
     required this.targetType,
@@ -1685,6 +1686,12 @@ class MacroState {
   /// Returns `null` unless [MacroGenerator.globalConfigParser] is configured
   /// to parse and return a global config.
   final MacroGlobalConfig? globalConfig;
+
+  /// The root context of the target path.
+  ///
+  /// This value is expected to be non-empty, except when the client and server
+  /// are not yet synchronized.
+  final String? contentPath;
 
   /// The relative path to which the generated file will be rewritten.
   ///

@@ -614,7 +614,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     } else {
       config = UserMacroConfig(
         id: fileContext.config.id,
-        context: filePath,
+        context: fileContext.path,
         configs: fileContext.config.userMacrosConfig,
         remapGeneratedFileTo: fileContext.config.remapGeneratedFileTo,
       );

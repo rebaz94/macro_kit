@@ -8,6 +8,8 @@ import 'package:macro_kit/src/common/models.dart';
 
 typedef MacroInitFunction = MacroGenerator Function(MacroConfig config);
 
+typedef CachedUserMacroConfig = ({MacroGlobalConfig? config, String contextPath, String remapGeneratedFileTo});
+
 class MacroManager implements ConnectionListener {
   MacroManager({
     required this.logger,
@@ -40,7 +42,7 @@ class MacroManager implements ConnectionListener {
   }
 
   final MacroLogger logger;
-  final Map<String, ({MacroGlobalConfig? config, String remapGeneratedFileTo})> cachedUserMacrosConfig = {};
+  final Map<String, CachedUserMacroConfig> cachedUserMacrosConfig = {};
   UserMacroConfig? userMacrosConfig;
   late ClientConnection connection;
 
@@ -142,12 +144,13 @@ class MacroManager implements ConnectionListener {
 
           // get global config if exists
           MacroGlobalConfig? globalConfig;
+          String? contentPath;
           String? remapGeneratedFileTo;
           if (userMacrosConfig != null) {
             if (macroGenrator.globalConfigParser case final v?) {
               final res = _getGlobalMacroConfig(macroConfig.key.name, v, userMacrosConfig!);
               if (res != null) {
-                (globalConfig, remapGeneratedFileTo) = res;
+                (globalConfig, contentPath, remapGeneratedFileTo) = res;
               }
             }
           }
@@ -174,6 +177,7 @@ class MacroManager implements ConnectionListener {
             macro: macroConfig.key,
             remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
             globalConfig: globalConfig,
+            contentPath: contentPath,
             remapGeneratedFileTo: remapGeneratedFileTo ?? '',
             targetPath: message.path,
             targetType: TargetType.clazz,
@@ -340,12 +344,13 @@ class MacroManager implements ConnectionListener {
 
       // get global config if exists
       MacroGlobalConfig? globalConfig;
+      String? contextPath;
       String? remapGeneratedFileTo;
       if (userMacrosConfig != null) {
         if (macroGenrator.globalConfigParser case final v?) {
           final res = _getGlobalMacroConfig(macroConfig.key.name, v, userMacrosConfig!);
           if (res != null) {
-            (globalConfig, remapGeneratedFileTo) = res;
+            (globalConfig, contextPath, remapGeneratedFileTo) = res;
           }
         }
       }
@@ -354,6 +359,7 @@ class MacroManager implements ConnectionListener {
         macro: macroConfig.key,
         remainingMacro: const [],
         globalConfig: globalConfig,
+        contentPath: contextPath,
         remapGeneratedFileTo: remapGeneratedFileTo ?? '',
         targetPath: message.path,
         targetType: TargetType.asset,
@@ -423,7 +429,12 @@ class MacroManager implements ConnectionListener {
   Future<bool> _syncMacroConfiguration(String path) async {
     if (connection.isMacrosConfigSynced.isCompleted) return true;
 
-    connection.addMessage(RequestMacrosConfigMsg(clientId: connection.clientId, filePath: path));
+    connection.addMessage(
+      RequestMacrosConfigMsg(
+        clientId: connection.clientId,
+        filePath: path,
+      ),
+    );
 
     try {
       final res = await connection.isMacrosConfigSynced.future;
@@ -434,28 +445,38 @@ class MacroManager implements ConnectionListener {
   }
 
   /// return the global config and relative path of remapping generated file
-  (MacroGlobalConfig?, String)? _getGlobalMacroConfig(
+  (MacroGlobalConfig?, String, String)? _getGlobalMacroConfig(
     String macroName,
     MacroGlobalConfigParser parser,
     UserMacroConfig rawConfig,
   ) {
     final cacheKey = '${rawConfig.id}_$macroName';
     final cached = cachedUserMacrosConfig[cacheKey];
-    if (cached != null) return (cached.config, cached.remapGeneratedFileTo);
+    if (cached != null) {
+      return (cached.config, cached.contextPath, cached.remapGeneratedFileTo);
+    }
 
     final macroConfigValue = rawConfig.configs[macroName];
     if (macroConfigValue == null || macroConfigValue is! Map<String, dynamic>) {
-      cachedUserMacrosConfig[cacheKey] = (config: null, remapGeneratedFileTo: '');
-      return null;
+      cachedUserMacrosConfig[cacheKey] = (
+        config: null,
+        contextPath: rawConfig.context,
+        remapGeneratedFileTo: rawConfig.remapGeneratedFileTo,
+      );
+      return (null, rawConfig.context, rawConfig.remapGeneratedFileTo);
     }
 
     try {
       final globalConfig = parser(macroConfigValue);
-      cachedUserMacrosConfig[cacheKey] = (config: globalConfig, remapGeneratedFileTo: rawConfig.remapGeneratedFileTo);
-      return (globalConfig, rawConfig.remapGeneratedFileTo);
+      cachedUserMacrosConfig[cacheKey] = (
+        config: globalConfig,
+        contextPath: rawConfig.context,
+        remapGeneratedFileTo: rawConfig.remapGeneratedFileTo,
+      );
+      return (globalConfig, rawConfig.context, rawConfig.remapGeneratedFileTo);
     } catch (e, s) {
       logger.error('Failed to decode macro configuration for: $macroName', e, s);
-      return null;
+      return (null, rawConfig.context, rawConfig.remapGeneratedFileTo);
     }
   }
 

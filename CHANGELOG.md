@@ -1,3 +1,7 @@
+## 0.4.5
+
+- Fixing incorrect value passed as root context
+
 ## 0.4.4
 
 - Export helper function: buildGeneratedFileInfoFor
