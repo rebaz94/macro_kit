@@ -1,3 +1,7 @@
+## 0.4.4
+
+- Export helper function: buildGeneratedFileInfoFor
+
 ## 0.4.3
 
 - Expose context root & base relative directory used to rewrite generated files
