@@ -12,10 +12,10 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:macro_kit/macro_kit.dart';
-import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
-import 'package:macro_kit/src/analyzer/utils/spawner.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
+import 'package:macro_kit/src/analyzer/utils/spawner.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/common/models.dart';
 import 'package:meta/meta.dart';
@@ -42,7 +42,7 @@ abstract class MacroServerInterface {
 
   Future<RunMacroResultMsg> runMacroGenerator(int channelId, RunMacroMsg message);
 
-  ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path);
+  ({String genFilePath, String partFromSource, String partFromGenerated}) buildGeneratedFileInfo(String path);
 
   void sendMessageMacroClients(GeneralMessage message, {int? clientId});
 
@@ -55,7 +55,7 @@ class DefaultFakeServerInterface implements MacroServerInterface {
   static final exception = Exception('Server is not initiated yet!');
 
   @override
-  ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path) {
+  ({String genFilePath, String partFromSource, String partFromGenerated}) buildGeneratedFileInfo(String path) {
     throw exception;
   }
 

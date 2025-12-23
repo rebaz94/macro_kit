@@ -1,3 +1,7 @@
+## 0.4.6
+
+- Add helper to generate part file
+
 ## 0.4.5
 
 - Fixing incorrect value passed as root context

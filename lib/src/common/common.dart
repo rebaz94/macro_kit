@@ -74,15 +74,20 @@ List<String> get excludedDirectory {
   ];
 }
 
+typedef GenPartDirectiveInfo = ({
+  String genFilePath,
+  String partFromSource,
+  String partFromGenerated,
+});
+
 /// Builds the generated file path and the relative `part` directive path,
 /// remapping the output base directory using [remapGeneratedFileTo] when provided.
-({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfoFor({
+GenPartDirectiveInfo buildGeneratedFileInfoFor({
   required String forFilePath,
   required String? inContextPath,
   required String remapGeneratedFileTo,
+  bool generatePartFromSource = false,
 }) {
-  final String relativeToSource;
-
   if (remapGeneratedFileTo.isNotEmpty && inContextPath != null && inContextPath.length <= forFilePath.length) {
     var relativePath = p.relative(forFilePath, from: inContextPath);
     if (relativePath.startsWith('lib/')) {
@@ -90,7 +95,7 @@ List<String> get excludedDirectory {
     }
 
     final newPath = p.absolute(inContextPath, remapGeneratedFileTo, relativePath);
-    relativeToSource = p.posix.relative(forFilePath, from: p.dirname(newPath));
+    final partFromGenerated = p.posix.relative(forFilePath, from: p.dirname(newPath));
 
     // Calculate relative path from generated file back to original source file
     // Add generated suffix
@@ -98,14 +103,25 @@ List<String> get excludedDirectory {
     final fileName = p.basenameWithoutExtension(newPath);
     final generatedFile = p.join(dir, '$fileName.g.dart');
 
-    return (genFilePath: generatedFile, relativePartFilePath: relativeToSource);
+    // part directive
+    final partFromSource = generatePartFromSource ? p.posix.relative(generatedFile, from: p.dirname(forFilePath)) : '';
+
+    return (
+      genFilePath: generatedFile,
+      partFromSource: partFromSource,
+      partFromGenerated: partFromGenerated,
+    );
   } else {
     // Fallback: just use the filename
     final fileName = p.basenameWithoutExtension(forFilePath);
     final dir = p.dirname(forFilePath);
     final generatedFile = p.join(dir, '$fileName.g.dart');
-    relativeToSource = '$fileName.dart';
+    final partFromGenerated = '$fileName.dart';
 
-    return (genFilePath: generatedFile, relativePartFilePath: relativeToSource);
+    return (
+      genFilePath: generatedFile,
+      partFromSource: generatePartFromSource ? '$fileName.g.dart' : '',
+      partFromGenerated: partFromGenerated,
+    );
   }
 }

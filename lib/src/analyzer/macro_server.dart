@@ -960,7 +960,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       return;
     } else if (assetMacros == null && changeType == ChangeType.REMOVE) {
       analyzer.mayContainsMacroCache.remove(path);
-      final (:genFilePath, relativePartFilePath: _) = buildGeneratedFileInfo(path);
+      final (:genFilePath, partFromSource: _, partFromGenerated: _) = buildGeneratedFileInfo(path);
       analyzer.removeFile(genFilePath);
       return;
     }
@@ -1109,7 +1109,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   @override
-  ({String genFilePath, String relativePartFilePath}) buildGeneratedFileInfo(String path) {
+  ({String genFilePath, String partFromSource, String partFromGenerated}) buildGeneratedFileInfo(String path) {
     final contextInfo = getContextInfoForPath(path);
     final config = contextInfo?.config ?? MacroClientConfiguration.defaultConfig;
 

@@ -38,10 +38,11 @@ mixin Generator on BaseAnalyzer {
     }
 
     // step:2 configure the generated file path
-    final (:genFilePath, :relativePartFilePath) = server.buildGeneratedFileInfo(path);
+    final (:genFilePath, partFromSource: partFromSource, :partFromGenerated) = server.buildGeneratedFileInfo(path);
+    print(partFromSource);
     // step:3 run the macro generator
 
-    final generated = StringBuffer("part of '$relativePartFilePath';");
+    final generated = StringBuffer("part of '$partFromGenerated';");
     bool fileGenerated = false;
 
     for (final runConfigEntry in runConfigs.entries) {
