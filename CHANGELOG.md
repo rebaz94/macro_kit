@@ -1,3 +1,7 @@
+## 0.4.2
+
+Expose base relative directory used to rewrite generated files
+
 ## 0.4.1
 
 - Fixed signal handler problems on Windows

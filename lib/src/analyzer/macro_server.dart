@@ -333,7 +333,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
 
     await Future.wait(futures);
-    logger.info('Watching analysis context: \n${contexts.join(', ')}');
+    logger.info('Watching analysis context: \n->\t${contexts.join('\n->\t')}');
 
     var toRemove = _subs.keys.where((p) => !contexts.contains(p)).toList();
     for (final path in toRemove) {
@@ -610,12 +610,13 @@ class MacroAnalyzerServer implements MacroServerInterface {
     final fileContext = getContextInfoForPath(filePath);
     final UserMacroConfig config;
     if (fileContext == null) {
-      config = const UserMacroConfig(id: 0, context: '', configs: {});
+      config = const UserMacroConfig(id: 0, context: '', configs: {}, remapGeneratedFileTo: '');
     } else {
       config = UserMacroConfig(
         id: fileContext.config.id,
         context: filePath,
         configs: fileContext.config.userMacrosConfig,
+        remapGeneratedFileTo: fileContext.config.remapGeneratedFileTo,
       );
     }
     final sent = await _addMessageToClient(clientId, SyncMacrosConfigMsg(config: config));

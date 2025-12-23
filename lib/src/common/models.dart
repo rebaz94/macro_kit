@@ -303,6 +303,7 @@ class UserMacroConfig {
     required this.id,
     required this.context,
     required this.configs,
+    required this.remapGeneratedFileTo,
   });
 
   static UserMacroConfig fromJson(Map<String, dynamic> json) {
@@ -310,6 +311,7 @@ class UserMacroConfig {
       id: (json['id'] as num).toInt(),
       context: json['context'] as String,
       configs: json['configs'] as Map<String, dynamic>,
+      remapGeneratedFileTo: json['remapGeneratedFileTo'] as String? ?? '',
     );
   }
 
@@ -322,11 +324,15 @@ class UserMacroConfig {
   /// The user macro configuration
   final Map<String, dynamic> configs;
 
+  /// The global project remap generated file path
+  final String remapGeneratedFileTo;
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'context': context,
       'configs': configs,
+      if (remapGeneratedFileTo.isNotEmpty)'remapGeneratedFileTo': remapGeneratedFileTo,
     };
   }
 }

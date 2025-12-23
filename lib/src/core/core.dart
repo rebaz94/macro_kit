@@ -1656,6 +1656,7 @@ class MacroState {
     required this.macro,
     required this.remainingMacro,
     required this.globalConfig,
+    required this.remapGeneratedFileTo,
     required this.targetPath,
     required this.targetType,
     required this.targetName,
@@ -1684,6 +1685,11 @@ class MacroState {
   /// Returns `null` unless [MacroGenerator.globalConfigParser] is configured
   /// to parse and return a global config.
   final MacroGlobalConfig? globalConfig;
+
+  /// The relative path to which the generated file will be rewritten.
+  ///
+  /// Defaults to an empty string.
+  final String remapGeneratedFileTo;
 
   /// The absolute path of the file
   final String targetPath;

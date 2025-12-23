@@ -97,5 +97,14 @@ Future<void> setupMacro() async {
       'JsonSchemaMacro': JsonSchemaMacro.initialize,
       'FormMacro': FormMacro.initialize,
     },
+    assetMacros: {
+      'assets': [
+        AssetMacroInfo(
+          macroName: 'AssetPathMacro',
+          output: 'lib',
+          config: AssetPathConfig().toJson(),
+        ),
+      ],
+    },
   );
 }
