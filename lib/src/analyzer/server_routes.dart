@@ -44,7 +44,7 @@ void startMacroServer() async {
 
 Future<bool> _serveServer(Router app, {bool throwErr = false}) async {
   try {
-    await shelf_io.serve(app.call, 'localhost', 3232);
+    await shelf_io.serve(app.call, 'localhost', 3232, poweredByHeader: '');
     return false;
   } catch (e) {
     if (!throwErr && e.toString().contains('already in use')) {
