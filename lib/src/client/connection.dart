@@ -132,7 +132,17 @@ class WsClientConnection extends ClientConnection {
           logger.error('Reconnecting to MacroServer in 10 seconds');
         }
 
-        requestPluginToConnect();
+        try {
+          requestPluginToConnect();
+        } catch (e, s) {
+          if (e.toString().contains('Cannot create file')) {
+            logger.error(
+              'Did you run in a sandboxed environment? please remove restriction and run the application again.',
+            );
+          }
+
+          logger.error('Requesting plugin to connect failed', e, s);
+        }
         await Future.delayed(delay ? const Duration(seconds: 10) : const Duration(seconds: 1));
         _establishConnection();
       },
