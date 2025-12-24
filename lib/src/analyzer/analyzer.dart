@@ -117,11 +117,13 @@ class MacroAnalyzer extends BaseAnalyzer
     }
 
     // step:3 get pending class sub types
-    await collectClassSubTypes(
-      pendingClassRequiredSubTypes,
-      analysisResult.libraryFragment,
-      macroAnalyzeResult,
-    );
+    if (pendingClassRequiredSubTypes.isNotEmpty) {
+      await collectClassSubTypes(
+        pendingClassRequiredSubTypes,
+        analysisResult.libraryFragment,
+        macroAnalyzeResult,
+      );
+    }
 
     // step:4 get any class that used more than once from iteration cache
     //        and use it as shared class declaration to automatically assign prepared data by class id

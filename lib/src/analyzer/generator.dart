@@ -39,7 +39,6 @@ mixin Generator on BaseAnalyzer {
 
     // step:2 configure the generated file path
     final (:genFilePath, partFromSource: partFromSource, :partFromGenerated) = server.buildGeneratedFileInfo(path);
-    print(partFromSource);
     // step:3 run the macro generator
 
     final generated = StringBuffer("part of '$partFromGenerated';");
@@ -98,7 +97,7 @@ mixin Generator on BaseAnalyzer {
 // dart format off
 
 ''';
-    final error = partFile.writeDataSyncOrErr(topHeader + codeRes, createFile: true, recursive: true);
+    final error = await partFile.writeDataOrErr(topHeader + codeRes, createFile: true, recursive: true);
     if (error != null) {
       logger.error('Failed to write generated code into: $genFilePath', error);
     }

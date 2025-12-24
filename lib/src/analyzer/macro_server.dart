@@ -923,7 +923,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
 
     for (final file in context.contextRoot.analyzedFiles()) {
-      _onFileChanged(file, ChangeType.MODIFY, startProcessing: false);
+      _addPendingGeneration(file);
     }
 
     // start processing file
@@ -976,6 +976,19 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
 
     if (startProcessing) _processNext();
+  }
+
+  @pragma('vm:prefer-inline')
+  void _addPendingGeneration(String path) {
+    final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
+    if (assetMacros == null && (p.extension(path, 2) != '.dart')) {
+      logger.fine('Ignored: $path');
+      return;
+    }
+
+    analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY, force: true)] = assetMacros == null
+        ? analyzer.defaultNullPendingAnalyzeValue
+        : (asset: assetMacros);
   }
 
   List<AnalyzingAsset>? _maybeRunAssetMacro(String path) {
