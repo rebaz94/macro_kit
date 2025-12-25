@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context.dart';
-import 'package:analyzer/file_system/physical_file_system.dart';
-// ignore: implementation_imports
-import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
+import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
@@ -68,8 +66,10 @@ class MacroAnalyzerServer implements MacroServerInterface {
   final CustomBasicLock lock = CustomBasicLock();
   final CustomBasicLock rebuildLock = CustomBasicLock();
   final Map<String, _Subscription> _subs = {};
+  final Map<String, StreamSubscription<WatchEvent>> _assetContextsSubs = {};
   final Map<int, PluginChannelInfo> _pluginChannels = {};
   final List<StreamSubscription> _wsPluginSubs = [];
+  bool _isSetWatchContexts = false;
 
   /// List of connected client by client id with ws socket and supported macro names
   final Map<int, ClientChannelInfo> _clientChannels = {};
@@ -136,8 +136,10 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
   }
 
-  Future<void> onContextChanged({ClientChannelInfo? connectedClient}) async {
+  Future<void> onContextChanged({ClientChannelInfo? connectedClient, bool triggerAutoBuild = false}) async {
     await lock.synchronized(() async {
+      _isSetWatchContexts = true;
+
       // Rebuild the context registry
       await _rebuildContextRegistry();
 
@@ -163,15 +165,14 @@ class MacroAnalyzerServer implements MacroServerInterface {
         );
 
         // Create new analysis context collection
-        var old = analyzer.contextCollection;
-        analyzer.contextCollection = AnalysisContextCollectionImpl(
-          includedPaths: analysisContextPaths,
-          byteStore: analyzer.byteStore,
-          resourceProvider: PhysicalResourceProvider.INSTANCE,
-        );
+        AnalysisContextCollection? old = analyzer.contextCollection;
+        analyzer.contextCollection = analyzer.createAnalysisCollection();
 
         // Dispose old context after delay
-        Future.delayed(const Duration(seconds: 10)).then((_) => old.dispose());
+        Future.delayed(const Duration(seconds: 10)).then((_) {
+          old?.dispose();
+          old = null;
+        });
       }
 
       final autoRunMacroContexts = _contextRegistry.values
@@ -179,10 +180,16 @@ class MacroAnalyzerServer implements MacroServerInterface {
           .toList();
 
       // Clear caches and setup watchers
-      analyzer.fileCaches.clear();
       final assetContexts = _setupAssetMacroConfiguration();
-      await _reWatchContexts(CombinedListView([watchPaths, assetContexts]), autoRunMacroContexts);
-      await _prepareAutoRebuildForAllClient(connectedClient: connectedClient);
+      await _reWatchContexts(watchPaths, assetContexts, autoRunMacroContexts);
+
+      _isSetWatchContexts = false;
+      if (triggerAutoBuild && connectedClient != null) {
+        await _prepareAndRunAutoRebuild(connectedClient);
+      }
+
+      // trigger next analyze if delayed because of lock
+      _processNext();
     });
   }
 
@@ -317,10 +324,14 @@ class MacroAnalyzerServer implements MacroServerInterface {
     return _assetsDir.keys.toList();
   }
 
-  Future<void> _reWatchContexts(List<String> contexts, List<ContextInfo> autoRunMacroContexts) async {
-    if (contexts.isEmpty) return;
+  Future<void> _reWatchContexts(
+    List<String> contexts,
+    List<String> assetContexts,
+    List<ContextInfo> autoRunMacroContexts,
+  ) async {
+    if (contexts.isEmpty && assetContexts.isEmpty) return;
 
-    // setup file watching
+    // setup source file watching
     final futures = <Future>[];
     for (final context in contexts) {
       if (_subs.containsKey(context)) continue;
@@ -332,8 +343,21 @@ class MacroAnalyzerServer implements MacroServerInterface {
       _subs[context] = (fileSub: sub, autoRunMacroProcess: null);
     }
 
+    // setup asset watching
+    for (final context in contexts) {
+      if (_assetContextsSubs.containsKey(context)) continue;
+
+      final watcher = Watcher(context);
+      futures.add(watcher.ready);
+
+      final sub = watcher.events.listen(_onWatchAssetChanged, onError: _onWatchFileError);
+      _assetContextsSubs[context] = sub;
+    }
+
+    logger.info(
+      'Watching analysis contexts: \n${CombinedListView([contexts, assetContexts]).map((c) => '    ->   $c').join('\n')}\n',
+    );
     await Future.wait(futures);
-    logger.info('Watching analysis context: \n->\t${contexts.join('\n->\t')}');
 
     var toRemove = _subs.keys.where((p) => !contexts.contains(p)).toList();
     for (final path in toRemove) {
@@ -351,6 +375,17 @@ class MacroAnalyzerServer implements MacroServerInterface {
       }
 
       _subs.remove(path);
+    }
+
+    toRemove = _assetContextsSubs.keys.where((p) => !contexts.contains(p)).toList();
+    for (final path in toRemove) {
+      final sub = _assetContextsSubs[path];
+      if (sub == null) {
+        continue;
+      }
+
+      sub.cancel();
+      _assetContextsSubs.remove(path);
     }
 
     // setup auto runnable macro
@@ -507,6 +542,8 @@ class MacroAnalyzerServer implements MacroServerInterface {
       onError: (err) => logger.error('WebSocket channel error occurred', err),
       onDone: () async {
         final pluginInfo = _pluginChannels[pluginId];
+        logger.info('Removing plugin: $pluginId');
+
         if (pluginInfo == null) {
           // Plugin already removed from tracking, trigger immediate context update
           onContextChanged();
@@ -528,6 +565,13 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   Future<void> _onPluginContextReceived(int pluginId, PluginChannelInfo plugin, List<String> contexts) async {
+    if (analyzer.pendingAnalyze.isNotEmpty) {
+      logger.info('waiting to pending complete: ${DateTime.now()}');
+      // wait until work done before adding new context
+      await analyzer.pendingAnalyzeCompleted.stream.first;
+      logger.info('waiting to pending completed: ${DateTime.now()}');
+    }
+
     final excluded = excludedDirectory;
     contexts = contexts.where((path) => !excluded.any((word) => path.contains(word))).toList();
 
@@ -536,6 +580,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       _contextRegistry[context]?.autoRebuildExecuted = false;
     }
 
+    logger.info('New plugin connected: $pluginId');
     _pluginChannels[pluginId] = plugin.copyWith(contextPaths: contexts);
     await onContextChanged();
   }
@@ -571,13 +616,17 @@ class MacroAnalyzerServer implements MacroServerInterface {
             clientId = msg.id;
 
             // this will trigger auto rebuild if configured
-            await onContextChanged(connectedClient: client);
+            logger.info('New Macro client connected: $clientId');
+            await onContextChanged(connectedClient: client, triggerAutoBuild: true);
           default:
             _handleMessage(message, channel);
         }
       },
       onError: (err) => logger.error('WebSocket channel error occurred', err),
-      onDone: () => _clientChannels.remove(clientId),
+      onDone: () {
+        logger.info('Removing Macro client: $clientId');
+        _clientChannels.remove(clientId);
+      },
     );
   }
 
@@ -758,22 +807,11 @@ class MacroAnalyzerServer implements MacroServerInterface {
     return null;
   }
 
-  Future<void> _prepareAutoRebuildForAllClient({required ClientChannelInfo? connectedClient}) async {
-    for (final client in _clientChannels.values.toList()) {
-      await _prepareAndRunAutoRebuild(client, connectedClient);
-    }
-  }
-
-  Future<void> _prepareAndRunAutoRebuild(
-    ClientChannelInfo clientChannel,
-    ClientChannelInfo? connectedClient,
-  ) async {
+  Future<void> _prepareAndRunAutoRebuild(ClientChannelInfo clientChannel) async {
     final clientId = clientChannel.id;
     final clientPkgNames = clientChannel.package.values;
     final autoRebuildConfigs = <ContextInfo>[];
     bool hasPackageContext = false;
-
-    final isSameClient = connectedClient?.id == clientId;
 
     // Check each context in the registry
     for (final contextInfo in _contextRegistry.values) {
@@ -782,15 +820,19 @@ class MacroAnalyzerServer implements MacroServerInterface {
       }
 
       final config = contextInfo.config;
-      if ((!config.autoRebuildOnConnect || contextInfo.autoRebuildExecuted) && !config.alwaysRebuildOnConnect) {
+      if (!config.autoRebuildOnConnect) {
         continue;
       }
 
-      if (config.alwaysRebuildOnConnect && !isSameClient && contextInfo.autoRebuildExecuted) {
-        continue;
-      }
+      if (config.alwaysRebuildOnConnect) {
+        // It always rebuild
 
-      if (config.skipConnectRebuildWithAutoRun && clientChannel.autoRunMacro) {
+        // Skip if client is an auto-run macro activated and configured to skip
+        if (clientChannel.autoRunMacro && config.skipConnectRebuildWithAutoRun) {
+          continue;
+        }
+      } else if (contextInfo.autoRebuildExecuted) {
+        // Skip if auto build is already executed
         continue;
       }
 
@@ -806,7 +848,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
         final config = analyzer.loadMacroConfig(pkgName, pkgName);
 
         if (!config.autoRebuildOnConnect && !config.alwaysRebuildOnConnect) continue;
-        if (config.alwaysRebuildOnConnect && !isSameClient) continue;
+        if (config.alwaysRebuildOnConnect) continue;
 
         final contextInfo = ContextInfo(
           path: pkgName,
@@ -821,7 +863,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       }
 
       if (autoRebuildConfigs.isNotEmpty) {
-        _addContextDynamically(autoRebuildConfigs, connectedClient);
+        _addContextDynamically(autoRebuildConfigs, clientChannel);
         return;
       }
     }
@@ -856,7 +898,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
 
     logger.info('Dynamically added new contexts for testing: ${newContextPaths.join(', ')}');
-    onContextChanged(connectedClient: connectedClient);
+    onContextChanged(connectedClient: connectedClient, triggerAutoBuild: true);
   }
 
   Future<void> _runAutoRebuildOnConnect(
@@ -886,7 +928,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
           ),
         );
 
-        logger.info('Completed regeneration in ${s.elapsed.inSeconds}s');
+        logger.info('Completed regeneration for: ${contextInfo.packageName} in ${s.elapsed.inSeconds}s');
         if (err != null) {
           logger.error('Auto rebuild on start failed', err);
         } else {
@@ -939,11 +981,50 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   void _onWatchFileChanged(WatchEvent event) {
-    _onFileChanged(event.path, event.type);
+    final path = event.path;
+    final changeType = event.type;
+    const minimumThreshold = 30;
+
+    if (analyzer.lastChangedPath == path &&
+        analyzer.lastChangeType == changeType &&
+        minimumThreshold > analyzer.getDiffFromLastExecution()) {
+      // duplicate event, ignore it
+      return;
+    }
+
+    analyzer.lastChangedPath = path;
+    analyzer.lastChangeType = changeType;
+
+    // Handle non-dart files
+    if (p.extension(path, 2) != '.dart') {
+      // logger.fine('Ignored: $path');
+      return;
+    }
+
+    // Handle removals
+    if (changeType == ChangeType.REMOVE) {
+      analyzer.mayContainsMacroCache.remove(path);
+      final (:genFilePath, partFromSource: _, partFromGenerated: _) = buildGeneratedFileInfo(path);
+      analyzer.removeFile(genFilePath);
+      return;
+    }
+
+    if (analyzer.currentAnalyzingPath.isEmpty || analyzer.currentAnalyzingPath == path) {
+      // its first time or file changed during current analyzing, so we have to run it again
+      analyzer.pendingAnalyze[(path: path, type: changeType)] = analyzer.defaultNullPendingAnalyzeValue;
+    } else if (analyzer.pendingAnalyze.containsKey((path: path, type: changeType))) {
+      // its already in pending list, so no duplicate, next time it process it
+      return;
+    }
+
+    _processNext();
   }
 
-  void _onFileChanged(String path, ChangeType changeType, {bool startProcessing = true}) {
+  void _onWatchAssetChanged(WatchEvent event) {
+    final path = event.path;
+    final changeType = event.type;
     const minimumThreshold = 30;
+
     if (analyzer.lastChangedPath == path &&
         analyzer.lastChangeType == changeType &&
         minimumThreshold > analyzer.getDiffFromLastExecution()) {
@@ -955,38 +1036,30 @@ class MacroAnalyzerServer implements MacroServerInterface {
     analyzer.lastChangeType = changeType;
 
     final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
-    if (assetMacros == null && (p.extension(path, 2) != '.dart')) {
-      logger.fine('Ignored: $path');
-      return;
-    } else if (assetMacros == null && changeType == ChangeType.REMOVE) {
-      analyzer.mayContainsMacroCache.remove(path);
-      final (:genFilePath, partFromSource: _, partFromGenerated: _) = buildGeneratedFileInfo(path);
-      analyzer.removeFile(genFilePath);
+    if (assetMacros == null) {
       return;
     }
 
-    if (analyzer.currentAnalyzingPath == '' || analyzer.currentAnalyzingPath == path) {
+    if (analyzer.currentAnalyzingPath.isEmpty || analyzer.currentAnalyzingPath == path) {
       // its first time or file changed during current analyzing, so we have to run it again
-      analyzer.pendingAnalyze[(path: path, type: changeType, force: true)] = assetMacros == null
-          ? analyzer.defaultNullPendingAnalyzeValue
-          : (asset: assetMacros);
-    } else if (analyzer.pendingAnalyze.containsKey((path: path, type: changeType, force: false))) {
+      analyzer.pendingAnalyze[(path: path, type: changeType)] = (asset: assetMacros);
+    } else if (analyzer.pendingAnalyze.containsKey((path: path, type: changeType))) {
       // its already in pending list, so no duplicate, next time it process it
       return;
     }
 
-    if (startProcessing) _processNext();
+    _processNext();
   }
 
   @pragma('vm:prefer-inline')
   void _addPendingGeneration(String path) {
     final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
     if (assetMacros == null && (p.extension(path, 2) != '.dart')) {
-      logger.fine('Ignored: $path');
+      // logger.fine('Ignored: $path');
       return;
     }
 
-    analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY, force: true)] = assetMacros == null
+    analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = assetMacros == null
         ? analyzer.defaultNullPendingAnalyzeValue
         : (asset: assetMacros);
   }
@@ -1001,20 +1074,13 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
       // Check if file is within this asset directory
       if (p.isWithin(assetAbsoluteBasePath, path)) {
-        late final fileExtension = p.extension(path);
-
         // Check if any macro in this directory accepts this file extension
         for (final macroInfo in macroInfos) {
-          if (macroInfo.macro.extension == '*') {
+          final macro = macroInfo.macro;
+
+          if (macro.extension == '*' || macro.allExtensions.contains(p.extension(path))) {
             (appliedMacros ??= []).add((
-              macro: macroInfo.macro,
-              absoluteBasePath: assetAbsoluteBasePath,
-              relativeBasePath: macroInfo.relativeBasePath,
-              absoluteOutputPath: macroInfo.absoluteOutputPath,
-            ));
-          } else if (macroInfo.macro.allExtensions.contains(fileExtension)) {
-            (appliedMacros ??= []).add((
-              macro: macroInfo.macro,
+              macro: macro,
               absoluteBasePath: assetAbsoluteBasePath,
               relativeBasePath: macroInfo.relativeBasePath,
               absoluteOutputPath: macroInfo.absoluteOutputPath,
@@ -1031,7 +1097,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   Future<void> _processNext() async {
-    if (analyzer.isAnalyzingFile) return;
+    if (analyzer.isAnalyzingFile || _isSetWatchContexts) return;
 
     if (analyzer.pendingAnalyze.isEmpty) {
       // broadcast no work(currently used only for force generation)
@@ -1075,6 +1141,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     // if not exist, reload to remove existing process
     if (!macroContextDartFile.existsSync()) {
+      logger.info('Macro source of: $filePath is deleted');
       await onContextChanged();
       return;
     }
@@ -1091,6 +1158,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
       analyzer.pendingAnalyze.clear();
       analyzer.isAnalyzingFile = false;
+      logger.info('Macro source of: $filePath is changed');
       onContextChanged();
     }
   }
@@ -1169,6 +1237,10 @@ class MacroAnalyzerServer implements MacroServerInterface {
     for (final sub in _subs.values.toList()) {
       tryFn(() => sub.fileSub?.cancel());
       tryFn(() => sub.autoRunMacroProcess?.kill());
+    }
+
+    for (final sub in _assetContextsSubs.values.toList()) {
+      tryFn(() => sub.cancel());
     }
 
     for (final channel in _pluginChannels.values.toList()) {

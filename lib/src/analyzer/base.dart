@@ -9,6 +9,10 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
 // ignore: implementation_imports
+import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
+// ignore: implementation_imports
+import 'package:analyzer/src/dart/analysis/analysis_options.dart';
+// ignore: implementation_imports
 import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:macro_kit/macro_kit.dart';
@@ -23,7 +27,7 @@ import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 
-typedef PendingPath = ({String path, ChangeType type, bool force});
+typedef PendingPath = ({String path, ChangeType type});
 typedef PendingAnalyze = ({List<AnalyzingAsset>? asset});
 
 typedef AnalyzingAsset = ({
@@ -97,16 +101,10 @@ abstract class BaseAnalyzer {
     trailingCommas: TrailingCommas.preserve,
   );
 
-  late final ByteStore byteStore = MemoryCachingByteStore(NullByteStore(), 1024 * 1024 * 256);
+  late final ByteStore _byteStore = MemoryCachingByteStore(NullByteStore(), 1024 * 1024 * 256);
+  AnalysisContextCollection contextCollection = AnalysisContextCollectionImpl(includedPaths: []);
   List<String> analysisContextPaths = [];
-  AnalysisContextCollection contextCollection = AnalysisContextCollection(
-    includedPaths: [],
-    resourceProvider: PhysicalResourceProvider.INSTANCE,
-  );
-
   AnalysisSession? currentSession;
-
-  final Map<String, File> fileCaches = {};
 
   /// per analyze cache for reusing common parsing like computing a class type info
   final Map<String, CountedCache> iterationCaches = {};
@@ -114,7 +112,7 @@ abstract class BaseAnalyzer {
   final Set<String> mayContainsMacroCache = {};
   final Map<PendingPath, PendingAnalyze> pendingAnalyze = {};
   final StreamController<bool> pendingAnalyzeCompleted = StreamController.broadcast();
-  final PendingAnalyze defaultNullPendingAnalyzeValue = (asset: null);
+  final PendingAnalyze defaultNullPendingAnalyzeValue = const (asset: null);
   final Stopwatch stopWatch = Stopwatch();
   String currentAnalyzingPath = '';
   String lastChangedPath = '';
@@ -131,6 +129,24 @@ abstract class BaseAnalyzer {
   /// --- internal state of required of sub types, reset per [processDartSource] call
   Map<String, AnalyzeResult> macroAnalyzeResult = {};
   List<(List<MacroConfig>, ClassFragment)> pendingClassRequiredSubTypes = [];
+
+  AnalysisContextCollection createAnalysisCollection() {
+    return AnalysisContextCollectionImpl(
+      includedPaths: analysisContextPaths,
+      byteStore: _byteStore,
+      resourceProvider: PhysicalResourceProvider.INSTANCE,
+      // fileContentCache: FileContentCache(PhysicalResourceProvider.INSTANCE),
+      updateAnalysisOptions4:
+          // >> from analysis server plugin
+          // Disable extra warning computation and lint computation, because
+          // these are reported in the main analysis server isolate, not in the
+          // plugins isolate.
+          ({required AnalysisOptionsImpl analysisOptions}) => analysisOptions
+            ..warning = false
+            ..lint = false,
+      withFineDependencies: true,
+    );
+  }
 
   @internal
   int lastTime = DateTime.now().millisecondsSinceEpoch;
@@ -224,7 +240,7 @@ abstract class BaseAnalyzer {
 
   void removeFile(String path) {
     try {
-      (fileCaches[path] ?? File(path)).deleteSync();
+      File(path).deleteSync();
     } on PathNotFoundException {
       return;
     } catch (e) {

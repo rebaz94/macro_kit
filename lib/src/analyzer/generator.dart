@@ -88,7 +88,7 @@ mixin Generator on BaseAnalyzer {
     }
 
     // step:3 generate the part file
-    final partFile = fileCaches.putIfAbsent(path, () => File(genFilePath));
+    final partFile = File(genFilePath);
     final codeRes = _formatCode(generated, genFilePath);
 
     const topHeader = '''
@@ -101,8 +101,6 @@ mixin Generator on BaseAnalyzer {
     if (error != null) {
       logger.error('Failed to write generated code into: $genFilePath', error);
     }
-
-    _cleanupCachedFile();
   }
 
   Future<void> executeAssetMacro({
@@ -158,7 +156,6 @@ mixin Generator on BaseAnalyzer {
     }
 
     // TODO: process generated file?
-    _cleanupCachedFile();
   }
 
   @pragma('vm:prefer-inline')
@@ -170,14 +167,6 @@ mixin Generator on BaseAnalyzer {
     } catch (e) {
       logger.warn('Formatting generated code failed', e);
       return code;
-    }
-  }
-
-  void _cleanupCachedFile() {
-    if (fileCaches.length > 50) {
-      final values = fileCaches.entries.toList().reversed.take(25);
-      fileCaches.clear();
-      fileCaches.addEntries(values);
     }
   }
 }

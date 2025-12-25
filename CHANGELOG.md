@@ -1,3 +1,7 @@
+## 0.4.8
+
+- Fix: avoid redundant rebuilds when clients reconnect
+
 ## 0.4.7
 
 - Fix: synchronize global macro configuration before execution
