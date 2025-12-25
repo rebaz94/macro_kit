@@ -1,3 +1,7 @@
+## 0.4.10
+
+- Fixed race condition in file creation by switching from `create` to `createSync`
+
 ## 0.4.9
 
 - Optimized rebuild file listing to only include actively watched files

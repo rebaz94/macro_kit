@@ -308,7 +308,7 @@ class MacroContextSourceCodeInfo {
     }
 
     final genFile = File(p.join(Directory.systemTemp.path, 'macro', 'macro_context_${newId()}.dart'))
-      ..create(recursive: true)
+      ..createSync(recursive: true)
       ..writeAsStringSync(generatedCode);
 
     return Spawner.evaluateCode(
