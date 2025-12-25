@@ -109,7 +109,7 @@ abstract class BaseAnalyzer {
   /// per analyze cache for reusing common parsing like computing a class type info
   final Map<String, CountedCache> iterationCaches = {};
 
-  final Set<String> mayContainsMacroCache = {};
+  final Set<int> mayContainsMacroCache = {};
   final Map<PendingPath, PendingAnalyze> pendingAnalyze = {};
   final StreamController<bool> pendingAnalyzeCompleted = StreamController.broadcast();
   final PendingAnalyze defaultNullPendingAnalyzeValue = const (asset: null);

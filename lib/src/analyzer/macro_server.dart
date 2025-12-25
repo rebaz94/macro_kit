@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context.dart';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
@@ -950,22 +949,29 @@ class MacroAnalyzerServer implements MacroServerInterface {
     final clientInfo = _clientChannels[clientId];
     if (clientInfo == null) return 'No client registered with id: $clientId';
 
-    (AnalysisContext?, StateError?) getContext(String path) {
-      try {
-        final context = analyzer.contextCollection.contextFor(contextPath);
-        return (context, null);
-      } on StateError catch (e) {
-        return (null, e);
+    final contextInfo = getContextInfoForPath('$contextPath/file');
+    if (contextInfo == null) {
+      return 'No analysis context found for: $contextPath';
+    }
+
+    void addFiles(String directoryPath, bool checkingAsset) {
+      final watchDir = Directory(directoryPath);
+      if (!watchDir.existsSync()) return;
+
+      for (final entity in watchDir.listSync(recursive: true, followLinks: false)) {
+        if (entity is File) {
+          _addPendingGeneration(entity.path, checkingAsset);
+        }
       }
     }
 
-    var (context, err) = getContext(contextPath);
-    if (err != null || context == null) {
-      return 'No analysis context found for: $contextPath, Error: $err';
-    }
+    final watchPath = _getWatchPaths([contextInfo]).first;
+    addFiles(watchPath, false);
 
-    for (final file in context.contextRoot.analyzedFiles()) {
-      _addPendingGeneration(file);
+    for (final asseCtx in _assetsDir.keys.toList()) {
+      if (p.isWithin(contextPath, asseCtx)) {
+        addFiles(asseCtx, true);
+      }
     }
 
     // start processing file
@@ -1003,7 +1009,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     // Handle removals
     if (changeType == ChangeType.REMOVE) {
-      analyzer.mayContainsMacroCache.remove(path);
+      analyzer.mayContainsMacroCache.remove(generateHash(path));
       final (:genFilePath, partFromSource: _, partFromGenerated: _) = buildGeneratedFileInfo(path);
       analyzer.removeFile(genFilePath);
       return;
@@ -1052,16 +1058,20 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   @pragma('vm:prefer-inline')
-  void _addPendingGeneration(String path) {
-    final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
-    if (assetMacros == null && (p.extension(path, 2) != '.dart')) {
-      // logger.fine('Ignored: $path');
-      return;
-    }
+  void _addPendingGeneration(String path, bool checkingAsset) {
+    if (checkingAsset) {
+      final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
+      if (assetMacros == null) return;
 
-    analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = assetMacros == null
-        ? analyzer.defaultNullPendingAnalyzeValue
-        : (asset: assetMacros);
+      analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = (asset: assetMacros);
+    } else {
+      if ((p.extension(path, 2) != '.dart')) {
+        // logger.fine('Ignored: $path');
+        return;
+      }
+
+      analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = analyzer.defaultNullPendingAnalyzeValue;
+    }
   }
 
   List<AnalyzingAsset>? _maybeRunAssetMacro(String path) {

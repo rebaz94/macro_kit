@@ -343,7 +343,7 @@ Object? encodeDartObject(Object? value) {
 
 extension FileExt on File {
   /// Write data to a file directly or retry when [createFile] is true and file not exist.
- Future<Object?> writeDataOrErr(String contents, {required bool createFile, bool recursive = false}) async {
+  Future<Object?> writeDataOrErr(String contents, {required bool createFile, bool recursive = false}) async {
     try {
       await writeAsString(contents);
       return null;

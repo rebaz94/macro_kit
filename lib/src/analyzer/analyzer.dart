@@ -39,6 +39,9 @@ class MacroAnalyzer extends BaseAnalyzer
       macroAnalyzeResult.clear();
       pendingClassRequiredSubTypes.clear();
       currentAnalyzingPath = '';
+      if (mayContainsMacroCache.length > 100) {
+        mayContainsMacroCache.clear();
+      }
       final time = stopWatch.elapsedMilliseconds;
       logger.info('Completed in ${time > 1000 ? '${time ~/ 1000}s' : '${time}ms'}');
     }
@@ -52,7 +55,8 @@ class MacroAnalyzer extends BaseAnalyzer
     await analysisContext.applyPendingFileChanges();
     final session = currentSession = analysisContext.currentSession;
 
-    final mayContainMacro = mayContainsMacroCache.contains(path);
+    final hashFileId = generateHash(path);
+    final mayContainMacro = mayContainsMacroCache.contains(hashFileId);
     // check content of the file only when already if we don't know yet contain macro or not
     if (!mayContainMacro) {
       if (session.getFile(path) case FileResult fileRes) {
@@ -62,7 +66,7 @@ class MacroAnalyzer extends BaseAnalyzer
           return;
         }
 
-        mayContainsMacroCache.add(path);
+        mayContainsMacroCache.add(hashFileId);
       }
     }
 
@@ -113,7 +117,7 @@ class MacroAnalyzer extends BaseAnalyzer
       }
     }
     if (!containsMacro) {
-      mayContainsMacroCache.remove(path);
+      mayContainsMacroCache.remove(hashFileId);
     }
 
     // step:3 get pending class sub types

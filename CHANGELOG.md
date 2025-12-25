@@ -1,3 +1,7 @@
+## 0.4.9
+
+- Optimized rebuild file listing to only include actively watched files
+
 ## 0.4.8
 
 - Fix: avoid redundant rebuilds when clients reconnect

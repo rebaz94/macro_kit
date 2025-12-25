@@ -97,7 +97,7 @@ mixin Generator on BaseAnalyzer {
 // dart format off
 
 ''';
-    final error = await partFile.writeDataOrErr(topHeader + codeRes, createFile: true, recursive: true);
+    final error = partFile.writeDataSyncOrErr(topHeader + codeRes, createFile: true, recursive: true);
     if (error != null) {
       logger.error('Failed to write generated code into: $genFilePath', error);
     }
