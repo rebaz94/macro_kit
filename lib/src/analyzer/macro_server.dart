@@ -866,8 +866,19 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
         final config = analyzer.loadMacroConfig(pkgName, pkgName);
 
-        if (!config.autoRebuildOnConnect && !config.alwaysRebuildOnConnect) continue;
-        if (config.alwaysRebuildOnConnect) continue;
+        if (config.alwaysRebuildOnConnect) {
+          // It always rebuild
+
+          // Skip if client is an auto-run macro activated and configured to skip
+          if (clientChannel.autoRunMacro && config.skipConnectRebuildWithAutoRun) {
+            continue;
+          }
+        }
+        // there is no context info yet, so it consider not executed
+        // else if (contextInfo.autoRebuildExecuted) {
+        //   // Skip if auto build is already executed
+        //   continue;
+        // }
 
         final contextInfo = ContextInfo(
           path: pkgName,
