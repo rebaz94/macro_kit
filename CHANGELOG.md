@@ -1,3 +1,7 @@
+## 0.5.0
+
+- Handle auto rebuild correctly when plugin is not connected yet
+
 ## 0.4.10
 
 - Fixed race condition in file creation by switching from `create` to `createSync`

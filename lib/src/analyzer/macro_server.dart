@@ -82,6 +82,10 @@ class MacroAnalyzerServer implements MacroServerInterface {
   /// Value: ContextInfo containing path, package name, config, and state
   final Map<String, ContextInfo> _contextRegistry = {};
 
+  /// Contain client ids which enabled rebuild generated code but at time
+  /// of generation the context is not registered by plugin.
+  final Set<int> _pendingAutoRebuildsClients = {};
+
   /// List of requested code generation by request id
   final Map<int, Completer<RunMacroResultMsg>> _pendingOperations = {};
 
@@ -184,7 +188,8 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
       _isSetWatchContexts = false;
       if (triggerAutoBuild && connectedClient != null) {
-        await _prepareAndRunAutoRebuild(connectedClient);
+        _pendingAutoRebuildsClients.add(connectedClient.id);
+        await _runPendingAutoRebuildClients();
       }
 
       // trigger next analyze if delayed because of lock
@@ -806,11 +811,24 @@ class MacroAnalyzerServer implements MacroServerInterface {
     return null;
   }
 
-  Future<void> _prepareAndRunAutoRebuild(ClientChannelInfo clientChannel) async {
-    final clientId = clientChannel.id;
+  Future<void> _runPendingAutoRebuildClients() async {
+    for (final pendingClientId in _pendingAutoRebuildsClients.toList()) {
+      await _prepareAndRunAutoRebuild(pendingClientId);
+    }
+  }
+
+  Future<void> _prepareAndRunAutoRebuild(int clientId) async {
+    final clientChannel = _clientChannels[clientId];
+    if (clientChannel == null) {
+      // no longer exists, remove from pending
+      _pendingAutoRebuildsClients.remove(clientId);
+      return;
+    }
+
     final clientPkgNames = clientChannel.package.values;
     final autoRebuildConfigs = <ContextInfo>[];
     bool hasPackageContext = false;
+    bool disabledAutoRebuild = false;
 
     // Check each context in the registry
     for (final contextInfo in _contextRegistry.values) {
@@ -818,8 +836,10 @@ class MacroAnalyzerServer implements MacroServerInterface {
         continue;
       }
 
+      _pendingAutoRebuildsClients.remove(clientId);
       final config = contextInfo.config;
       if (!config.autoRebuildOnConnect) {
+        disabledAutoRebuild = true;
         continue;
       }
 
@@ -862,19 +882,31 @@ class MacroAnalyzerServer implements MacroServerInterface {
       }
 
       if (autoRebuildConfigs.isNotEmpty) {
+        // client is dynamic, keep pending id, it trigger auto rebuild next time
         _addContextDynamically(autoRebuildConfigs, clientChannel);
         return;
       }
     }
 
-    if (autoRebuildConfigs.isNotEmpty) {
-      sendMessageMacroClients(
-        GeneralMessage(
-          message: 'Rebuilding macro generated code for: ${autoRebuildConfigs.map((e) => e.packageName).join(', ')}',
-        ),
-      );
-      await _runAutoRebuildOnConnect(clientId, autoRebuildConfigs);
+    if (autoRebuildConfigs.isEmpty) {
+      if (disabledAutoRebuild) {
+        // consider to remove, since it has config but not enabled
+        _pendingAutoRebuildsClients.remove(clientChannel.id);
+      } else {
+        // consider the context is not yet registered, add to pending
+        _pendingAutoRebuildsClients.add(clientChannel.id);
+      }
+      return;
     }
+
+    // remove from pending, configuration exists
+    _pendingAutoRebuildsClients.remove(clientChannel.id);
+    sendMessageMacroClients(
+      GeneralMessage(
+        message: 'Rebuilding macro generated code for: ${autoRebuildConfigs.map((e) => e.packageName).join(', ')}',
+      ),
+    );
+    await _runAutoRebuildOnConnect(clientId, autoRebuildConfigs);
   }
 
   void _addContextDynamically(

@@ -9,7 +9,7 @@ mixin AnalyzeClassMethod on BaseAnalyzer {
     InterfaceFragment classFragment,
     List<MacroProperty>? classTypeParams,
   ) async {
-    if (!capability.classConstructors) {
+    if (!capability.classMethods) {
       return const (null, false);
     }
 
