@@ -1009,7 +1009,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     // Handle removals
     if (changeType == ChangeType.REMOVE) {
-      analyzer.mayContainsMacroCache.remove(generateHash(path));
+      analyzer.mayContainsMacroCache.remove(path.hashCode);
       final (:genFilePath, partFromSource: _, partFromGenerated: _) = buildGeneratedFileInfo(path);
       analyzer.removeFile(genFilePath);
       return;

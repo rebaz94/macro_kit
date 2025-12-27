@@ -55,7 +55,7 @@ class MacroAnalyzer extends BaseAnalyzer
     await analysisContext.applyPendingFileChanges();
     final session = currentSession = analysisContext.currentSession;
 
-    final hashFileId = generateHash(path);
+    final hashFileId = path.hashCode;
     final mayContainMacro = mayContainsMacroCache.contains(hashFileId);
     // check content of the file only when already if we don't know yet contain macro or not
     if (!mayContainMacro) {
