@@ -323,9 +323,9 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
 
   bool get isNamed => value['in'] == true;
 
-  bool get isRequireNamed => value['rn'] == true;
+  bool get isRequiredNamed => value['rn'] == true;
 
-  bool get isRequirePositional => value['rp'] == true;
+  bool get isRequiredPositional => value['rp'] == true;
 
   bool get isGetProperty => value['gp'] == true;
 
@@ -386,8 +386,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
     if (isAugmentation) add('isAugmentation');
     if (isExtensionMember) add('isExtensionMember');
     if (isNamed) add('isNamed');
-    if (isRequireNamed) add('isRequireNamed');
-    if (isRequirePositional) add('isRequirePositional');
+    if (isRequiredNamed) add('isRequiredNamed');
+    if (isRequiredPositional) add('isRequiredPositional');
     if (isGetProperty) add('isGetProperty');
     if (isSetProperty) add('isSetProperty');
     if (hasInitializer) add('hasInitializer');

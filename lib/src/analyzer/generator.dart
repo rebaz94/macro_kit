@@ -31,9 +31,11 @@ mixin Generator on BaseAnalyzer {
           libraryPaths: libraryPaths,
           sharedClasses: sharedClasses,
           classes: analyzeRes.classes,
+          topLevelFunctions: analyzeRes.topLevelFunctions,
         );
       } else {
         res.classes!.addAll(analyzeRes.classes);
+        res.topLevelFunctions!.addAll(analyzeRes.topLevelFunctions);
       }
     }
 
@@ -49,7 +51,7 @@ mixin Generator on BaseAnalyzer {
       final msg = runConfigEntry.value;
 
       // ignore message with empty class to not generate empty file
-      if (msg.classes == null || msg.classes!.isEmpty) {
+      if (msg.classes?.isNotEmpty != true && msg.topLevelFunctions?.isNotEmpty != true) {
         continue;
       }
 

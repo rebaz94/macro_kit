@@ -133,6 +133,7 @@ extension type CountedCache._((int, Object) _v) {
 @internal
 class AnalyzeResult {
   List<MacroClassDeclaration> classes = [];
+  List<MacroFunctionDeclaration> topLevelFunctions = [];
 }
 
 @internal

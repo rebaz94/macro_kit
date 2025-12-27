@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_example/example_macro/form_macro.dart';
 import 'package:flutter_example/example_macro/json_schema_macro.dart';
+import 'package:flutter_example/example_macro/timed_macro.dart';
 import 'package:macro_kit/macro_kit.dart';
 
 /// Controls automatic macro execution behavior.
@@ -96,6 +97,7 @@ Future<void> setupMacro() async {
       'AssetPathMacro': AssetPathMacro.initialize,
       'JsonSchemaMacro': JsonSchemaMacro.initialize,
       'FormMacro': FormMacro.initialize,
+      'TimedMacro': TimedMacro.initialize,
     },
     assetMacros: {
       'assets': [

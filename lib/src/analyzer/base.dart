@@ -286,6 +286,8 @@ abstract class BaseAnalyzer {
     String? typeAliasClassName,
   });
 
+  Future<MacroFunctionDeclaration?> parseTopLevelFunction(TopLevelFunctionFragment functionFragment);
+
   Future<void> collectClassSubTypes(
     List<(List<MacroConfig>, ClassFragment)> pendingRequiredSubTypes,
     LibraryFragment libraryFragment,
@@ -430,6 +432,17 @@ abstract class BaseAnalyzer {
     final uri = classFragment.element.library.uri.toString();
     final id = '$className:${generateHash('$capability$className$uri')}';
     return ('classDec:$id', id);
+  }
+
+  (String, String) functionDeclarationCachedKey(
+    TopLevelFunctionFragment fnFragment,
+    MacroCapability capability, [
+    String? typeAliasName,
+  ]) {
+    final fnName = typeAliasName ?? fnFragment.element.name;
+    final uri = fnFragment.element.library.uri.toString();
+    final id = '$fnName:${generateHash('$capability$fnName$uri')}';
+    return ('functionDec:$id', id);
   }
 
   (String, String) enumDeclarationCachedKey(

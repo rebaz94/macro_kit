@@ -179,3 +179,7 @@ When multiple rebuild options are set:
     - `always_rebuild_on_connect` takes precedence over `auto_rebuild_on_connect`
     - If `always_rebuild_on_connect` is `true`, cache is always ignored
     - If `auto_rebuild_on_connect` is `true`, normal cache rules apply
+
+---
+
+<p align="right"><a href="../topics/Write New Macro-topic.html">Next: Write New Macro</a></p>

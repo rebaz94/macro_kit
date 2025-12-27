@@ -79,13 +79,14 @@ mixin Types on BaseAnalyzer {
       filterClassStaticMethod: cap.peek('filterClassStaticMethod')?.toBoolValue() ?? false,
       filterMethods: cap.peek('filterMethods')?.toStringValue() ?? '',
       filterClassMethodMetadata: cap.peek('filterClassMethodMetadata')?.toStringValue() ?? '',
+      topLevelFunctions: cap.peek('topLevelFunctions')?.toBoolValue() ?? false,
       collectClassSubTypes: cap.peek('collectClassSubTypes')?.toBoolValue() ?? false,
       filterCollectSubTypes: cap.peek('filterCollectSubTypes')?.toStringValue() ?? '',
     );
 
     final List<MacroProperty> props = [];
     for (final fieldName in fields) {
-      if (fieldName == 'capability') continue;
+      if (fieldName == 'capability' || fieldName == '(super)') continue;
 
       final fieldValue = generator.peek(fieldName);
       if (fieldValue == null) continue;
@@ -527,6 +528,10 @@ mixin Types on BaseAnalyzer {
         capability,
       );
       final macroKeys = await computeMacroKeys(filterMethodMetadata, param.metadata, capability);
+      final defaultValue = param.computeConstantValue();
+      final paramConstantValue = defaultValue == null
+          ? null
+          : await computeConstantInitializerValue(param.name ?? '', defaultValue, capability);
 
       params.add(
         MacroProperty(
@@ -544,6 +549,9 @@ mixin Types on BaseAnalyzer {
           ),
           keys: macroKeys,
           fieldInitializer: null,
+          requireConversionToLiteral: paramConstantValue?.reqConversion,
+          constantValue: paramConstantValue?.constantValue,
+          constantModifier: paramConstantValue?.modifier,
         ),
       );
     }

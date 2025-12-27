@@ -10,12 +10,12 @@ dartdoc:
       markdown: "doc/data_class_macro.md"
     "Asset Path Macro":
       markdown: "doc/asset_path_macro.md"
+    "Global Configuration":
+      markdown: "doc/global_macro_config.md"
     "Write New Macro":
       markdown: "doc/write_new_macro.md"
     "Capability":
       markdown: "doc/capability.md"
-    "Global Configuration":
-      markdown: "doc/global_macro_config.md"
 
   categoryOrder:
     - "Get started"
@@ -23,9 +23,9 @@ dartdoc:
     - "Models"
     - "Data Class Macro"
     - "Asset Path Macro"
+    - "Global Configuration"
     - "Write New Macro"
     - "Capability"
-    - "Global Configuration"
   showUndocumentedCategories: true
   ignore:
     - broken-link

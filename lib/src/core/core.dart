@@ -28,6 +28,7 @@ export 'package:macro_kit/src/analyzer/base_macro.dart';
 /// {@category Models}
 /// {@category Data Class Macro}
 /// {@category Asset Path Macro}
+/// {@category Global Configuration}
 /// {@category Write New Macro}
 /// {@category Capability}
 class Macro {
@@ -505,7 +506,7 @@ class MacroProperty {
     return result;
   }
 
-  static String getClassTypeParameter(List<MacroProperty> generics) {
+  static String getTypeParameter(List<MacroProperty> generics) {
     if (generics.isEmpty) return '';
 
     final s = StringBuffer('<');
@@ -523,7 +524,7 @@ class MacroProperty {
     return s.toString();
   }
 
-  static String getClassTypeParameterWithBound(List<MacroProperty> generics) {
+  static String getTypeParameterWithBound(List<MacroProperty> generics) {
     if (generics.isEmpty) return '';
 
     final s = StringBuffer('<');
@@ -543,7 +544,7 @@ class MacroProperty {
     return s.toString();
   }
 
-  static String getClassTypeParameterWithPrioritizedBound(List<MacroProperty> generics) {
+  static String getTypeParameterWithPrioritizedBound(List<MacroProperty> generics) {
     if (generics.isEmpty) return '';
 
     // Group by name, keeping the one with bound if duplicates exist
@@ -1035,8 +1036,8 @@ class MacroMethod {
       name: json['n'] as String? ?? '',
       typeParams:
           (json['tp'] as List?)?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
-      params: MacroProperty._decodeUpdatableList(json['p'] as List),
-      returns: MacroProperty._decodeUpdatableList(json['r'] as List),
+      params: MacroProperty._decodeUpdatableList(json['p'] as List? ?? const []),
+      returns: MacroProperty._decodeUpdatableList(json['r'] as List? ?? const []),
       modifier: json['m'] == null
           ? const MacroModifier({})
           : MacroModifier((json['m'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
@@ -1069,7 +1070,7 @@ class MacroMethod {
       str.write(' ');
     }
 
-    str.write('Function${MacroProperty.getClassTypeParameterWithBound(typeParams)}(');
+    str.write('Function${MacroProperty.getTypeParameterWithBound(typeParams)}(');
 
     final posParams = <MacroProperty>[];
     final namedParams = <MacroProperty>[];
@@ -1091,7 +1092,7 @@ class MacroMethod {
       for (int i = 0; i < namedParams.length; i++) {
         if (i > 0) str.write(', ');
         final p = namedParams[i];
-        if (p.modifier.isRequireNamed) str.write('required ');
+        if (p.modifier.isRequiredNamed) str.write('required ');
         str.write('${p.getDartType(dartCorePrefix)} ${p.name}');
       }
       str.write('}');
@@ -1294,6 +1295,80 @@ class MacroClassDeclaration {
   @override
   String toString() {
     return 'MacroClassDeclaration{libraryId: $libraryId, classId: $classId, configs: $configs, importPrefix: $importPrefix, className: $className, modifier: $modifier, classTypeParameters: $classTypeParameters, classFields: $classFields, constructors: $constructors, methods: $methods, subTypes: $subTypes, ready: $ready}';
+  }
+}
+
+/// Represents a top level function declaration with its metadata, and macro configurations.
+class MacroFunctionDeclaration {
+  const MacroFunctionDeclaration({
+    required this.libraryId,
+    required this.functionId,
+    required this.configs,
+    required this.importPrefix,
+    required this.info,
+    required this.typeParameters,
+  });
+
+  static MacroFunctionDeclaration fromJson(Map<String, dynamic> json) {
+    final libraryId = (json['lid'] as num).toInt();
+    final functionId = json['fid'] as String;
+    final configs = (json['cf'] as List).map((e) => MacroConfig.fromJson(e as Map<String, dynamic>)).toList();
+
+    return MacroFunctionDeclaration(
+      libraryId: libraryId,
+      functionId: functionId,
+      configs: configs,
+      importPrefix: (json['ip'] as String?) ?? '',
+      info: MacroMethod.fromJson(json['fi'] as Map<String, dynamic>),
+      typeParameters: (json['tp'] as List?)?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  /// The ID of the library where this function is declared.
+  ///
+  /// Use this ID to retrieve the full path of the declaration's source file.
+  final int libraryId;
+
+  /// Unique identifier for this function declaration.
+  final String functionId;
+
+  /// List of macro configurations applied to this function.
+  final List<MacroConfig> configs;
+
+  /// The import prefix used when importing this class (empty string if none).
+  final String importPrefix;
+
+  /// Type parameters (generics) of the function, if any.
+  final List<MacroProperty>? typeParameters;
+
+  /// The top level Function information
+  final MacroMethod info;
+
+  MacroFunctionDeclaration copyWith({int? libraryId, String? functionId, List<MacroConfig>? configs}) {
+    return MacroFunctionDeclaration(
+      libraryId: libraryId ?? this.libraryId,
+      functionId: functionId ?? this.functionId,
+      configs: configs ?? this.configs,
+      importPrefix: importPrefix,
+      info: info,
+      typeParameters: typeParameters,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lid': libraryId,
+      'fid': functionId,
+      'cf': configs.map((e) => e.toJson()).toList(),
+      if (importPrefix.isNotEmpty) 'ip': importPrefix,
+      'fi': info.toJson(),
+      if (typeParameters?.isNotEmpty == true) 'tp': typeParameters!.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  @override
+  String toString() {
+    return 'MacroFunctionDeclaration{libraryId: $libraryId, functionId: $functionId, configs: $configs, importPrefix: $importPrefix, typeParameters: $typeParameters, info: $info}';
   }
 }
 
@@ -1521,7 +1596,7 @@ enum AssetChangeType {
 }
 
 /// The target type that the macro has been applied to
-enum TargetType { clazz, enumType, asset }
+enum TargetType { clazz, function, enumType, asset }
 
 /// State information about the asset directory when processing asset-related macros.
 ///
@@ -1849,11 +1924,13 @@ class MacroState {
 /// - [clazz] - Generates `class ClassNameSuffixName`
 /// - [abstractClass] - Generates `abstract class ClassNameSuffixName`
 /// - [extendsClass] - Generates `class ClassNameSuffixName extends Base`
+/// - [function] - Generates `function implementation`
 enum GeneratedType {
   mixin,
   clazz,
   abstractClass,
   extendsClass,
+  function,
 }
 
 /// Base class for implementing macro code generation.
@@ -1889,6 +1966,7 @@ enum GeneratedType {
 /// - [MacroCapability.classFields] → [onClassFields] invoked with field declarations
 /// - [MacroCapability.classConstructors] → [onClassConstructors] invoked with constructors
 /// - [MacroCapability.classMethods] → [onClassMethods] invoked with methods
+/// - [MacroCapability.topLevelFunctions] → [onTopLevelFunction] invoked with function
 /// - [MacroCapability.collectClassSubTypes] → [onClassSubTypes] invoked with subtypes
 ///
 /// Use capability filters (e.g., [MacroCapability.filterClassInstanceFields],
@@ -1925,9 +2003,11 @@ enum GeneratedType {
 /// 3. [onClassFields] - Process field declarations
 /// 4. [onClassConstructors] - Process constructors
 /// 5. [onClassMethods] - Process methods
-/// 6. [onClassSubTypes] - Process subtype declarations
-/// 7. [onAsset] - Handle monitored asset changes (asset macros only)
-/// 8. [onGenerate] - Generate final code output and report via [MacroState.reportGenerated]
+/// 6. [onTopLevelFunctionTypeParameter] - Process top level function declarations type parameter
+/// 7. [onTopLevelFunction] - Process top level function declarations
+/// 8. [onClassSubTypes] - Process subtype declarations
+/// 9. [onAsset] - Handle monitored asset changes (asset macros only)
+/// 10.[onGenerate] - Generate final code output and report via [MacroState.reportGenerated]
 ///
 ///
 /// ## Implementation Requirements
@@ -1996,6 +2076,14 @@ abstract class MacroGenerator implements BaseMacroGenerator {
   /// Called with all methods of the target class.
   @override
   Future<void> onClassMethods(MacroState state, List<MacroMethod> names) async {}
+
+  /// Called when the target function has type parameters.
+  @override
+  Future<void> onTopLevelFunctionTypeParameter(MacroState state, List<MacroProperty> typeParameters) async {}
+
+  /// Called when the target function is a top level function.
+  @override
+  Future<void> onTopLevelFunction(MacroState state, MacroMethod function) async {}
 
   /// Called with all subtypes of the target class in the library
   @override

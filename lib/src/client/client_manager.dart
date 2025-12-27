@@ -126,160 +126,11 @@ class MacroManager implements ConnectionListener {
     if (!synced) return;
 
     try {
-      for (final declaration in message.classes ?? const <MacroClassDeclaration>[]) {
-        final hasMultipleMetadata = declaration.configs.length > 1;
-        final isCombiningGenCodeMode = hasMultipleMetadata && declaration.configs.first.combine == true;
-        String? combinedSuffixName;
-        bool firstMacroApplied = false;
-        StringBuffer? generatedNonCombinable;
-        GeneratedType lastGeneratedType = GeneratedType.mixin;
-
-        for (final (index, macroConfig) in declaration.configs.indexed) {
-          // initialize or reuse generator
-          final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
-          if (errMsg != null || macroGenrator == null) {
-            connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
-            return;
-          }
-
-          // get global config if exists
-          final (globalConfig, contentPath, remapGeneratedFileTo) = _getGlobalMacroConfig(
-            macroConfig.key.name,
-            macroGenrator.globalConfigParser,
-            userMacrosConfig,
-          );
-
-          // if combing generated code & first macro not applied yet, set the suffix and use that for all macro,
-          // otherwise its if not combing or value is set, it fallback to MacroGenerator.suffixName
-          if (isCombiningGenCodeMode && !firstMacroApplied) {
-            combinedSuffixName = macroGenrator.suffixName;
-          }
-
-          // get current generator type
-          final currentGeneratedType = macroGenrator.generatedType;
-
-          // combine mode only if first macro applied and its same type as before
-          final isCombingGenerator =
-              firstMacroApplied &&
-              isCombiningGenCodeMode && //
-              lastGeneratedType == currentGeneratedType;
-
-          lastGeneratedType = currentGeneratedType;
-
-          // run the macro
-          final state = MacroState(
-            macro: macroConfig.key,
-            remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
-            globalConfig: globalConfig,
-            contentPath: contentPath,
-            remapGeneratedFileTo: remapGeneratedFileTo,
-            targetPath: message.path,
-            targetType: TargetType.clazz,
-            importPrefix: declaration.importPrefix,
-            imports: message.imports,
-            libraryPaths: message.libraryPaths,
-            targetName: declaration.className,
-            modifier: declaration.modifier,
-            isCombingGenerator: isCombingGenerator,
-            suffixName: isCombingGenerator || (isCombiningGenCodeMode && !firstMacroApplied)
-                ? combinedSuffixName ?? macroGenrator.suffixName
-                : macroGenrator.suffixName,
-            classesById: message.sharedClasses,
-            assetState: null,
-          );
-
-          final cap = macroConfig.capability;
-
-          // init state and execute each capability as requested
-          await macroGenrator.init(state);
-
-          if (declaration.classTypeParameters != null) {
-            await macroGenrator.onClassTypeParameter(state, declaration.classTypeParameters!);
-          }
-
-          if (cap.classFields) {
-            final fields = declaration.classFields ?? const [];
-
-            await switch ((hasMultipleMetadata, cap.filterClassStaticFields, cap.filterClassInstanceFields)) {
-              (_, false, false) => Future.value(),
-              (false, _, _) || (_, true, true) => macroGenrator.onClassFields(state, fields),
-              (_, false, true) => macroGenrator.onClassFields(state, fields.where((e) => !e.isStatic).toList()),
-              (_, true, false) => macroGenrator.onClassFields(state, fields.where((e) => e.isStatic).toList()),
-            };
-          }
-
-          if (cap.classConstructors) {
-            await macroGenrator.onClassConstructors(state, declaration.constructors ?? const []);
-          }
-
-          if (cap.classMethods) {
-            final methods = declaration.methods ?? const [];
-
-            await switch ((hasMultipleMetadata, cap.filterClassStaticMethod, cap.filterClassInstanceMethod)) {
-              (_, false, false) => Future.value(),
-              (false, _, _) || (_, true, true) => macroGenrator.onClassMethods(state, methods),
-              (_, false, true) => macroGenrator.onClassMethods(
-                state,
-                methods.where((e) => !e.modifier.isStatic).toList(),
-              ),
-              (_, true, false) => macroGenrator.onClassMethods(
-                state,
-                methods.where((e) => e.modifier.isStatic).toList(),
-              ),
-            };
-          }
-
-          if (cap.collectClassSubTypes) {
-            await macroGenrator.onClassSubTypes(state, declaration.subTypes ?? const []);
-          }
-
-          await macroGenrator.onGenerate(state);
-          String generatedCode = state.generated;
-
-          if (isCombiningGenCodeMode) {
-            if (!firstMacroApplied) {
-              // Remove the last closing bracket when combining with next macros
-              final lastBracket = generatedCode.lastIndexOf('}');
-              if (lastBracket != -1) {
-                generatedCode = '${generatedCode.substring(0, lastBracket)}\n';
-              }
-            }
-          }
-
-          if (generatedCode.isNotEmpty) {
-            // if in combining mode but isCombingGenerator = false, due to different in macro generatedType
-            // then add the generated code to non combinable
-
-            final shouldUseCombined = !isCombiningGenCodeMode || !firstMacroApplied || isCombingGenerator;
-            final buffer = shouldUseCombined ? generated : (generatedNonCombinable ??= StringBuffer());
-
-            buffer
-              ..write('\n')
-              ..write(generatedCode)
-              ..write('\n');
-          }
-
-          if (state.generatedNonCombinable case String nonCombinableCode) {
-            generatedNonCombinable ??= StringBuffer();
-            generatedNonCombinable
-              ..write('\n')
-              ..write(nonCombinableCode)
-              ..write('\n');
-          }
-
-          firstMacroApplied = true;
-        }
-
-        // add end bracket
-        if (isCombiningGenCodeMode) {
-          generated.write('\n}\n');
-        }
-
-        // add non combinable to end of current generated code
-        if (generatedNonCombinable != null) {
-          generated.write(generatedNonCombinable.toString());
-          generatedNonCombinable = null;
-        }
+      if (message.classes?.isNotEmpty == true) {
+        await _executeClassDeclarationMacro(message, generated);
+      }
+      if (message.topLevelFunctions?.isNotEmpty == true) {
+        await _executeFunctionDeclarationMacro(message, generated);
       }
     } catch (e, s) {
       logger.error('Macro execution failed', e, s);
@@ -292,9 +143,290 @@ class MacroManager implements ConnectionListener {
     if (!sent) {
       logger.error('Failed to publish generated code: MacroServer maybe down!');
     }
+  }
 
-    // remove exceeded cache
-    _removeExcessCache();
+  Future<void> _executeClassDeclarationMacro(RunMacroMsg message, StringBuffer generated) async {
+    for (final declaration in message.classes ?? const <MacroClassDeclaration>[]) {
+      final hasMultipleMetadata = declaration.configs.length > 1;
+      final isCombiningGenCodeMode = hasMultipleMetadata && declaration.configs.first.combine == true;
+      String? combinedSuffixName;
+      bool firstMacroApplied = false;
+      StringBuffer? generatedNonCombinable;
+      GeneratedType lastGeneratedType = GeneratedType.mixin;
+
+      for (final (index, macroConfig) in declaration.configs.indexed) {
+        // initialize or reuse generator
+        final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
+        if (errMsg != null || macroGenrator == null) {
+          connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
+          return;
+        }
+
+        // get global config if exists
+        final (globalConfig, contentPath, remapGeneratedFileTo) = _getGlobalMacroConfig(
+          macroConfig.key.name,
+          macroGenrator.globalConfigParser,
+          userMacrosConfig,
+        );
+
+        // if combing generated code & first macro not applied yet, set the suffix and use that for all macro,
+        // otherwise its if not combing or value is set, it fallback to MacroGenerator.suffixName
+        if (isCombiningGenCodeMode && !firstMacroApplied) {
+          combinedSuffixName = macroGenrator.suffixName;
+        }
+
+        // get current generator type
+        final currentGeneratedType = macroGenrator.generatedType;
+
+        // combine mode only if first macro applied and its same type as before
+        final isCombingGenerator =
+            firstMacroApplied &&
+            isCombiningGenCodeMode && //
+            lastGeneratedType == currentGeneratedType;
+
+        lastGeneratedType = currentGeneratedType;
+
+        // run the macro
+        final state = MacroState(
+          macro: macroConfig.key,
+          remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
+          globalConfig: globalConfig,
+          contentPath: contentPath,
+          remapGeneratedFileTo: remapGeneratedFileTo,
+          targetPath: message.path,
+          targetType: TargetType.clazz,
+          importPrefix: declaration.importPrefix,
+          imports: message.imports,
+          libraryPaths: message.libraryPaths,
+          targetName: declaration.className,
+          modifier: declaration.modifier,
+          isCombingGenerator: isCombingGenerator,
+          suffixName: isCombingGenerator || (isCombiningGenCodeMode && !firstMacroApplied)
+              ? combinedSuffixName ?? macroGenrator.suffixName
+              : macroGenrator.suffixName,
+          classesById: message.sharedClasses,
+          assetState: null,
+        );
+
+        final cap = macroConfig.capability;
+
+        // init state and execute each capability as requested
+        await macroGenrator.init(state);
+
+        if (declaration.classTypeParameters != null) {
+          await macroGenrator.onClassTypeParameter(state, declaration.classTypeParameters!);
+        }
+
+        if (cap.classFields) {
+          final fields = declaration.classFields ?? const [];
+
+          await switch ((hasMultipleMetadata, cap.filterClassStaticFields, cap.filterClassInstanceFields)) {
+            (_, false, false) => Future.value(),
+            (false, _, _) || (_, true, true) => macroGenrator.onClassFields(state, fields),
+            (_, false, true) => macroGenrator.onClassFields(state, fields.where((e) => !e.isStatic).toList()),
+            (_, true, false) => macroGenrator.onClassFields(state, fields.where((e) => e.isStatic).toList()),
+          };
+        }
+
+        if (cap.classConstructors) {
+          await macroGenrator.onClassConstructors(state, declaration.constructors ?? const []);
+        }
+
+        if (cap.classMethods) {
+          final methods = declaration.methods ?? const [];
+
+          await switch ((hasMultipleMetadata, cap.filterClassStaticMethod, cap.filterClassInstanceMethod)) {
+            (_, false, false) => Future.value(),
+            (false, _, _) || (_, true, true) => macroGenrator.onClassMethods(state, methods),
+            (_, false, true) => macroGenrator.onClassMethods(
+              state,
+              methods.where((e) => !e.modifier.isStatic).toList(),
+            ),
+            (_, true, false) => macroGenrator.onClassMethods(
+              state,
+              methods.where((e) => e.modifier.isStatic).toList(),
+            ),
+          };
+        }
+
+        if (cap.collectClassSubTypes) {
+          await macroGenrator.onClassSubTypes(state, declaration.subTypes ?? const []);
+        }
+
+        await macroGenrator.onGenerate(state);
+        String generatedCode = state.generated;
+
+        if (isCombiningGenCodeMode) {
+          if (!firstMacroApplied) {
+            // Remove the last closing bracket when combining with next macros
+            final lastBracket = generatedCode.lastIndexOf('}');
+            if (lastBracket != -1) {
+              generatedCode = '${generatedCode.substring(0, lastBracket)}\n';
+            }
+          }
+        }
+
+        if (generatedCode.isNotEmpty) {
+          // if in combining mode but isCombingGenerator = false, due to different in macro generatedType
+          // then add the generated code to non combinable
+
+          final shouldUseCombined = !isCombiningGenCodeMode || !firstMacroApplied || isCombingGenerator;
+          final buffer = shouldUseCombined ? generated : (generatedNonCombinable ??= StringBuffer());
+
+          buffer
+            ..write('\n')
+            ..write(generatedCode)
+            ..write('\n');
+        }
+
+        if (state.generatedNonCombinable case String nonCombinableCode) {
+          generatedNonCombinable ??= StringBuffer();
+          generatedNonCombinable
+            ..write('\n')
+            ..write(nonCombinableCode)
+            ..write('\n');
+        }
+
+        firstMacroApplied = true;
+      }
+
+      // add end bracket
+      if (isCombiningGenCodeMode) {
+        generated.write('\n}\n');
+      }
+
+      // add non combinable to end of current generated code
+      if (generatedNonCombinable != null) {
+        generated.write(generatedNonCombinable.toString());
+        generatedNonCombinable = null;
+      }
+    }
+  }
+
+  Future<void> _executeFunctionDeclarationMacro(RunMacroMsg message, StringBuffer generated) async {
+    for (final declaration in message.topLevelFunctions ?? const <MacroFunctionDeclaration>[]) {
+      final hasMultipleMetadata = declaration.configs.length > 1;
+      final isCombiningGenCodeMode = hasMultipleMetadata && declaration.configs.first.combine == true;
+      String? combinedSuffixName;
+      bool firstMacroApplied = false;
+      StringBuffer? generatedNonCombinable;
+      GeneratedType lastGeneratedType = GeneratedType.mixin;
+
+      for (final (index, macroConfig) in declaration.configs.indexed) {
+        // initialize or reuse generator
+        final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
+        if (errMsg != null || macroGenrator == null) {
+          connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
+          return;
+        }
+
+        // get global config if exists
+        final (globalConfig, contentPath, remapGeneratedFileTo) = _getGlobalMacroConfig(
+          macroConfig.key.name,
+          macroGenrator.globalConfigParser,
+          userMacrosConfig,
+        );
+
+        // if combing generated code & first macro not applied yet, set the suffix and use that for all macro,
+        // otherwise its if not combing or value is set, it fallback to MacroGenerator.suffixName
+        if (isCombiningGenCodeMode && !firstMacroApplied) {
+          combinedSuffixName = macroGenrator.suffixName;
+        }
+
+        // get current generator type
+        final currentGeneratedType = macroGenrator.generatedType;
+
+        // combine mode only if first macro applied and its same type as before
+        final isCombingGenerator =
+            firstMacroApplied &&
+            isCombiningGenCodeMode && //
+            lastGeneratedType == currentGeneratedType;
+
+        lastGeneratedType = currentGeneratedType;
+
+        // run the macro
+        final state = MacroState(
+          macro: macroConfig.key,
+          remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
+          globalConfig: globalConfig,
+          contentPath: contentPath,
+          remapGeneratedFileTo: remapGeneratedFileTo,
+          targetPath: message.path,
+          targetType: TargetType.function,
+          importPrefix: declaration.importPrefix,
+          imports: message.imports,
+          libraryPaths: message.libraryPaths,
+          targetName: declaration.info.name,
+          modifier: const MacroModifier({}),
+          isCombingGenerator: isCombingGenerator,
+          suffixName: isCombingGenerator || (isCombiningGenCodeMode && !firstMacroApplied)
+              ? combinedSuffixName ?? macroGenrator.suffixName
+              : macroGenrator.suffixName,
+          classesById: message.sharedClasses,
+          assetState: null,
+        );
+
+        final cap = macroConfig.capability;
+
+        // init state and execute each capability as requested
+        await macroGenrator.init(state);
+
+        if (declaration.typeParameters != null) {
+          await macroGenrator.onTopLevelFunctionTypeParameter(state, declaration.typeParameters!);
+        }
+
+        if (cap.topLevelFunctions) {
+          await macroGenrator.onTopLevelFunction(state, declaration.info);
+        }
+
+        await macroGenrator.onGenerate(state);
+        String generatedCode = state.generated;
+
+        if (isCombiningGenCodeMode) {
+          if (!firstMacroApplied) {
+            // Remove the last closing bracket when combining with next macros
+            final lastBracket = generatedCode.lastIndexOf('}');
+            if (lastBracket != -1) {
+              generatedCode = '${generatedCode.substring(0, lastBracket)}\n';
+            }
+          }
+        }
+
+        if (generatedCode.isNotEmpty) {
+          // if in combining mode but isCombingGenerator = false, due to different in macro generatedType
+          // then add the generated code to non combinable
+
+          final shouldUseCombined = !isCombiningGenCodeMode || !firstMacroApplied || isCombingGenerator;
+          final buffer = shouldUseCombined ? generated : (generatedNonCombinable ??= StringBuffer());
+
+          buffer
+            ..write('\n')
+            ..write(generatedCode)
+            ..write('\n');
+        }
+
+        if (state.generatedNonCombinable case String nonCombinableCode) {
+          generatedNonCombinable ??= StringBuffer();
+          generatedNonCombinable
+            ..write('\n')
+            ..write(nonCombinableCode)
+            ..write('\n');
+        }
+
+        firstMacroApplied = true;
+      }
+
+      // add end bracket
+      if (isCombiningGenCodeMode) {
+        generated.write('\n}\n');
+      }
+
+      // add non combinable to end of current generated code
+      if (generatedNonCombinable != null) {
+        generated.write(generatedNonCombinable.toString());
+        generatedNonCombinable = null;
+      }
+    }
   }
 
   static final _mapStrDynamicTypeArg = [
@@ -385,9 +517,6 @@ class MacroManager implements ConnectionListener {
     if (!sent) {
       logger.error('Failed to publish generated files: MacroServer maybe down!');
     }
-
-    // remove exceeded cache
-    _removeExcessCache();
   }
 
   (MacroGenerator?, String?) _getMacroGenerator(MacroConfig config) {
@@ -472,14 +601,6 @@ class MacroManager implements ConnectionListener {
     } catch (e, s) {
       logger.error('Failed to decode macro configuration for: $macroName', e, s);
       return (null, rawConfig.context, rawConfig.remapGeneratedFileTo);
-    }
-  }
-
-  void _removeExcessCache() {
-    if (_generatorCaches.length > 30) {
-      for (final k in _generatorCaches.keys.toList().reversed.take(15)) {
-        _generatorCaches.remove(k);
-      }
     }
   }
 

@@ -222,7 +222,7 @@ class DataClassMacro extends MacroGenerator {
     if (!state.isCombingGenerator) {
       buff.write('mixin ${state.targetName}${state.suffixName}');
       if (typeParams.isNotEmpty) {
-        buff.write(MacroProperty.getClassTypeParameterWithBound(typeParams));
+        buff.write(MacroProperty.getTypeParameterWithBound(typeParams));
       }
 
       buff.write(' {\n');
@@ -447,7 +447,7 @@ class DataClassMacro extends MacroGenerator {
     final discriminatorDefault = state.getOrNull<MacroClassDeclaration?>('defaultPolymorphicClass');
     final discriminatorValues =
         state.getOrNull<List<(MacroClassDeclaration, MacroProperty?)>>('discriminatorValues') ?? const [];
-    final mainClassTypeParams = MacroProperty.getClassTypeParameter(typeParams);
+    final mainClassTypeParams = MacroProperty.getTypeParameter(typeParams);
 
     // combine generic for all sealed class
     final discriminatorTypeParamsByIndex = <int, List<MacroProperty>>{};
@@ -497,8 +497,8 @@ class DataClassMacro extends MacroGenerator {
         uniqueTypeParams.add(typeParam);
       }
     }
-    final discriminatorWithClassTypeParams = MacroProperty.getClassTypeParameterWithBound(uniqueTypeParams);
-    final discriminatorTypeParamsCombined = MacroProperty.getClassTypeParameterWithBound(discriminatorTypeParams);
+    final discriminatorWithClassTypeParams = MacroProperty.getTypeParameterWithBound(uniqueTypeParams);
+    final discriminatorTypeParamsCombined = MacroProperty.getTypeParameterWithBound(discriminatorTypeParams);
 
     /// Generate fromJson
     if (fromJson ?? config.createFromJson ?? true) {
@@ -536,7 +536,7 @@ class DataClassMacro extends MacroGenerator {
         discriminatorTypeParams,
         [MacroProperty(name: 'Res', importPrefix: '', type: '', typeInfo: TypeInfo.generic)],
       ]);
-      final discriminatorTypeParamsCombined = MacroProperty.getClassTypeParameterWithBound(allTypeParams);
+      final discriminatorTypeParamsCombined = MacroProperty.getTypeParameterWithBound(allTypeParams);
 
       _generatePolymorphicMapTo(
         state: state,
@@ -663,7 +663,7 @@ class DataClassMacro extends MacroGenerator {
             }
 
             final fromJsonCastValue = fieldCast(fromJsonFn.params.first, null, value);
-            final typeParams = MacroProperty.getClassTypeParameter(fromJsonFn.typeParams);
+            final typeParams = MacroProperty.getTypeParameter(fromJsonFn.typeParams);
 
             if (isNullable) {
               return '$value == null ? $defaultValue : $prefix${type.removedNullability}.$fromJsonStaticFnName$typeParams($fromJsonCastValue)';
@@ -978,8 +978,8 @@ class DataClassMacro extends MacroGenerator {
     }
 
     final prefix = state.importPrefix;
-    final clsTypeParams = MacroProperty.getClassTypeParameter(typeParams);
-    final clsTypeParamsWithBound = MacroProperty.getClassTypeParameterWithBound(typeParams);
+    final clsTypeParams = MacroProperty.getTypeParameter(typeParams);
+    final clsTypeParamsWithBound = MacroProperty.getTypeParameterWithBound(typeParams);
     for (final tp in typeParams) {
       fromJsonGenericsArgs.add('${tp.name} Function(${dcp}Object? v) $fromJsonStaticFnName${tp.name}');
     }
@@ -1276,7 +1276,7 @@ class DataClassMacro extends MacroGenerator {
       return '      $tag: $value';
     }
 
-    final clsWithTypeParams = '$prefix$className${MacroProperty.getClassTypeParameter(typeParams)}';
+    final clsWithTypeParams = '$prefix$className${MacroProperty.getTypeParameter(typeParams)}';
     for (final tp in typeParams) {
       toJsonGenericsArgs.add('${dcp}Object? Function(${tp.name} v) $toJsonFnName${tp.name}');
     }
@@ -1406,7 +1406,7 @@ class DataClassMacro extends MacroGenerator {
     }
 
     final prefix = state.importPrefix;
-    final clsWithTypeParams = '$prefix$className${MacroProperty.getClassTypeParameter(typeParams)}';
+    final clsWithTypeParams = '$prefix$className${MacroProperty.getTypeParameter(typeParams)}';
 
     // copy with params
     buff.write(' $clsWithTypeParams copyWith(');
@@ -1464,7 +1464,7 @@ class DataClassMacro extends MacroGenerator {
   }) {
     final dcp = state.getOrNull<String>('dartCorePrefix') ?? '';
     final prefix = state.importPrefix;
-    final clsWithTypeParams = '$prefix$className${MacroProperty.getClassTypeParameter(typeParams)}';
+    final clsWithTypeParams = '$prefix$className${MacroProperty.getTypeParameter(typeParams)}';
 
     /// generate equality
     buff
@@ -1563,7 +1563,7 @@ class DataClassMacro extends MacroGenerator {
   }) {
     final dcp = state.getOrNull<String>('dartCorePrefix') ?? '';
     final prefix = state.importPrefix;
-    final clsWithGenericParam = '$prefix$className${MacroProperty.getClassTypeParameter(typeParams)}';
+    final clsWithGenericParam = '$prefix$className${MacroProperty.getTypeParameter(typeParams)}';
     final genericParamAsType = typeParams.isNotEmpty == true ? '<\$${typeParams.map((tp) => tp.name).join(',')}>' : '';
 
     buff
@@ -1618,11 +1618,11 @@ class DataClassMacro extends MacroGenerator {
           );
         }
 
-        final typeParams = MacroProperty.getClassTypeParameter(fromJsonFn.typeParams);
+        final typeParams = MacroProperty.getTypeParameter(fromJsonFn.typeParams);
         return '${classSubType.importPrefix}${classSubType.className}.$fromJsonStaticFnName$typeParams($value)';
       }
 
-      final typeParams = MacroProperty.getClassTypeParameter(classTypeParams ?? const []);
+      final typeParams = MacroProperty.getTypeParameter(classTypeParams ?? const []);
       return '${classSubType.importPrefix}${classSubType.className}$suffixName.$fromJsonStaticFnName$typeParams($value)';
     }
 
@@ -1722,7 +1722,7 @@ class DataClassMacro extends MacroGenerator {
       List<MacroProperty>? typeParams, {
       String? customCaseKey,
     }) {
-      final classTypeParam = MacroProperty.getClassTypeParameter(typeParams ?? const []);
+      final classTypeParam = MacroProperty.getTypeParameter(typeParams ?? const []);
       final classType = '${subTypeInfo.importPrefix}${subTypeInfo.className}$classTypeParam';
       return '$classType v => v.$toJsonFnName(${typeParams?.map((e) => '$toJsonFnName${e.name}').join(', ') ?? ''})';
     }
@@ -1775,7 +1775,7 @@ class DataClassMacro extends MacroGenerator {
       String? customCaseKey,
     }) {
       final argName = subTypeInfo.className.toCamelCase();
-      final classTypeParam = MacroProperty.getClassTypeParameter(typeParams ?? const []);
+      final classTypeParam = MacroProperty.getTypeParameter(typeParams ?? const []);
       final classType = '${subTypeInfo.importPrefix}${subTypeInfo.className}$classTypeParam';
       return '$classType v => ${orNull ? '$argName?.call(v)' : '$argName(v)'}';
     }
@@ -1784,7 +1784,7 @@ class DataClassMacro extends MacroGenerator {
         ? '{${discriminatorValues.mapIndexed((i, e) {
             final range = discriminatorTypeParamsByIndexRange[i];
             final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-            final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
+            final classTypeParams = MacroProperty.getTypeParameter(typeParams ?? const []);
             final classType = '${e.$1.importPrefix}${e.$1.className}$classTypeParams';
             return '${orNull ? '' : 'required'} Res${orNull ? '?' : ''} Function($classType value)${orNull ? '?' : ''} ${e.$1.className.toCamelCase()}';
           }).join(',\n')}${orNull ? ',}\n' : ',\nRes Function($prefix$className$mainClassTypeParams value)? fallback,}\n'}'
@@ -1839,7 +1839,7 @@ class DataClassMacro extends MacroGenerator {
       String? customCaseKey,
     }) {
       final argName = subTypeInfo.className.toCamelCase();
-      final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
+      final classTypeParams = MacroProperty.getTypeParameter(typeParams ?? const []);
       final classType = '${subTypeInfo.className}$classTypeParams';
       return '${subTypeInfo.importPrefix}$classType v => $argName != null ? $argName(v) : v.copyWith()';
     }
@@ -1849,7 +1849,7 @@ class DataClassMacro extends MacroGenerator {
         ? '{${discriminatorValues.mapIndexed((i, e) {
             final range = discriminatorTypeParamsByIndexRange[i];
             final typeParams = range != null ? discriminatorTypeParams.sublist(range.start, range.end) : null;
-            final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
+            final classTypeParams = MacroProperty.getTypeParameter(typeParams ?? const []);
             final classType = '${e.$1.importPrefix}${e.$1.className}$classTypeParams';
             return '$classType Function($classType value)? ${e.$1.className.toCamelCase()}';
           }).join(',\n')},}'
@@ -1890,8 +1890,8 @@ class DataClassMacro extends MacroGenerator {
     final dcp = state.getOrNull<String>('dartCorePrefix') ?? '';
 
     String asTypeFunction(MacroClassDeclaration subTypeInfo, List<MacroProperty>? typeParams) {
-      final classTypeParams = MacroProperty.getClassTypeParameter(typeParams ?? const []);
-      final classTypeParamsWithBound = MacroProperty.getClassTypeParameterWithBound(typeParams ?? const []);
+      final classTypeParams = MacroProperty.getTypeParameter(typeParams ?? const []);
+      final classTypeParamsWithBound = MacroProperty.getTypeParameterWithBound(typeParams ?? const []);
       final classType = '${subTypeInfo.importPrefix}${subTypeInfo.className}$classTypeParams';
 
       return '''

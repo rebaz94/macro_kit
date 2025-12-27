@@ -165,16 +165,18 @@ class DataClassMacro extends MacroGenerator {
 
 **Key properties and methods:**
 
-- `suffixName` - The suffix appended to the class name (e.g., `Data` → `UserData`)
-- `generatedType` - The type of code being generated (mixin, class, abstract class, etc.)
-- `init()` - Optional setup method called before generation
+- `suffixName` - The suffix appended to the class name (e.g., `Data` → `UserData`).
+- `generatedType` - The type of code being generated (mixin, class, abstract class, etc.).
+- `init()` - Optional setup method called before generation.
 - `onClassTypeParameter()` - Called when the target class has type parameters.
-- `onClassFields()` - Called when class fields are collected
-- `onClassConstructors()` - Called when constructors are collected
-- `onClassMethods()` - Called when methods are collected
-- `onClassSubTypes()` - Called with all subtypes of the target class in the library
+- `onClassFields()` - Called when class fields are collected.
+- `onClassConstructors()` - Called when constructors are collected.
+- `onClassMethods()` - Called when methods are collected.
+- `onClassSubTypes()` - Called with all subtypes of the target class in the library.
+- `onTopLevelFunctionTypeParameter()` - Called when the target function has type parameters.
+- `onTopLevelFunction()` - Called when the target function is a top level function.
 - `onAsset()` - Called when a monitored asset file changes in configured directories.
-- `onGenerate()` - Final method where you generate and report code
+- `onGenerate()` - Final method where you generate and report code.
 
 ---
 

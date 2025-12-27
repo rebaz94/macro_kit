@@ -139,4 +139,4 @@ With `FieldRename.camelCase`:
 
 ---
 
-<p align="right"><a href="../topics/Write New Macro-topic.html">Next: Write New Macro</a></p>
+<p align="right"><a href="../topics/Global Configuration-topic.html">Next: Global Configuration</a></p>

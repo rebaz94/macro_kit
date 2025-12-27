@@ -346,6 +346,7 @@ class RunMacroMsg implements Message {
     required this.libraryPaths,
     this.sharedClasses = const {},
     this.classes,
+    this.topLevelFunctions,
     this.assetDeclaration,
     this.assetConfig,
     this.assetBasePath,
@@ -357,7 +358,7 @@ class RunMacroMsg implements Message {
     final sharedDec = <String, MacroClassDeclaration>{};
     final pendingUpdate = <void Function()>[];
 
-    final classesRes = runZoneGuarded(
+    final (classesRes, functionRes) = runZoneGuarded(
       fn: () {
         final rawSharedDec = json['sharedClasses'] as Map<String, dynamic>?;
 
@@ -373,12 +374,17 @@ class RunMacroMsg implements Message {
           classes.add(MacroClassDeclaration.fromJson(e));
         }
 
+        final functions = <MacroFunctionDeclaration>[];
+        for (final e in (json['functions'] as List?) ?? const []) {
+          functions.add(MacroFunctionDeclaration.fromJson(e));
+        }
+
         for (final update in pendingUpdate) {
           update();
         }
         pendingUpdate.clear();
 
-        return classes;
+        return (classes, functions);
       },
       values: {
         #sharedClasses: sharedDec,
@@ -396,6 +402,7 @@ class RunMacroMsg implements Message {
       ),
       sharedClasses: sharedDec,
       classes: classesRes,
+      topLevelFunctions: functionRes,
       assetDeclaration: json['asset'] != null
           ? MacroAssetDeclaration.fromJson(json['asset'] as Map<String, dynamic>)
           : null,
@@ -428,6 +435,9 @@ class RunMacroMsg implements Message {
   /// The class declarations of a processed dart code
   final List<MacroClassDeclaration>? classes;
 
+  /// The top level function declarations of a processed dart code
+  final List<MacroFunctionDeclaration>? topLevelFunctions;
+
   /// The file or directory which triggered macro generation
   final MacroAssetDeclaration? assetDeclaration;
 
@@ -456,6 +466,7 @@ class RunMacroMsg implements Message {
       'libraryPaths': libraryPaths.map((k, v) => MapEntry(k.toString(), v)),
       if (sharedClasses.isNotEmpty) 'sharedClasses': sharedClasses.map((k, v) => MapEntry(k, v.toJson())),
       if (classes?.isNotEmpty == true) 'classes': classes!.map((e) => e.toJson()).toList(),
+      if (topLevelFunctions?.isNotEmpty == true) 'functions': topLevelFunctions!.map((e) => e.toJson()).toList(),
       if (assetDeclaration != null) 'asset': assetDeclaration!.toJson(),
       if (assetConfig != null) 'assetConfig': assetConfig,
       if (assetBasePath != null) 'assetBasePath': assetBasePath,

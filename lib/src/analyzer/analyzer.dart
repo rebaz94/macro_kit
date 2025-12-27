@@ -8,6 +8,7 @@ import 'package:macro_kit/src/analyzer/analyze_class_ctor.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_field.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_method.dart';
 import 'package:macro_kit/src/analyzer/analyze_enum.dart';
+import 'package:macro_kit/src/analyzer/analyze_function.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
@@ -17,7 +18,16 @@ import 'package:macro_kit/src/common/models.dart';
 import 'package:watcher/watcher.dart';
 
 class MacroAnalyzer extends BaseAnalyzer
-    with Types, AnalyzeClass, AnalyzeClassField, AnalyzeClassCtor, AnalyzeClassMethod, AnalyzeEnum, Generator {
+    with
+        Types,
+        AnalyzeClass,
+        AnalyzeClassField,
+        AnalyzeClassCtor,
+        AnalyzeClassMethod,
+        AnalyzeFunction,
+        AnalyzeEnum,
+        Generator {
+  ///
   MacroAnalyzer({
     required super.logger,
     super.server = const DefaultFakeServerInterface(),
@@ -92,28 +102,28 @@ class MacroAnalyzer extends BaseAnalyzer
     }
 
     // step:2 analyze the code
-    var containsMacro = false;
+    bool containsMacro = false;
     for (final declaration in analysisResult.unit.declarations) {
       final decFrag = declaration.declaredFragment;
       if (decFrag == null) continue;
 
-      MacroClassDeclaration? macroClass;
       switch (declaration) {
         case ClassDeclaration() when decFrag is ClassFragment:
-          macroClass = await parseClass(decFrag);
+          final macroClass = await parseClass(decFrag);
+          containsMacro = containsMacro ? true : macroClass != null;
         case GenericTypeAlias() when decFrag.element is TypeAliasElement:
           final typeAliasElem = (decFrag.element as TypeAliasElement);
           if (typeAliasElem.aliasedType.element?.firstFragment case ClassFragment classFrag) {
-            macroClass = await parseClass(
+            final macroClass = await parseClass(
               classFrag,
               typeAliasAnnotation: decFrag.metadata.annotations,
               typeAliasClassName: decFrag.name,
             );
+            containsMacro = containsMacro ? true : macroClass != null;
           }
-      }
-
-      if (macroClass != null) {
-        containsMacro = true;
+        case FunctionDeclaration() when decFrag is TopLevelFunctionFragment:
+          final macroFunction = await parseTopLevelFunction(decFrag);
+          containsMacro = containsMacro ? true : macroFunction != null;
       }
     }
     if (!containsMacro) {
@@ -176,7 +186,27 @@ class MacroAnalyzer extends BaseAnalyzer
         newClasses.add(clazz);
       }
 
+      final newFunctions = <MacroFunctionDeclaration>[];
+      for (var fn in entry.value.topLevelFunctions) {
+        List<MacroConfig>? newConfigs;
+        if (fn.configs.length > 1) {
+          newConfigs = fn.configs.uniqueBy((v) => v.key.name);
+        }
+
+        if (newConfigs != null) {
+          fn = fn.copyWith(configs: newConfigs);
+        }
+
+        if (fn.libraryId != generateForLibraryId) {
+          // filter out from generation
+          continue;
+        }
+
+        newFunctions.add(fn);
+      }
+
       entry.value.classes = newClasses;
+      entry.value.topLevelFunctions = newFunctions;
     }
 
     // step:6 run macro

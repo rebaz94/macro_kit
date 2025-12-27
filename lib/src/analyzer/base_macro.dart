@@ -27,6 +27,7 @@ class MacroCapability {
     this.filterClassStaticMethod = false,
     this.filterMethods = '',
     this.filterClassMethodMetadata = '',
+    this.topLevelFunctions = false,
     this.collectClassSubTypes = false,
     this.filterCollectSubTypes = '',
   });
@@ -47,6 +48,7 @@ class MacroCapability {
       filterClassStaticMethod: (json['fcsm'] as bool?) ?? false,
       filterMethods: (json['fm'] as String?) ?? '',
       filterClassMethodMetadata: (json['fcmm'] as String?) ?? '',
+      topLevelFunctions: (json['tlf'] as bool?) ?? false,
       collectClassSubTypes: (json['ccst'] as bool?) ?? false,
       filterCollectSubTypes: (json['fccst'] as String?) ?? '',
     );
@@ -140,12 +142,13 @@ class MacroCapability {
   /// The names must match the method identifiers in the class.
   final String filterMethods;
 
-  /// Filter specified custom metadata defined on the constructor parameter.
+  /// Filter specified custom metadata defined on the method.
   ///
   /// To get all metadata, use '*' or filter by providing comma separated key 'JsonKey,CustomMetadata'
-  ///
-  /// Only applies when [classConstructors] is `true`.
   final String filterClassMethodMetadata;
+
+  /// Whether to retrieve all function declared in the library.
+  final bool topLevelFunctions;
 
   /// Whether to include all subclasses (subtypes) of this class.
   ///
@@ -200,6 +203,7 @@ class MacroCapability {
       filterClassStaticMethod: c.filterClassStaticMethod ? true : filterClassStaticMethod,
       filterMethods: combineFilter(filterMethods, c.filterMethods),
       filterClassMethodMetadata: combineFilter(filterClassMethodMetadata, c.filterClassMethodMetadata),
+      topLevelFunctions: c.topLevelFunctions ? true : topLevelFunctions,
       collectClassSubTypes: c.collectClassSubTypes ? true : collectClassSubTypes,
       filterCollectSubTypes: combineFilter(filterCollectSubTypes, c.filterCollectSubTypes),
     );
@@ -221,6 +225,7 @@ class MacroCapability {
       if (filterClassStaticMethod) 'fcsm': true,
       if (filterMethods.isNotEmpty) 'fm': filterMethods,
       if (filterClassMethodMetadata.isNotEmpty) 'fcmm': filterClassMethodMetadata,
+      if (topLevelFunctions) 'tlf': true,
       if (collectClassSubTypes) 'ccst': true,
       if (filterCollectSubTypes.isNotEmpty) 'fccst': filterCollectSubTypes,
     };
@@ -228,7 +233,7 @@ class MacroCapability {
 
   @override
   String toString() {
-    return 'MacroCapability{classFields: $classFields, filterClassInstanceFields: $filterClassInstanceFields, filterClassStaticFields: $filterClassStaticFields, filterClassIgnoreSetterOnly: $filterClassIgnoreSetterOnly, filterClassFieldMetadata: $filterClassFieldMetadata, classConstructors: $classConstructors, filterClassConstructorParameterMetadata: $filterClassConstructorParameterMetadata, mergeClassFieldWithConstructorParameter: $mergeClassFieldWithConstructorParameter, inspectFieldInitializer: $inspectFieldInitializer, classMethods: $classMethods, filterClassInstanceMethod: $filterClassInstanceMethod, filterClassStaticMethod: $filterClassStaticMethod, filterMethods: $filterMethods, filterClassMethodMetadata: $filterClassMethodMetadata, collectClassSubTypes: $collectClassSubTypes, filterCollectSubTypes: $filterCollectSubTypes}';
+    return 'MacroCapability{classFields: $classFields, filterClassInstanceFields: $filterClassInstanceFields, filterClassStaticFields: $filterClassStaticFields, filterClassIgnoreSetterOnly: $filterClassIgnoreSetterOnly, filterClassFieldMetadata: $filterClassFieldMetadata, classConstructors: $classConstructors, filterClassConstructorParameterMetadata: $filterClassConstructorParameterMetadata, mergeClassFieldWithConstructorParameter: $mergeClassFieldWithConstructorParameter, inspectFieldInitializer: $inspectFieldInitializer, classMethods: $classMethods, filterClassInstanceMethod: $filterClassInstanceMethod, filterClassStaticMethod: $filterClassStaticMethod, filterMethods: $filterMethods, filterClassMethodMetadata: $filterClassMethodMetadata, topLevelFunctions: $topLevelFunctions, collectClassSubTypes: $collectClassSubTypes, filterCollectSubTypes: $filterCollectSubTypes}';
   }
 }
 
@@ -283,7 +288,11 @@ abstract class BaseMacroGenerator {
 
   Future<void> onClassMethods(MacroState state, List<MacroMethod> executable);
 
-  Future<void> onClassSubTypes(MacroState state, List<MacroClassDeclaration> subTypes) async {}
+  Future<void> onTopLevelFunctionTypeParameter(MacroState state, List<MacroProperty> typeParameters);
+
+  Future<void> onTopLevelFunction(MacroState state, MacroMethod function);
+
+  Future<void> onClassSubTypes(MacroState state, List<MacroClassDeclaration> subTypes);
 
   Future<void> onAsset(MacroState state, MacroAssetDeclaration asset);
 

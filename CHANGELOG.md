@@ -1,6 +1,7 @@
 ## 0.5.0
 
-- Handle auto rebuild correctly when plugin is not connected yet
+- Add top-level function capability to macros.
+- Handle auto rebuild correctly when plugin is not connected yet.
 
 ## 0.4.10
 
