@@ -348,7 +348,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
 
     // setup asset watching
-    for (final context in contexts) {
+    for (final context in assetContexts) {
       if (_assetContextsSubs.containsKey(context)) continue;
 
       final watcher = Watcher(context);
@@ -363,6 +363,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     );
     await Future.wait(futures);
 
+    // cancel removed contexts
     var toRemove = _subs.keys.where((p) => !contexts.contains(p)).toList();
     for (final path in toRemove) {
       final sub = _subs[path];
@@ -381,7 +382,8 @@ class MacroAnalyzerServer implements MacroServerInterface {
       _subs.remove(path);
     }
 
-    toRemove = _assetContextsSubs.keys.where((p) => !contexts.contains(p)).toList();
+    // cancel removed asset contexts
+    toRemove = _assetContextsSubs.keys.where((p) => !assetContexts.contains(p)).toList();
     for (final path in toRemove) {
       final sub = _assetContextsSubs[path];
       if (sub == null) {

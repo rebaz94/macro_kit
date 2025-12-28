@@ -1,3 +1,7 @@
+## 0.5.1
+
+- Fixed an issue where the watched asset directory was removed incorrectly
+
 ## 0.5.0
 
 - Add top-level function capability to macros.
