@@ -4,7 +4,121 @@
 
 part of 'measure_time.dart';
 
-Future<(List<Map<String, dynamic>>, int)> getTodos() async {
+mixin TodoData {
+  static Todo fromJson(Map<String, dynamic> json) {
+    return Todo(
+      id: (json['id'] as num).toInt(),
+      userId: (json['userId'] as num).toInt(),
+      title: json['title'] as String,
+      completed: json['completed'] as bool,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as Todo;
+    return <String, dynamic>{
+      'id': v.id,
+      'userId': v.userId,
+      'title': v.title,
+      'completed': v.completed,
+    };
+  }
+
+  Todo copyWith({
+    int? id,
+    int? userId,
+    String? title,
+    bool? completed,
+  }) {
+    final v = this as Todo;
+    return Todo(
+      id: id ?? v.id,
+      userId: userId ?? v.userId,
+      title: title ?? v.title,
+      completed: completed ?? v.completed,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Todo;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is Todo &&
+            (identical(other.id, v.id) || other.id == v.id) &&
+            (identical(other.userId, v.userId) || other.userId == v.userId) &&
+            (identical(other.title, v.title) || other.title == v.title) &&
+            (identical(other.completed, v.completed) || other.completed == v.completed));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Todo;
+    return Object.hash(
+      runtimeType,
+      v.id,
+      v.userId,
+      v.title,
+      v.completed,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Todo;
+    return 'Todo{id: ${v.id}, userId: ${v.userId}, title: ${v.title}, completed: ${v.completed}}';
+  }
+}
+
+mixin TodosData {
+  static Todos fromJson(Map<String, dynamic> json) {
+    return Todos(
+      items: (json['items'] as List<dynamic>).map((e) => TodoData.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as Todos;
+    return <String, dynamic>{
+      'items': v.items.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  Todos copyWith({
+    List<Todo>? items,
+  }) {
+    final v = this as Todos;
+    return Todos(
+      items: items ?? v.items,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Todos;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is Todos &&
+            const DeepCollectionEquality().equals(other.items, v.items));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Todos;
+    return Object.hash(
+      runtimeType,
+      const DeepCollectionEquality().hash(v.items),
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Todos;
+    return 'Todos{items: ${v.items}}';
+  }
+}
+
+Future<(Todos, int)> getTodos() async {
   final s = Stopwatch()..start();
   try {
     final res = await _getTodos();
@@ -15,7 +129,7 @@ Future<(List<Map<String, dynamic>>, int)> getTodos() async {
   }
 }
 
-Future<(Map<String, dynamic>, int)> getTodoById(int id) async {
+Future<(Todo, int)> getTodoById(int id) async {
   final s = Stopwatch()..start();
   try {
     final res = await _getTodoById(id);
@@ -26,7 +140,7 @@ Future<(Map<String, dynamic>, int)> getTodoById(int id) async {
   }
 }
 
-Future<(Map<String, dynamic>, int)> getTodoOfTimed({required int id}) async {
+Future<(Todo, int)> getTodoOfTimed({required int id}) async {
   final s = Stopwatch()..start();
   try {
     final res = await getTodoOf(id: id);

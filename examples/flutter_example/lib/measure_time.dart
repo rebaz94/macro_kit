@@ -3,26 +3,53 @@ import 'dart:convert';
 import 'package:flutter_example/example_macro/timed_macro.dart';
 // ignore: depend_on_referenced_packages
 import 'package:http/http.dart' as http;
+import 'package:macro_kit/macro_kit.dart';
 
 part 'measure_time.g.dart';
 
+@dataClassMacro
+class Todo with TodoData {
+  const Todo({
+    required this.id,
+    required this.userId,
+    required this.title,
+    required this.completed,
+  });
+
+  final int id;
+  final int userId;
+  final String title;
+  final bool completed;
+}
+
+@dataClassMacro
+class Todos with TodosData {
+  Todos({required this.items});
+
+  static Todos fromJsonList(List json) {
+    return Todos(items: json.map((e) => TodoData.fromJson(e as Map<String, dynamic>)).toList());
+  }
+
+  final List<Todo> items;
+}
+
 @timedMacro
-Future<List<Map<String, dynamic>>> _getTodos() async {
+Future<Todos> _getTodos() async {
   final result = await http.get(Uri.parse('https://jsonplaceholder.typicode.com/todos'));
   final res = jsonDecode(result.body);
-  return (res as List).map((e) => e as Map<String, dynamic>).toList();
+  return Todos.fromJsonList(res as List);
 }
 
 @timedMacro
-Future<Map<String, dynamic>> _getTodoById(int id) async {
+Future<Todo> _getTodoById(int id) async {
   final result = await http.get(Uri.parse('https://jsonplaceholder.typicode.com/todos/$id'));
-  return jsonDecode(result.body);
+  return TodoData.fromJson(jsonDecode(result.body) as Map<String, dynamic>);
 }
 
 @timedMacro
-Future<Map<String, dynamic>> getTodoOf({required int id}) async {
+Future<Todo> getTodoOf({required int id}) async {
   final result = await http.get(Uri.parse('https://jsonplaceholder.typicode.com/todos/$id'));
-  return jsonDecode(result.body);
+  return TodoData.fromJson(jsonDecode(result.body) as Map<String, dynamic>);
 }
 
 void operation(int i) {}
