@@ -1941,12 +1941,24 @@ extension on MacroProperty {
 
 typedef _RangeInfo = ({int start, int end});
 
-/// `DataClassMacro` generates common data-class boilerplate such as
+/// **DataClassMacro** generates common data-class boilerplate such as
 /// `fromJson`, `toJson`, `copyWith`, equality, `toString`, and (in the
 /// future) constructor implementations.
 ///
 /// The macro is fully configurable through annotation metadata and can
-/// optionally support polymorphic class hierarchies via a
+/// optionally support polymorphic class hierarchies via a discriminator configuration
+///
+/// **Example**
+/// Annotate your class with `@Macro(DataClassMacro)` or use the shorthand
+/// `@dataClassMacro`, then apply a `with` clause to include the generated
+/// mixin, e.g.:
+///
+/// ```dart
+/// @dataClassMacro
+/// class User with UserDataClass {
+///   ...
+/// }
+/// ```
 const dataClassMacro = Macro(
   DataClassMacro(
     capability: dataClassMacroCapability,
