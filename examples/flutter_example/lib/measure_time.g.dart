@@ -6,32 +6,57 @@ part of 'measure_time.dart';
 
 Future<(List<Map<String, dynamic>>, int)> getTodos() async {
   final s = Stopwatch()..start();
-  final res = await _getTodos();
-  return (res, s.elapsedMicroseconds);
+  try {
+    final res = await _getTodos();
+    return (res, (s..stop()).elapsedMicroseconds);
+  } catch (_) {
+    s.stop();
+    rethrow;
+  }
 }
 
 Future<(Map<String, dynamic>, int)> getTodoById(int id) async {
   final s = Stopwatch()..start();
-  final res = await _getTodoById(id);
-  return (res, s.elapsedMicroseconds);
+  try {
+    final res = await _getTodoById(id);
+    return (res, (s..stop()).elapsedMicroseconds);
+  } catch (_) {
+    s.stop();
+    rethrow;
+  }
 }
 
 Future<(Map<String, dynamic>, int)> getTodoOfTimed({required int id}) async {
   final s = Stopwatch()..start();
-  final res = await getTodoOf(id: id);
-  return (res, s.elapsedMicroseconds);
+  try {
+    final res = await getTodoOf(id: id);
+    return (res, (s..stop()).elapsedMicroseconds);
+  } catch (_) {
+    s.stop();
+    rethrow;
+  }
 }
 
 int syncFunctionsTimed([void Function(int i) fn = operation, bool? a = true, bool? c]) {
   final s = Stopwatch()..start();
-  syncFunctions(fn, a, c);
-  return s.elapsedMicroseconds;
+  try {
+    syncFunctions(fn, a, c);
+    return (s..stop()).elapsedMicroseconds;
+  } catch (_) {
+    s.stop();
+    rethrow;
+  }
 }
 
 int syncFunctions2Timed(void Function(int i) fn, {bool a = false, bool b = true, required String c}) {
   final s = Stopwatch()..start();
-  syncFunctions2(fn, a: a, b: b, c: c);
-  return s.elapsedMicroseconds;
+  try {
+    syncFunctions2(fn, a: a, b: b, c: c);
+    return (s..stop()).elapsedMicroseconds;
+  } catch (_) {
+    s.stop();
+    rethrow;
+  }
 }
 
 int syncFunctions3Timed({
@@ -42,6 +67,11 @@ int syncFunctions3Timed({
   void Function(int i)? fn2,
 }) {
   final s = Stopwatch()..start();
-  syncFunctions3(a: a, b: b, c: c, fn: fn, fn2: fn2);
-  return s.elapsedMicroseconds;
+  try {
+    syncFunctions3(a: a, b: b, c: c, fn: fn, fn2: fn2);
+    return (s..stop()).elapsedMicroseconds;
+  } catch (_) {
+    s.stop();
+    rethrow;
+  }
 }

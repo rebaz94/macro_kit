@@ -194,14 +194,20 @@ class TimedMacro extends MacroGenerator {
     buff.write(isAsync ? ' async ' : ' ');
     buff.write('{\n');
     buff.write('  final s = ${dcp}Stopwatch()..start();\n');
+    buff.write('  try {\n');
 
     if (hasReturnValue) {
       buff.write('  final res = ${isAsync ? 'await ' : ''}$originalName$typeParamsCall($argsStr);\n');
-      buff.write('  return (res, s.$timeUnitProp);\n');
+      buff.write('  return (res, (s..stop()).$timeUnitProp);\n');
     } else {
       buff.write('  ${isAsync ? 'await ' : ''}$originalName$typeParamsCall($argsStr);\n');
-      buff.write('  return s.$timeUnitProp;\n');
+      buff.write('  return (s..stop()).$timeUnitProp;\n');
     }
+
+    buff.write('  }\n catch(_) { \n');
+    buff.writeln('  s.stop();');
+    buff.writeln('  rethrow;');
+    buff.writeln('}\n');
 
     buff.write('}\n');
 
