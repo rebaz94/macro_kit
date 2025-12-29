@@ -1,3 +1,7 @@
+## 0.5.3
+
+- Fix formatting
+
 ## 0.5.2
 
 - Added support for handling duplicate contexts (package names) by defining an `id` in the pubspec

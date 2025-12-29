@@ -51,5 +51,3 @@ class ExternalModel2<T> {
 
   final T data;
 }
-
-

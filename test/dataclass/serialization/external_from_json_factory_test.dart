@@ -31,13 +31,11 @@ class ExternalModel {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-          other is ExternalModel && runtimeType == other.runtimeType && data == other.data;
+      identical(this, other) || other is ExternalModel && runtimeType == other.runtimeType && data == other.data;
 
   @override
   int get hashCode => data.hashCode;
 }
-
 
 @dataClassMacro
 class Wrapped2 with Wrapped2Data {
@@ -65,8 +63,7 @@ class ExternalModel2<T> {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-          other is ExternalModel2 && runtimeType == other.runtimeType && data == other.data;
+      identical(this, other) || other is ExternalModel2 && runtimeType == other.runtimeType && data == other.data;
 
   @override
   int get hashCode => data.hashCode;
@@ -75,22 +72,34 @@ class ExternalModel2<T> {
 void main() {
   group('external fromJson factory', () {
     test('from json succeeds-1', () {
-      var w = Wrapped(id: '1', model: ExternalModel(data: 'hello'));
+      var w = Wrapped(
+        id: '1',
+        model: ExternalModel(data: 'hello'),
+      );
       expect(WrappedData.fromJson(jsonDecode('{"id": "1", "model": {"data": "hello"}}')), w);
     });
 
     test('to json succeeds-1', () {
-      var w = Wrapped(id: '1', model: ExternalModel(data: 'hello'));
+      var w = Wrapped(
+        id: '1',
+        model: ExternalModel(data: 'hello'),
+      );
       expect(jsonEncode(w.toJson()), equals('{"id":"1","model":{"data":"hello"}}'));
     });
 
     test('from json succeeds-2', () {
-      var w = Wrapped2(id: '1', model: ExternalModel2(data: 'hello'));
+      var w = Wrapped2(
+        id: '1',
+        model: ExternalModel2(data: 'hello'),
+      );
       expect(Wrapped2Data.fromJson(jsonDecode('{"id": "1", "model": {"data": "hello"}}')), w);
     });
 
     test('to json succeeds-2', () {
-      var w = Wrapped2(id: '1', model: ExternalModel2(data: 'hello'));
+      var w = Wrapped2(
+        id: '1',
+        model: ExternalModel2(data: 'hello'),
+      );
       expect(jsonEncode(w.toJson()), equals('{"id":"1","model":{"data":"hello"}}'));
     });
   });
