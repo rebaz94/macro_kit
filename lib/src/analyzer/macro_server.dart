@@ -227,7 +227,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       // Preserve auto-rebuild state if context already exists
       final existingInfo = _contextRegistry[contextPath];
 
-      final packageName = analyzer.loadContextPackageName(contextPath);
+      final (packageName, packageId) = analyzer.loadContextPackageInfo(contextPath);
       final config = analyzer.loadMacroConfig(contextPath, packageName);
       final macroContextInfo = await analyzer.evaluateMacroContextConfiguration(
         existingSourceContext: existingInfo?.sourceContext,
@@ -236,6 +236,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
       final contextInfo = ContextInfo(
         path: contextPath,
+        packageId: packageId,
         packageName: packageName,
         isDynamic: existingInfo?.isDynamic ?? false,
         config: config,
@@ -610,7 +611,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
             final client = ClientChannelInfo(
               id: msg.id,
               channel: channel,
-              package: msg.package,
+              packages: msg.package.parsedPackageWithId(),
               macros: msg.macros,
               assetMacros: msg.assetMacros,
               timeout: msg.runTimeout,
@@ -754,8 +755,8 @@ class MacroAnalyzerServer implements MacroServerInterface {
       }
 
       // Check if client works with this package/context
-      if (!clientInfo.autoRunMacro && clientInfo.package.values.contains(contextInfo.packageName) ||
-          clientInfo.package.values.contains(contextInfo.path)) {
+      if (!clientInfo.autoRunMacro && clientInfo.containsPackageOf(contextInfo.packageName, contextInfo.packageId) ||
+          clientInfo.containsPackagePathOf(contextInfo.path)) {
         return entry.key;
       }
     }
@@ -780,8 +781,8 @@ class MacroAnalyzerServer implements MacroServerInterface {
     for (final entry in _clientChannels.entries) {
       final clientInfo = entry.value;
 
-      if (!clientInfo.autoRunMacro && clientInfo.package.values.contains(contextInfo.packageName) ||
-          clientInfo.package.values.contains(contextInfo.path)) {
+      if (!clientInfo.autoRunMacro && clientInfo.containsPackageOf(contextInfo.packageName, contextInfo.packageId) ||
+          clientInfo.containsPackagePathOf(contextInfo.path)) {
         return entry.key;
       }
     }
@@ -802,8 +803,8 @@ class MacroAnalyzerServer implements MacroServerInterface {
     for (final entry in _clientChannels.entries) {
       final clientInfo = entry.value;
 
-      if (clientInfo.autoRunMacro && clientInfo.package.values.contains(contextInfo.packageName) ||
-          clientInfo.package.values.contains(contextInfo.path)) {
+      if (clientInfo.autoRunMacro && clientInfo.containsPackageOf(contextInfo.packageName, contextInfo.packageId) ||
+          clientInfo.containsPackagePathOf(contextInfo.path)) {
         _cachedRunnableMacroClients[contextInfo.packageName] = entry.key;
         return entry.key;
       }
@@ -827,14 +828,33 @@ class MacroAnalyzerServer implements MacroServerInterface {
       return;
     }
 
-    final clientPkgNames = clientChannel.package.values;
     final autoRebuildConfigs = <ContextInfo>[];
     bool hasPackageContext = false;
     bool disabledAutoRebuild = false;
 
     // Check each context in the registry
     for (final contextInfo in _contextRegistry.values) {
-      if (!clientPkgNames.contains(contextInfo.packageName) && !clientPkgNames.contains(contextInfo.path)) {
+      String buildForPkg = '';
+
+      for (final pkg in clientChannel.packages) {
+        if (pkg.name != contextInfo.packageName && pkg.name != contextInfo.path) {
+          continue;
+        }
+
+        // ensure multiple registered package with same name don't trigger rebuild
+        if (pkg.id != contextInfo.packageId) {
+          logger.warn(
+            'Detected a duplicate package for: ${contextInfo.packageName}, excluded build: ${contextInfo.path}',
+          );
+          continue;
+        }
+
+        buildForPkg = pkg.name;
+        break;
+      }
+
+      // package not found
+      if (buildForPkg.isEmpty) {
         continue;
       }
 
@@ -850,6 +870,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
         // Skip if client is an auto-run macro activated and configured to skip
         if (clientChannel.autoRunMacro && config.skipConnectRebuildWithAutoRun) {
+          disabledAutoRebuild = true;
           continue;
         }
       } else if (contextInfo.autoRebuildExecuted) {
@@ -863,10 +884,10 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     // Handle dynamic contexts (for testing)
     if (!hasPackageContext) {
-      for (final pkgName in clientChannel.package.values) {
-        if (!pkgName.contains('/') && !pkgName.contains('\\')) continue;
+      for (final pkg in clientChannel.packages) {
+        if (!pkg.name.contains('/') && !pkg.name.contains('\\')) continue;
 
-        final config = analyzer.loadMacroConfig(pkgName, pkgName);
+        final config = analyzer.loadMacroConfig(pkg.name, pkg.name);
 
         if (config.alwaysRebuildOnConnect) {
           // It always rebuild
@@ -883,14 +904,15 @@ class MacroAnalyzerServer implements MacroServerInterface {
         // }
 
         final contextInfo = ContextInfo(
-          path: pkgName,
-          packageName: pkgName,
+          path: pkg.name,
+          packageId: pkg.name,
+          packageName: pkg.name,
           isDynamic: true,
           config: config,
           sourceContext: MacroContextSourceCodeInfo.testContext(),
         );
 
-        _contextRegistry[pkgName] = contextInfo;
+        _contextRegistry[pkg.name] = contextInfo;
         autoRebuildConfigs.add(contextInfo);
       }
 

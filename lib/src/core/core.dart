@@ -2339,6 +2339,14 @@ class PackageInfo {
   /// The list of package names that can connect to the MacroPlugin server.
   final List<String> values;
 
+  /// Return a list of tuple for each package with extracted id
+  List<({String name, String id})> parsedPackageWithId() {
+    return values.map((p) {
+      final index = p.indexOf('::');
+      return index == -1 ? (name: p, id: '') : (name: p.substring(0, index), id: p.substring(index + 2));
+    }).toList();
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'values': values,

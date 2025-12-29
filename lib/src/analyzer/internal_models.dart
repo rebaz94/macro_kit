@@ -19,6 +19,7 @@ int newId() => random.nextInt(100000);
 class ContextInfo {
   ContextInfo({
     required this.path,
+    required this.packageId,
     required this.packageName,
     required this.isDynamic,
     required this.config,
@@ -26,6 +27,7 @@ class ContextInfo {
   });
 
   final String path;
+  final String packageId;
   final String packageName;
   final bool isDynamic;
   final MacroClientConfiguration config;
@@ -40,14 +42,15 @@ class ContextInfo {
       other is ContextInfo &&
           runtimeType == other.runtimeType &&
           path == other.path &&
+          packageId == other.packageId &&
           packageName == other.packageName;
 
   @override
-  int get hashCode => path.hashCode ^ packageName.hashCode;
+  int get hashCode => path.hashCode ^ packageId.hashCode ^ packageName.hashCode;
 
   @override
   String toString() {
-    return 'ContextInfo{path: $path, packageName: $packageName, isDynamic: $isDynamic, config: $config, sourceContext: $sourceContext, autoRebuildExecuted: $autoRebuildExecuted}';
+    return 'ContextInfo{path: $path, packageId: $packageId, packageName: $packageName, isDynamic: $isDynamic, config: $config, sourceContext: $sourceContext, autoRebuildExecuted: $autoRebuildExecuted}';
   }
 }
 
@@ -96,7 +99,7 @@ class ClientChannelInfo {
   ClientChannelInfo({
     required this.id,
     required this.channel,
-    required this.package,
+    required this.packages,
     required this.macros,
     required this.assetMacros,
     required this.timeout,
@@ -107,13 +110,33 @@ class ClientChannelInfo {
 
   final int id;
   final WsChannel channel;
-  final PackageInfo package;
+  final List<({String name, String id})> packages;
   final List<String> macros;
   final Map<String, List<AssetMacroInfo>> assetMacros;
   final Duration timeout;
   final bool autoRunMacro;
   final bool managedByMacroServer;
   final async.StreamSubscription? sub;
+
+  bool containsPackageOf(String pkgName, String pkgId) {
+    for (final pkg in packages) {
+      if (pkg.name == pkgName && pkg.id == pkgId) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool containsPackagePathOf(String pkgPath) {
+    for (final pkg in packages) {
+      if (pkg.name == pkgPath) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }
 
 extension type CountedCache._((int, Object) _v) {

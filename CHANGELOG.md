@@ -1,3 +1,8 @@
+## 0.5.2
+
+- Added support for handling duplicate contexts (package names) by defining an `id` in the pubspec
+  and passing it to `PackageInfo`, for example: `PackageInfo('my_package::123')`
+
 ## 0.5.1
 
 - Fixed an issue where the watched asset directory was removed incorrectly

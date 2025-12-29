@@ -175,19 +175,21 @@ abstract class BaseAnalyzer {
   }
 
   @pragma('vm:prefer-inline')
-  String loadContextPackageName(String context) {
+  (String, String) loadContextPackageInfo(String context) {
     try {
       final pubspecContent = loadYamlNode(File(p.join(context, 'pubspec.yaml')).readAsStringSync());
-      return switch (pubspecContent.value['name']) {
-        String v => v,
-        _ => '',
+      return switch ((pubspecContent.value['name'], pubspecContent.value['id'])) {
+        (String name, String id) val => val,
+        (String name, int id) val => (val.$1, val.$2.toString()),
+        (String name, _) => (name, ''),
+        _ => ('', ''),
       };
     } catch (e) {
       logger.error(
         'Unable to read package name from pubspec.yaml for context: $context. '
         'Using full context path as package name fallback.',
       );
-      return context;
+      return (context, '');
     }
   }
 
