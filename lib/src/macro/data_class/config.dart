@@ -197,7 +197,7 @@ class JsonKeyConfig {
     final fromJsonProp = props['fromJson'];
 
     if (fromJsonProp != null) {
-      if (fromJsonProp.typeInfo != TypeInfo.function || !fromJsonProp.isStatic) {
+      if (fromJsonProp.typeInfo != TypeInfo.function || !(fromJsonProp.isStatic || fromJsonProp.isFactory)) {
         throw MacroException(
           'The provided JsonKey.fromJson must be a static function but got: ${fromJsonProp.constantValue}',
         );

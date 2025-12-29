@@ -1672,7 +1672,7 @@ mixin RepoFullData {
     );
   }
 
-  Map<String, dynamic> toJson(Object? Function(Issue v) toJsonIssues) {
+  Map<String, dynamic> toJson() {
     final v = this as RepoFull;
     return <String, dynamic>{
       'repository': v.repository.toJson(),

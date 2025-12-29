@@ -274,3 +274,57 @@ mixin ClassBData {
     return 'ClassB{someVariable: ${v.someVariable}}';
   }
 }
+
+mixin Wrapped3Data<T> {
+  static Wrapped3<T> fromJson<T>(Map<String, dynamic> json, T Function(Object? v) fromJsonT) {
+    return Wrapped3<T>(
+      id: json['id'] as String,
+      model: fromJsonT(json['model']),
+    );
+  }
+
+  Map<String, dynamic> toJson(Object? Function(T v) toJsonT) {
+    final v = this as Wrapped3<T>;
+    return <String, dynamic>{
+      'id': v.id,
+      'model': toJsonT(v.model),
+    };
+  }
+
+  Wrapped3<T> copyWith({
+    String? id,
+    T? model,
+  }) {
+    final v = this as Wrapped3<T>;
+    return Wrapped3<T>(
+      id: id ?? v.id,
+      model: model ?? v.model,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Wrapped3<T>;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is Wrapped3<T> &&
+            (identical(other.id, v.id) || other.id == v.id) &&
+            (identical(other.model, v.model) || other.model == v.model));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Wrapped3<T>;
+    return Object.hash(
+      runtimeType,
+      v.id,
+      v.model,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Wrapped3<T>;
+    return 'Wrapped3<$T>{id: ${v.id}, model: ${v.model}}';
+  }
+}

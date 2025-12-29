@@ -26,7 +26,7 @@ extension ExecutableElementExtension on ExecutableElement {
       if (name == 'new') {
         return enclosingElement!.name!;
       }
-      return '${enclosingElement!.name}.$displayName';
+      return '${enclosingElement!.name}.$name';
     }
 
     throw MacroException('$runtimeType is not supported');

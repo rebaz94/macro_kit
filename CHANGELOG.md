@@ -2,6 +2,9 @@
 
 - Added support for handling duplicate contexts (package names) by defining an `id` in the pubspec
   and passing it to `PackageInfo`, for example: `PackageInfo('my_package::123')`
+- Added support for using a `fromJson` factory from an external class via the `@JsonKey` annotation
+- Fixed an issue where an extra generic argument was added to `toJson` for a generic field that does
+  not use the class type parameter
 
 ## 0.5.1
 

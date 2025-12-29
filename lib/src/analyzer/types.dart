@@ -209,7 +209,11 @@ mixin Types on BaseAnalyzer {
       return (
         constantValue: result,
         reqConversion: false,
-        modifier: MacroModifier.create(isStatic: fieldFnValue.isStatic),
+        modifier: MacroModifier.create(
+          isStatic: fieldFnValue.isStatic,
+          // it consider a factory function if used function is constructor
+          isFactory: fieldFnValue.kind == ElementKind.CONSTRUCTOR,
+        ),
       );
     }
     // check maybe its enum

@@ -72,6 +72,17 @@ enum EnumB {
   final int value;
 }
 
+@dataClassMacro
+class Wrapped3<T> with Wrapped3Data<T> {
+  Wrapped3({
+    required this.id,
+    required this.model,
+  });
+
+  final String id;
+  final T model;
+}
+
 void main() {
   group(
     'Basic Serialization',
@@ -216,6 +227,11 @@ void main() {
 
         expect(ClassBData.fromJson(a.toJson()), a);
         expect(ClassBData.fromJson(b.toJson()), b);
+      });
+
+      test('from json success-5', () {
+        var a = Wrapped3<String>(id: '1', model: 'hello');
+        expect(Wrapped3Data.fromJson<String>(a.toJson((v) => v), (v) => v as String), a);
       });
     },
   );

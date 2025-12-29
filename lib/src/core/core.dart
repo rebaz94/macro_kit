@@ -691,6 +691,9 @@ class MacroProperty {
   /// Returns true if the declaration is static (based on either the modifier or constant modifier)
   bool get isStatic => modifier.isStatic || constantModifier?.isStatic == true;
 
+  /// Returns true if the declaration is factory (based on either the modifier or constant modifier)
+  bool get isFactory => modifier.isFactory || constantModifier?.isFactory == true;
+
   Map<String, Object?>? _cacheKeysByKeyName;
 
   /// Checks if this property is a `Map<String, dynamic>` type.

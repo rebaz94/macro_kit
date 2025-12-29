@@ -955,7 +955,7 @@ class DataClassMacro extends MacroGenerator {
           fromJsonReturnTypeProp.type,
           expectedType,
           valueTypeIsGeneric: fromJsonReturnTypeProp.typeInfo == TypeInfo.generic,
-        )) {
+        ) ) {
           throw MacroException(
             'The parameter `${field.name}` of type: `${field.type}` in `${state.targetName}` has incompatible $fromJsonStaticFnName function, '
             'the $fromJsonStaticFnName return must be type of: `${field.type}` but got: `${fromJsonReturnTypeProp.type}`',
@@ -1261,6 +1261,9 @@ class DataClassMacro extends MacroGenerator {
           var toJsonArgFnRef = '$toJsonFnName${tp.type}';
           var toJsonArgFn = '${dcp}Object? Function(${tp.importPrefix}${tp.type} v) $toJsonArgFnRef';
           if (toJsonGenericsArgs.contains(toJsonArgFn) || !field.typeInfo.isClassLike) {
+            continue;
+          } else if (!typeParams.any((t) => t.type == tp.type)) {
+            // type parameter not coming from class type param, so don't add generic toJson fn
             continue;
           }
 
