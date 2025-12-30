@@ -111,3 +111,57 @@ mixin Wrapped2Data {
     return 'Wrapped2{id: ${v.id}, model: ${v.model}}';
   }
 }
+
+mixin Wrapped3Data {
+  static Wrapped3 fromJson(Map<String, dynamic> json) {
+    return Wrapped3(
+      id: json['id'] as String,
+      model: CustomModel.fromJson(json['model'] as Map<String, dynamic>),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as Wrapped3;
+    return <String, dynamic>{
+      'id': v.id,
+      'model': Wrapped3.toJ(v.model),
+    };
+  }
+
+  Wrapped3 copyWith({
+    String? id,
+    CustomModel<String>? model,
+  }) {
+    final v = this as Wrapped3;
+    return Wrapped3(
+      id: id ?? v.id,
+      model: model ?? v.model,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Wrapped3;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is Wrapped3 &&
+            (identical(other.id, v.id) || other.id == v.id) &&
+            (identical(other.model, v.model) || other.model == v.model));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Wrapped3;
+    return Object.hash(
+      runtimeType,
+      v.id,
+      v.model,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Wrapped3;
+    return 'Wrapped3{id: ${v.id}, model: ${v.model}}';
+  }
+}

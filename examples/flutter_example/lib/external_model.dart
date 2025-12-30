@@ -28,7 +28,7 @@ class ExternalModel {
 }
 
 @dataClassMacro
-class Wrapped2 with WrappedData {
+class Wrapped2 with Wrapped2Data {
   Wrapped2({
     required this.id,
     required this.model,
@@ -47,6 +47,43 @@ class ExternalModel2<T> {
 
   factory ExternalModel2.fromJson(Map<String, dynamic> json) {
     return ExternalModel2(data: json['data'] as T);
+  }
+
+  final T data;
+}
+
+@dataClassMacro
+class Wrapped3 with Wrapped3Data {
+  Wrapped3({
+    required this.id,
+    required this.model,
+  });
+
+  final String id;
+  @JsonKey(fromJson: CustomModel.fromJson<String>, toJson: toJ)
+  final CustomModel<String> model;
+
+  static CustomModel<String> fromJ(Map<String, dynamic> json) {
+    return CustomModel.fromJson(json);
+  }
+
+
+  static Map<String, dynamic> toJ(CustomModel<String> model) {
+    return model.toJson();
+  }
+}
+
+class CustomModel<T> {
+  CustomModel({required this.data});
+
+  static CustomModel<T> fromJson<T>(Map<String, dynamic> json) {
+    return CustomModel<T>(
+      data: json['data'] as T,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'data': data};
   }
 
   final T data;

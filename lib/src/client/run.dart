@@ -163,18 +163,30 @@ List<String> get macroDartRunnerCommand {
   return const ['dart', 'run', 'lib/macro_context.dart'];
 }
 
-/// Command to run the macro runner using Flutter test runner
+/// Command used to run the macro runner via the Flutter test runner.
 ///
-/// Use this when your macro dependencies include Flutter packages. Runs the
-/// macro context file via the Flutter test runner with no timeout, keeping
-/// the process alive until terminated by the macro server.
+/// Use this when your macro dependencies include Flutter packages. This runs
+/// the macro context file using the Flutter test runner with no timeout,
+/// keeping the process alive until it is terminated by the macro server.
 ///
-/// Requires [keepMacroRunner] to be called after `setupMacro()` in your
-/// `macro_context.dart` to prevent the test runner from exiting.
+/// Important:
+/// You must call [keepMacroRunner] after `setupMacro()` in your
+/// `macro_context.dart` file. This prevents the Flutter test runner from
+/// exiting immediately.
 ///
-/// Command: `flutter test --timeout none lib/macro_context.dart`
+/// Command:
+/// `flutter test --timeout none --ignore-timeouts lib/macro_context.dart`
+///
+/// Environment notes:
+/// If you run `macro_context.dart` manually (outside of your app) and want it
+/// to behave as a code generator, you must pass the
+/// `managed_by_macro_server=true` environment variable to the process.
+///
+/// This is handled automatically when running inside the app or when
+/// [autoRunMacro] is enabled. If the macro runner is executed separately
+/// for any reason, this environment variable must be provided manually.
 List<String> get macroFlutterRunnerCommand {
-  return const ['flutter', 'test', '--timeout', 'none', 'lib/macro_context.dart'];
+  return const ['flutter', 'test', '--timeout', 'none', '--ignore-timeouts', 'lib/macro_context.dart'];
 }
 
 /// Keeps the macro runner process alive when launched via test runners

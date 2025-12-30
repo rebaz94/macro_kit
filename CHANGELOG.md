@@ -1,3 +1,7 @@
+## 0.5.4
+
+- Fix timeout issue when running `macro_context.dart` via the Flutter runner
+
 ## 0.5.3
 
 - Fix formatting
