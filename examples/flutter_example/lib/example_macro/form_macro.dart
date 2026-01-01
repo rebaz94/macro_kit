@@ -50,9 +50,9 @@ class FormMacro extends MacroGenerator {
   }
 
   @override
-  Future<void> onClassFields(MacroState state, List<MacroProperty> classFields) async {
+  Future<void> onClassFields(MacroState state, List<MacroProperty> fields) async {
     // Filter only schema fields
-    final schemaFields = classFields.where(_isSchemaField).toList();
+    final schemaFields = fields.where(_isSchemaField).toList();
     state.set('schemaFields', schemaFields);
   }
 

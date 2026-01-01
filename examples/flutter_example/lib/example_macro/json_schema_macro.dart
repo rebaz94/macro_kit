@@ -144,9 +144,9 @@ class JsonSchemaMacro extends MacroGenerator {
   }
 
   @override
-  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> classConstructor) async {
+  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> constructors) async {
     final primaryCtor = 'new';
-    final currentCtor = classConstructor.firstWhereOrNull((e) => e.constructorName == primaryCtor);
+    final currentCtor = constructors.firstWhereOrNull((e) => e.constructorName == primaryCtor);
 
     final List<MacroProperty> classFields;
 

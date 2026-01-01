@@ -2070,15 +2070,15 @@ abstract class MacroGenerator implements BaseMacroGenerator {
   /// Use to generate constructors or analyze field metadata. See [onClassConstructors]
   /// to determine whether fields are positional or named parameters.
   @override
-  Future<void> onClassFields(MacroState state, List<MacroProperty> classFields) async {}
+  Future<void> onClassFields(MacroState state, List<MacroProperty> fields) async {}
 
   /// Called with all constructors of the target class.
   @override
-  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> classConstructor) async {}
+  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> constructors) async {}
 
   /// Called with all methods of the target class.
   @override
-  Future<void> onClassMethods(MacroState state, List<MacroMethod> names) async {}
+  Future<void> onClassMethods(MacroState state, List<MacroMethod> methods) async {}
 
   /// Called when the target function has type parameters.
   @override

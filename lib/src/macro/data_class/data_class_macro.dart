@@ -156,8 +156,8 @@ class DataClassMacro extends MacroGenerator {
   }
 
   @override
-  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> classConstructor) async {
-    state.set('classConstructors', classConstructor);
+  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> constructors) async {
+    state.set('classConstructors', constructors);
   }
 
   @override

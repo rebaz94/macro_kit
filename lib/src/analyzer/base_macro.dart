@@ -304,11 +304,11 @@ abstract class BaseMacroGenerator {
 
   Future<void> onClassTypeParameter(MacroState state, List<MacroProperty> typeParameters);
 
-  Future<void> onClassFields(MacroState state, List<MacroProperty> classFields);
+  Future<void> onClassFields(MacroState state, List<MacroProperty> fields);
 
-  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> classConstructor);
+  Future<void> onClassConstructors(MacroState state, List<MacroClassConstructor> constructors);
 
-  Future<void> onClassMethods(MacroState state, List<MacroMethod> executable);
+  Future<void> onClassMethods(MacroState state, List<MacroMethod> methods);
 
   Future<void> onTopLevelFunctionTypeParameter(MacroState state, List<MacroProperty> typeParameters);
 
