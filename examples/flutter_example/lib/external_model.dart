@@ -67,7 +67,6 @@ class Wrapped3 with Wrapped3Data {
     return CustomModel.fromJson(json);
   }
 
-
   static Map<String, dynamic> toJ(CustomModel<String> model) {
     return model.toJson();
   }

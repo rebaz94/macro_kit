@@ -1,3 +1,7 @@
+## 0.5.5
+
+- Add a new option to **MacroCapability** to target only annotated fields and methods.
+
 ## 0.5.4
 
 - Fix timeout issue when running `macro_context.dart` via the Flutter runner

@@ -86,6 +86,11 @@ mixin AnalyzeClassField on BaseAnalyzer {
         macroKeys.addAll(setterMacroKeys ?? const []);
       }
 
+      if (capability.filterClassIncludeAnnotatedFieldOnly && macroKeys?.isNotEmpty != true) {
+        // ignore unannotated field
+        continue;
+      }
+
       classFields.add(
         MacroProperty(
           name: field.name ?? '',

@@ -67,6 +67,7 @@ mixin Types on BaseAnalyzer {
       filterClassInstanceFields: cap.peek('filterClassInstanceFields')?.toBoolValue() ?? false,
       filterClassStaticFields: cap.peek('filterClassStaticFields')?.toBoolValue() ?? false,
       filterClassIgnoreSetterOnly: cap.peek('filterClassIgnoreSetterOnly')?.toBoolValue() ?? true,
+      filterClassIncludeAnnotatedFieldOnly: cap.peek('filterClassIncludeAnnotatedFieldOnly')?.toBoolValue() ?? false,
       filterClassFieldMetadata: cap.peek('filterClassFieldMetadata')?.toStringValue() ?? '',
       classConstructors: cap.peek('classConstructors')?.toBoolValue() ?? false,
       filterClassConstructorParameterMetadata:
@@ -77,6 +78,7 @@ mixin Types on BaseAnalyzer {
       classMethods: cap.peek('classMethods')?.toBoolValue() ?? false,
       filterClassInstanceMethod: cap.peek('filterClassInstanceMethod')?.toBoolValue() ?? false,
       filterClassStaticMethod: cap.peek('filterClassStaticMethod')?.toBoolValue() ?? false,
+      filterClassIncludeAnnotatedMethodOnly: cap.peek('filterClassIncludeAnnotatedMethodOnly')?.toBoolValue() ?? false,
       filterMethods: cap.peek('filterMethods')?.toStringValue() ?? '',
       filterClassMethodMetadata: cap.peek('filterClassMethodMetadata')?.toStringValue() ?? '',
       topLevelFunctions: cap.peek('topLevelFunctions')?.toBoolValue() ?? false,

@@ -22,6 +22,7 @@ For example:
 | `filterClassInstanceFields`               | `bool`   | `classFields == true`          | Include only instance fields.                                              |
 | `filterClassStaticFields`                 | `bool`   | `classFields == true`          | Include only static fields.                                                |
 | `filterClassIgnoreSetterOnly`             | `bool`   | `classFields == true`          | Ignore “setter-only” virtual fields; include getters/setters/vars.         |
+| `filterClassIncludeAnnotatedFieldOnly`    | `bool`   | `classFields == true`          | Include only annotated fields.                                             |
 | `filterClassFieldMetadata`                | `String` | `classFields == true`          | Filter fields by metadata. Use `"*"` or comma-separated list.              |
 | `classConstructors`                       | `bool`   | —                              | Collect all constructors declared in the class.                            |
 | `filterClassConstructorParameterMetadata` | `String` | `classConstructors == true`    | Filter constructor parameters by metadata. `"*"` allowed.                  |
@@ -30,6 +31,7 @@ For example:
 | `classMethods`                            | `bool`   | —                              | Collect all methods declared in the class.                                 |
 | `filterClassInstanceMethod`               | `bool`   | `classMethods == true`         | Include only instance methods.                                             |
 | `filterClassStaticMethod`                 | `bool`   | `classMethods == true`         | Include only static methods.                                               |
+| `filterClassIncludeAnnotatedMethodOnly`   | `bool`   | `classMethods == true`         | Include only annotated methods.                                            |
 | `filterMethods`                           | `String` | `classMethods == true`         | Filter included methods (`"*"` or list: `build,toJson`)                    |
 | `filterClassMethodMetadata`               | `String` | `classMethods == true`         | Filter methods by metadata. `"*"` allowed.                                 |
 | `topLevelFunctions`                       | `bool`   | —                              | Collect all function declared in the library.                              |

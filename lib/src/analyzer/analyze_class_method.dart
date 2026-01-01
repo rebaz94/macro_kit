@@ -64,6 +64,11 @@ mixin AnalyzeClassMethod on BaseAnalyzer {
 
       final macroKeys = await computeMacroKeys(capability.filterClassMethodMetadata, method.metadata, capability);
 
+      if (capability.filterClassIncludeAnnotatedMethodOnly && macroKeys?.isNotEmpty != true) {
+        // ignore unannotated method
+        continue;
+      }
+
       final function = await getFunctionInfo(
         methodElem,
         classTypeParams,

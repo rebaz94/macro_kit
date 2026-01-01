@@ -42,7 +42,7 @@ class _MyHomePageState extends State<MyHomePage> with _MyHomePageStateForm {
   @FormzField(type: String)
   StringSchema get nameSchema => StringSchema(minLength: 3);
 
-  // @FormField(type: int) // should be inferred
+  // @FormzField(type: int) // should be inferred
   IntegerSchema get ageSchema => IntegerSchema(minimum: 18);
 
   @FormzField(type: UserProfile2)
