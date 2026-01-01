@@ -188,6 +188,11 @@ class MacroCapability {
   ///   - `"*"` — any class may collect subtypes
   final String filterCollectSubTypes;
 
+  /// Whether at least one capability is enabled.
+  bool get hasAnyCapability {
+    return classFields || classConstructors || classMethods;
+  }
+
   MacroCapability combine(MacroCapability c) {
     String combineFilter(String base, String other) {
       if (base == '*' || other == '*') return '*';

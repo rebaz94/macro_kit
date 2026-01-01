@@ -40,7 +40,7 @@ mixin AnalyzeClass on BaseAnalyzer {
         }
 
         final capability = macroConfig.capability;
-        if (!capability.classFields && !capability.classConstructors && !capability.classMethods) {
+        if (!capability.hasAnyCapability) {
           // if there is no capability, return it
           logger.info('Class $className does not defined any Macro capability, ignored');
           continue;

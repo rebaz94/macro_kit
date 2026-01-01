@@ -39,7 +39,7 @@ mixin AnalyzeEnum on BaseAnalyzer {
       }
 
       final capability = macroConfig.capability;
-      if (!capability.classFields && !capability.classConstructors && !capability.classMethods) {
+      if (!capability.hasAnyCapability) {
         // if there is no capability, return it
         logger.info('Enum $enumName does not defined any Macro capability, ignored');
         continue;
