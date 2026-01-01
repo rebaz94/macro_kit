@@ -34,6 +34,7 @@ mixin Types on BaseAnalyzer {
   }) {
     final (annotClassName, library) = switch (annotation?.element) {
       GetterElement elem => (elem.returnType.element?.displayName, elem.returnType.element?.library),
+      ConstructorElement ctorElem => (ctorElem.returnType.element.displayName, ctorElem.returnType.element.library),
       _ => (annotation?.element?.displayName, annotation?.element?.library),
     };
     if (annotClassName != className) return false;
@@ -131,6 +132,7 @@ mixin Types on BaseAnalyzer {
     for (final elem in metadata.annotations) {
       final name = switch (elem.element) {
         GetterElement getterElement => getterElement.returnType.element?.displayName ?? '',
+        ConstructorElement ctorElem => ctorElem.returnType.element.displayName,
         _ => elem.element?.displayName ?? '',
       };
       if (targetKeys?.contains(name) == false) continue;
