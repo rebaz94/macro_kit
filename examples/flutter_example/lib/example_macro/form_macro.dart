@@ -292,7 +292,7 @@ class FormFieldConfig {
 
     String? defaultValue;
     if (defaultValueProp != null) {
-      defaultValue = defaultValueProp.constantValueToDartLiteralIfNeeded;
+      defaultValue = defaultValueProp.constantValueToLiteralValue();
     }
 
     return FormFieldConfig(

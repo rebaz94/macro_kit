@@ -171,6 +171,14 @@ class MacroKey {
   ///   * name = 'includeIfNull', value = false
   final List<MacroProperty> properties;
 
+  /// Returns a map of constant constructor properties for the annotation,
+  /// keyed by property name.
+  ///
+  /// See also [properties].
+  Map<String, MacroProperty> propertiesAsMap() {
+    return Map.fromEntries(properties.map((e) => MapEntry(e.name, e)));
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'n': name,
@@ -678,11 +686,27 @@ class MacroProperty {
   /// returns the value directly if it's already a string, or null otherwise.
   String? get constantValueToDartLiteralIfNeeded {
     if (requireConversionToLiteral == true) {
+      if (constantValue is Map && (constantValue as Map).containsKey('__use_ctor__')) {
+        return clazzToLiteral(constantValue as Map<String, dynamic>, insideConstant: false);
+      }
+
+      if (typeInfo == TypeInfo.enumData) {
+        return asStringConstantValue() ?? '';
+      }
+
       return jsonLiteralAsDart(constantValue);
+    } else if (typeInfo == TypeInfo.enumData) {
+      return asStringConstantValue() ?? '';
     } else if (constantValue case String v) {
       return v;
     }
+
     return null;
+  }
+
+  /// Convert constant value to a dart literal value
+  String? constantValueToLiteralValue() {
+    return MacroProperty.toLiteralValue(this);
   }
 
   /// Return true if declaration is nullable
@@ -809,6 +833,12 @@ class MacroProperty {
   /// Returns the constant value as a num, or null if not a num.
   num? asNumConstantValue() {
     if (constantValue case num v) return v;
+    return null;
+  }
+
+  /// Returns the constant value as a List, or null if not a list.
+  List? asList() {
+    if (typeInfo == TypeInfo.list) return constantValue as List;
     return null;
   }
 
