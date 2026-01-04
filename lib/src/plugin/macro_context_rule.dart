@@ -8,6 +8,7 @@ import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/error/error.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 class MacroContextRule extends AnalysisRule {
   MacroContextRule({
@@ -17,10 +18,13 @@ class MacroContextRule extends AnalysisRule {
          name: 'macro_context',
          description:
              'Allows macros to discover and apply contextual information from analysis contexts during code generation',
-       );
+       ) {
+    defaultLogger = logger;
+  }
 
   final MacroLogger logger;
-  final void Function(String) onNewAnalysisContext;
+  final void Function(List<String> contexts) onNewAnalysisContext;
+  static late MacroLogger defaultLogger;
 
   @override
   DiagnosticCode get diagnosticCode => LintCode(
@@ -36,6 +40,24 @@ class MacroContextRule extends AnalysisRule {
   void registerNodeProcessors(RuleVisitorRegistry registry, RuleContext context) {
     final visitor = _Visitor(rule: this);
     registry.addCompilationUnit(this, visitor);
+
+    if (context.package == null) return;
+
+    final packagesPath = _listWorkspaceProjects(context.package!.root.path);
+    if (packagesPath == null) return;
+
+    logger.info('Workspace packages founded: ${packagesPath.join(', ')}');
+    final filteredContexts = _filterContextRootForMacroContext(packagesPath);
+    if (filteredContexts.isEmpty) {
+      logger.info(
+        'No contexts were found in the workspace packages. If the macro_kit plugin cannot be '
+        'detected, please install it per project.',
+      );
+      return;
+    }
+
+    logger.info('Context by workspace: ${filteredContexts.length}: ${filteredContexts.join(', ')}');
+    onNewAnalysisContext(filteredContexts);
   }
 }
 
@@ -84,37 +106,91 @@ class _Visitor extends SimpleAstVisitor<void> {
       }
     } catch (_) {}
 
-    rule.onNewAnalysisContext(contextRoot);
+    rule.onNewAnalysisContext([contextRoot]);
   }
+}
 
-  String? _findProjectRoot(File file) {
-    const maxLevels = 3;
-    var directory = file.parent;
-    var levelsChecked = 0;
+String? _findProjectRoot(File file) {
+  const maxLevels = 3;
+  var directory = file.parent;
+  var levelsChecked = 0;
 
-    // Traverse up the directory tree looking for pubspec.yaml
-    while (levelsChecked < maxLevels) {
-      var pubspecPath = p.join(directory.path, 'pubspec.yaml');
+  // Traverse up the directory tree looking for pubspec.yaml
+  while (levelsChecked < maxLevels) {
+    var pubspecPath = p.join(directory.path, 'pubspec.yaml');
 
-      if (File(pubspecPath).existsSync()) {
-        return directory.path;
-      }
-
-      // Move to parent directory & Check if we've reached the filesystem root
-      final parent = directory.parent;
-      if (parent.path == directory.path) {
-        return null;
-      }
-
-      directory = parent;
-      levelsChecked++;
+    if (File(pubspecPath).existsSync()) {
+      return directory.path;
     }
 
+    // Move to parent directory & Check if we've reached the filesystem root
+    final parent = directory.parent;
+    if (parent.path == directory.path) {
+      return null;
+    }
+
+    directory = parent;
+    levelsChecked++;
+  }
+
+  return null;
+}
+
+List<String>? _listWorkspaceProjects(String rootWorkspace) {
+  try {
+    final rootDir = Directory(rootWorkspace);
+    final pubspecFile = File(p.join(rootWorkspace, 'pubspec.yaml'));
+    if (!pubspecFile.existsSync()) {
+      return null;
+    }
+
+    final yaml = loadYaml(pubspecFile.readAsStringSync()) as YamlMap;
+    final workspace = yaml['workspace'];
+
+    if (workspace is! YamlList) return null;
+
+    final packages = <String>[];
+    for (final entry in workspace) {
+      final relativePath = entry.toString();
+      final absolutePath = p.normalize(p.absolute(rootDir.path, relativePath));
+      packages.add(absolutePath);
+    }
+
+    return packages;
+  } catch (e, s) {
+    MacroContextRule.defaultLogger.error('Failed to list workspace projects', e, s);
     return null;
   }
 }
 
-const defaultContextFileConfiguration = '''import 'dart:async';
+/// return context root only for root of a project where it contains macro_context.dart in lib directory
+List<String> _filterContextRootForMacroContext(List<String> rootProjects) {
+  final contexts = <String>[];
+
+  for (final context in rootProjects) {
+    try {
+      final macroContextFile = File(p.join(context, 'lib', 'macro_context.dart'));
+      if (!macroContextFile.existsSync()) {
+        continue;
+      }
+
+      try {
+        if (macroContextFile.lengthSync() == 0) {
+          macroContextFile.writeAsStringSync(defaultContextFileConfiguration);
+        }
+      } catch (_) {}
+
+      contexts.add(context);
+    } catch (e, s) {
+      MacroContextRule.defaultLogger.error('Failed to check macro_context.dart by root project path: $context', e, s);
+    }
+  }
+
+  return contexts;
+}
+
+const defaultContextFileConfiguration = '''
+import 'dart:async';
 
 import 'package:macro_kit/macro_kit.dart';
 
@@ -211,4 +287,5 @@ Future<void> setupMacro() async {
     },
   );
 }
+
 ''';

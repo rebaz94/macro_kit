@@ -48,8 +48,8 @@ class MacroPlugin extends Plugin implements MacroServerListener {
     );
   }
 
-  void _onNewAnalysisContextReceived(String contextPath) {
-    final newContexts = {...contexts, contextPath};
+  void _onNewAnalysisContextReceived(List<String> contextPath) {
+    final newContexts = {...contexts, ...contextPath};
     if (const DeepCollectionEquality().equals(contexts, newContexts)) {
       return;
     }

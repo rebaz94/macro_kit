@@ -1,3 +1,8 @@
+## 0.5.6
+
+- Enable automatic context discovery across workspace packages
+- Refactor & Improve API
+
 ## 0.5.5
 
 - Add a new option to **MacroCapability** to target only annotated fields and methods.
