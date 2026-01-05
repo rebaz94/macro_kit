@@ -1,3 +1,8 @@
+## 0.5.8
+
+- Added CLI commands to restart the macro server and analysis context
+- Improved CLI help and error handling
+
 ## 0.5.7
 
 - Add ignore comment for generated file
