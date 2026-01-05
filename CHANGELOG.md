@@ -1,3 +1,7 @@
+## 0.5.9
+
+- Add ignore comment for unused variable in generated code
+
 ## 0.5.8
 
 - Added CLI commands to restart the macro server and analysis context

@@ -1,7 +1,7 @@
 name: macro_kit
 description: A development-time macro system for Dart that generates code instantly for fast iteration without build_runner.
-version: 0.5.8
-version_code: 34
+version: 0.5.9
+version_code: 35
 repository: https://github.com/rebaz94/macro_kit
 topics:
   - codegen
