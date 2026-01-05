@@ -40,6 +40,12 @@
       "properties": {
         "DataClassMacro": {
           "$ref": "#/definitions/DataClassMacroConfig"
+        },
+        "WidgetStateMacro": {
+          "$ref": "#/definitions/WidgetStateMacroConfig"
+        },
+        "ModelMacro": {
+          "$ref": "#/definitions/WidgetStateMacroConfig"
         }
       },
       "additionalProperties": {
@@ -122,6 +128,23 @@
           "type": "boolean",
           "description": "Use 'toMap'/'fromMap' naming convention instead of 'toJson'/'fromJson'. This is configured globally since data classes that depend on other data classes need consistent method names.",
           "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "WidgetStateMacroConfig": {
+      "type": "object",
+      "description": "Configuration for the WidgetStateMacro",
+      "properties": {
+        "state_field_strategy": {
+          "type": "string",
+          "description": "Controls how state field visibility is resolved when no explicit visibility is specified on the annotation.",
+          "enum": [
+            "public",
+            "private",
+            "keep"
+          ],
+          "default": "public"
         }
       },
       "additionalProperties": false
