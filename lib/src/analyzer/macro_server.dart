@@ -129,17 +129,41 @@ class MacroAnalyzerServer implements MacroServerInterface {
       ..writeAsStringSync('${DateTime.now().microsecondsSinceEpoch}:reconnect');
   }
 
-  Future<bool> shutdownMacroServer() async {
+  static Future<bool> shutdownMacroServer() async {
     try {
       final res = await http.post(Uri.parse('http://localhost:3232/shutdown'), body: '{}');
       return res.statusCode == HttpStatus.ok;
     } catch (e) {
-      logger.error('Failed to shut down existing MacroServer', e);
+      if (e is SocketException && e.message.contains('Connection refused')) {
+        return true;
+      }
+      stderr.writeln('Failed to shut down existing MacroServer: $e');
       return false;
     }
   }
 
-  Future<void> onContextChanged({ClientChannelInfo? connectedClient, bool triggerAutoBuild = false}) async {
+  static Future<bool> restartMacroAnalyzer() async {
+    try {
+      final res = await http.post(Uri.parse('http://localhost:3232/restart-analyzer'), body: '{}');
+      return res.statusCode == HttpStatus.ok;
+    } catch (e) {
+      if (e is SocketException && e.message.contains('Connection refused')) {
+        return true;
+      }
+      stderr.writeln('Failed to restart macro analyzer: $e');
+      return false;
+    }
+  }
+
+  void restartAnalyzer() {
+    onContextChanged(restartAnalyzer: true);
+  }
+
+  Future<void> onContextChanged({
+    ClientChannelInfo? connectedClient,
+    bool triggerAutoBuild = false,
+    bool restartAnalyzer = false,
+  }) async {
     await lock.synchronized(() async {
       _isSetWatchContexts = true;
 
@@ -153,10 +177,16 @@ class MacroAnalyzerServer implements MacroServerInterface {
       final watchPaths = _getWatchPaths(_contextRegistry.values);
 
       // Check if contexts actually changed
-      final contextsChanged = !const DeepCollectionEquality().equals(
-        analyzer.analysisContextPaths,
-        analysisContextPaths,
-      );
+      final contextsChanged =
+          restartAnalyzer ||
+          !const DeepCollectionEquality().equals(
+            analyzer.analysisContextPaths,
+            analysisContextPaths,
+          );
+
+      if (restartAnalyzer) {
+        logger.info('Force restarting analysis context');
+      }
 
       if (contextsChanged) {
         analyzer.analysisContextPaths = analysisContextPaths;

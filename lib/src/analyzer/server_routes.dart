@@ -30,7 +30,8 @@ void startMacroServer() async {
       ),
     )
     ..get('/contexts', _getServerContexts)
-    ..post('/shutdown', _onShutdown);
+    ..post('/shutdown', _onShutdown)
+    ..post('/restart-analyzer', _onRestartAnalyzer);
 
   await _serveServer(app, throwErr: true);
 
@@ -80,5 +81,10 @@ Future<Response> _getServerContexts(Request request) async {
 Future<Response> _onShutdown(Request request) async {
   MacroAnalyzerServer.instance.dispose();
   Future.delayed(const Duration(seconds: 2)).then((_) => exit(0));
+  return Response.ok('');
+}
+
+Future<Response> _onRestartAnalyzer(Request request) async {
+  MacroAnalyzerServer.instance.restartAnalyzer();
   return Response.ok('');
 }

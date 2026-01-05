@@ -19,3 +19,23 @@ Future<void> startLogHandler(List<String> args) async {
   setupSignalHandler(trackedProcessDir: 'logs');
   await MacroLogger.readStreamingLogs(logNames.map(MacroLogger.getFilePath).toList());
 }
+
+const helpUsage = '''
+MacroKit
+
+Commands:
+  restart-server        Restart the macro server
+  restart-analyzer      Restart the macro analysis context
+
+Options:
+  --log=server          Stream macro server logs
+  --log=macro           Stream macro process logs
+  --log=all             Stream all macro-related logs
+  --log                 Stream macro process logs (default)
+
+  -h, --help            Show this help message
+
+Behavior:
+  • Running without arguments starts the macro server
+  • Log streaming reads from the "logs/" directory
+''';
