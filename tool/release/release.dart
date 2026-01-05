@@ -152,16 +152,19 @@ Future<bool> isCommandAvailable(String command) async {
 }
 
 String extractChangelogForVersion(String changelog, String version) {
-  // Match pattern like "## 0.2.2" or "## [0.2.2]"
-  final versionPattern = RegExp(
-    r'##\s+\[?' + RegExp.escape(version) + r'\]?.*?\n(.*?)(?=\n##|\Z)',
-    multiLine: true,
-    dotAll: true,
-  );
+  // Split by ## headers
+  final sections = changelog.split(RegExp(r'^##\s+', multiLine: true));
 
-  final match = versionPattern.firstMatch(changelog);
-  if (match != null && match.groupCount >= 1) {
-    return match.group(1)!.trim();
+  for (final section in sections) {
+    // Check if this section starts with our version (with or without brackets)
+    final versionPattern = RegExp(r'^\[?' + RegExp.escape(version) + r'\]?');
+    if (versionPattern.hasMatch(section)) {
+      // Extract content after the first line
+      final lines = section.split('\n');
+      if (lines.length > 1) {
+        return lines.sublist(1).join('\n').trim();
+      }
+    }
   }
 
   return '';
