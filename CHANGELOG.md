@@ -1,3 +1,7 @@
+## 0.5.7
+
+- Add ignore comment for generated file
+
 ## 0.5.6
 
 - Enable automatic context discovery across workspace packages
