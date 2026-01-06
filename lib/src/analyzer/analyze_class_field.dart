@@ -65,6 +65,7 @@ mixin AnalyzeClassField on BaseAnalyzer {
         continue;
       }
 
+      bool? isGetterPropertyAbstract, isSetterPropertyAbstract;
       var macroKeys = await computeMacroKeys(capability.filterClassFieldMetadata, field.metadata, capability);
       if (fieldElem.getter != null && fieldElem.getter!.metadata.annotations.isNotEmpty) {
         final getterMacroKeys = await computeMacroKeys(
@@ -74,6 +75,7 @@ mixin AnalyzeClassField on BaseAnalyzer {
         );
         macroKeys ??= [];
         macroKeys.addAll(getterMacroKeys ?? const []);
+        isGetterPropertyAbstract = fieldElem.getter!.isAbstract;
       }
 
       if (fieldElem.setter != null && fieldElem.setter!.metadata.annotations.isNotEmpty) {
@@ -84,6 +86,7 @@ mixin AnalyzeClassField on BaseAnalyzer {
         );
         macroKeys ??= [];
         macroKeys.addAll(setterMacroKeys ?? const []);
+        isSetterPropertyAbstract = fieldElem.setter!.isAbstract;
       }
 
       if (capability.filterClassIncludeAnnotatedFieldOnly && macroKeys?.isNotEmpty != true) {
@@ -106,6 +109,8 @@ mixin AnalyzeClassField on BaseAnalyzer {
             fieldElem,
             isNullable: field.element.type.nullabilitySuffix != NullabilitySuffix.none,
             isAugmentation: field.isAugmentation,
+            isGetterPropertyAbstract: isGetterPropertyAbstract ?? false,
+            isSetterPropertyAbstract: isSetterPropertyAbstract ?? false,
           ),
           keys: macroKeys,
         ),

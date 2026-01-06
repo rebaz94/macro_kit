@@ -9,6 +9,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
     bool isSynchronous = false,
     bool isGenerator = false,
     bool isAugmentation = false,
+    bool isGetterPropertyAbstract = false,
+    bool isSetterPropertyAbstract = false,
   }) {
     return switch (elem) {
       FieldElement() => MacroModifier.create(
@@ -20,6 +22,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isPrivate: elem.isPrivate,
         isExternal: elem.isExternal,
         isAbstract: elem.isAbstract,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
         isCovariant: elem.isCovariant,
         isAsynchronous: isAsynchronous,
         isSynchronous: isSynchronous,
@@ -36,6 +40,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isNullable: isNullable,
         isStatic: elem.isStatic,
         isPrivate: elem.isPrivate,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
         isCovariant: elem.isCovariant,
         isAsynchronous: isAsynchronous,
         isSynchronous: isSynchronous,
@@ -56,6 +62,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isNullable: isNullable,
         isStatic: elem.isStatic,
         isPrivate: elem.isPrivate,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
         isCovariant: elem.isCovariant,
         isAsynchronous: isAsynchronous,
         isSynchronous: isSynchronous,
@@ -73,6 +81,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isConst: elem.isConst,
         isFinal: elem.isFinal,
         isLate: elem.isLate,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
         isAsynchronous: isAsynchronous,
         isSynchronous: isSynchronous,
         isGenerator: isGenerator,
@@ -86,6 +96,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isConst: elem.isConst,
         isFinal: elem.isFinal,
         isLate: elem.isLate,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
         isAsynchronous: isAsynchronous,
         isSynchronous: isSynchronous,
         isGenerator: isGenerator,
@@ -102,6 +114,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isConst: elem.isConst,
         isFinal: elem.isFinal,
         isLate: elem.isLate,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
         isAsynchronous: isAsynchronous,
         isSynchronous: isSynchronous,
         isGenerator: isGenerator,
@@ -116,6 +130,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isGenerator: isGenerator,
         isAugmentation: isAugmentation,
         isNullable: isNullable,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
         isStatic: elem.isStatic,
         isPrivate: elem.isPrivate,
         isExternal: elem.isExternal,
@@ -131,6 +147,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isAugmentation: isAugmentation,
         isPrivate: elem.isPrivate,
         isExternal: elem.isExternal,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
       ),
       ExecutableElement() => MacroModifier.create(
         isAsynchronous: isAsynchronous,
@@ -143,6 +161,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isExternal: elem.isExternal,
         isAbstract: elem.isAbstract,
         isExtensionMember: elem.isExtensionTypeMember,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
       ),
       FunctionType() => MacroModifier.create(
         isAsynchronous: isAsynchronous,
@@ -151,6 +171,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isAugmentation: isAugmentation,
         isNullable: isNullable,
         isStatic: true,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
       ),
       DartType() => MacroModifier.create(
         isAsynchronous: isAsynchronous,
@@ -158,6 +180,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isGenerator: isGenerator,
         isAugmentation: isAugmentation,
         isNullable: isNullable,
+        isGetterPropertyAbstract: isGetterPropertyAbstract,
+        isSetterPropertyAbstract: isSetterPropertyAbstract,
       ),
       _ => throw UnimplementedError('Getting modifier from: ${elem.runtimeType} is not implemented'),
     };
@@ -175,6 +199,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
     bool isPrivate = false,
     bool isExternal = false,
     bool isAbstract = false,
+    bool isGetterPropertyAbstract = false,
+    bool isSetterPropertyAbstract = false,
     bool isSealed = false,
     bool isExhaustive = false,
     bool isAlias = false,
@@ -218,6 +244,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
       if (isPrivate) 'p': true,
       if (isExternal) 'ex': true,
       if (isAbstract) 'a': true,
+      if (isGetterPropertyAbstract) 'gpa': true,
+      if (isSetterPropertyAbstract) 'spa': true,
       if (isSealed) 'cs': true,
       if (isExhaustive) 'ce': true,
       if (isAlias) 'ai': true,
@@ -277,6 +305,10 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
   bool get isExternal => value['ex'] == true;
 
   bool get isAbstract => value['a'] == true;
+
+  bool get isGetterPropertyAbstract => value['gpa'] == true;
+
+  bool get isSetterPropertyAbstract => value['spa'] == true;
 
   bool get isSealed => value['sc'] == true;
 
@@ -370,6 +402,8 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
     if (isPrivate) add('isPrivate');
     if (isExternal) add('isExternal');
     if (isAbstract) add('isAbstract');
+    if (isGetterPropertyAbstract) add('isGetterPropertyAbstract');
+    if (isSetterPropertyAbstract) add('isSetterPropertyAbstract');
     if (isSealed) add('isSealed');
     if (isExhaustive) add('isExhaustive');
     if (isAlias) add('isAlias');

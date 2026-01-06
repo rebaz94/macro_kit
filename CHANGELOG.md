@@ -1,3 +1,8 @@
+## 0.5.10
+
+- Exposed abstract information for getter and setter properties (`isGetterPropertyAbstract`,
+  `isSetterPropertyAbstract`)
+
 ## 0.5.9
 
 - Add ignore comment for unused variable in generated code
