@@ -10,6 +10,7 @@ import 'package:macro_kit/src/analyzer/utils/lock.dart';
 import 'package:macro_kit/src/common/logger.dart';
 import 'package:macro_kit/src/plugin/macro_context_rule.dart';
 import 'package:macro_kit/src/plugin/server_client.dart';
+import 'package:macro_kit/src/version/version.dart';
 
 class MacroPlugin extends Plugin implements MacroServerListener {
   MacroPlugin._({
@@ -31,7 +32,7 @@ class MacroPlugin extends Plugin implements MacroServerListener {
   Set<String> contexts = {};
 
   @override
-  String get name => 'MacroPlugin';
+  String get name => 'MacroPlugin-v$pluginVersionName';
 
   @override
   FutureOr<void> start() {

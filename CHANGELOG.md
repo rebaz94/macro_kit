@@ -1,3 +1,7 @@
+## 0.5.11
+
+- Add version info in the plugin title
+
 ## 0.5.10
 
 - Exposed abstract information for getter and setter properties (`isGetterPropertyAbstract`,
