@@ -155,8 +155,37 @@ extension type CountedCache._((int, Object) _v) {
 
 @internal
 class AnalyzeResult {
-  List<MacroClassDeclaration> classes = [];
-  List<MacroFunctionDeclaration> topLevelFunctions = [];
+  List<MacroClassDeclaration> _classes = [];
+  List<MacroRecordDeclaration>? _records;
+  List<MacroFunctionDeclaration>? _topLevelFunctions = [];
+
+  List<MacroClassDeclaration> get classes => _classes;
+
+  List<MacroRecordDeclaration>? get records => _records;
+
+  List<MacroFunctionDeclaration>? get topLevelFunctions => _topLevelFunctions;
+
+  void update({
+    List<MacroClassDeclaration>? classes,
+    List<MacroFunctionDeclaration>? topLevelFunctions,
+    List<MacroRecordDeclaration>? records,
+  }) {
+    _classes = classes ?? _classes;
+    _topLevelFunctions = topLevelFunctions ?? _topLevelFunctions;
+    _records = records ?? _records;
+  }
+
+  void addClass(MacroClassDeclaration declaration) {
+    _classes.add(declaration);
+  }
+
+  void addRecord(MacroRecordDeclaration declaration) {
+    (_records ??= []).add(declaration);
+  }
+
+  void addTopLevelFunction(MacroFunctionDeclaration declaration) {
+    (_topLevelFunctions ??= []).add(declaration);
+  }
 }
 
 @internal

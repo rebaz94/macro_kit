@@ -1,13 +1,14 @@
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/type.dart';
 import 'package:logging/logging.dart';
 import 'package:macro_kit/macro_kit.dart';
 import 'package:macro_kit/src/analyzer/analyze_class.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_ctor.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_field.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_method.dart';
-import 'package:macro_kit/src/analyzer/analyze_enum.dart';
+import 'package:macro_kit/src/analyzer/analyze_enum_record.dart';
 import 'package:macro_kit/src/analyzer/analyze_function.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
@@ -109,18 +110,34 @@ class MacroAnalyzer extends BaseAnalyzer
 
       switch (declaration) {
         case ClassDeclaration() when decFrag is ClassFragment:
+          if (decFrag.metadata.annotations.isEmpty) continue;
+
           final macroClass = await parseClass(decFrag);
           containsMacro = containsMacro ? true : macroClass != null;
+
         case GenericTypeAlias() when decFrag.element is TypeAliasElement:
+          if (decFrag.metadata.annotations.isEmpty) continue;
+
           final typeAliasElem = (decFrag.element as TypeAliasElement);
           if (typeAliasElem.aliasedType.element?.firstFragment case ClassFragment classFrag) {
             final macroClass = await parseClass(
               classFrag,
-              typeAliasAnnotation: decFrag.metadata.annotations,
               typeAliasClassName: decFrag.name,
+              typeAliasAnnotation: decFrag.metadata.annotations,
             );
             containsMacro = containsMacro ? true : macroClass != null;
+          } else if (typeAliasElem.aliasedType is RecordType) {
+            final macroRecord = await parseRecord(
+              typeAliasElem.aliasedType as RecordType,
+              typeAliasName: decFrag.name,
+              typeAliasAnnotation: decFrag.metadata.annotations,
+              typeArguments: typeAliasElem.aliasedType.alias?.typeArguments,
+              fallbackUri: typeAliasElem.library.uri.toString(),
+              includeInList: true,
+            );
+            containsMacro = containsMacro ? true : macroRecord != null;
           }
+
         case FunctionDeclaration() when decFrag is TopLevelFunctionFragment:
           final macroFunction = await parseTopLevelFunction(decFrag);
           containsMacro = containsMacro ? true : macroFunction != null;
@@ -141,12 +158,29 @@ class MacroAnalyzer extends BaseAnalyzer
 
     // step:4 get any class that used more than once from iteration cache
     //        and use it as shared class declaration to automatically assign prepared data by class id
+    // step 5: remove duplicate macro, keep the first one and filter out external macro declaration
+    final sharedClasses = _filterAnalyzedResult(analysisResult);
+
+    // step:6 run macro
+    await executeMacro(
+      path: path,
+      imports: imports,
+      libraryPaths: libraryPathById,
+      result: macroAnalyzeResult,
+      sharedClasses: sharedClasses,
+    );
+  }
+
+  Map<String, MacroClassDeclaration> _filterAnalyzedResult(ResolvedUnitResult analysisResult) {
     final sharedClasses = <String, MacroClassDeclaration>{};
     for (final entry in iterationCaches.entries) {
       final key = entry.key;
       final value = entry.value;
       var classVal = entry.value.value;
-      if (!key.startsWith('classDec') || value.count < 1 || classVal is! MacroClassDeclaration) continue;
+      // filter only class declaration with count grater than 1
+      if (!key.startsWith('classDec') || !(value.count > 1) || classVal is! MacroClassDeclaration) {
+        continue;
+      }
 
       // remove duplicate macro, keep the first one
       if (classVal.configs.length > 1) {
@@ -186,8 +220,9 @@ class MacroAnalyzer extends BaseAnalyzer
         newClasses.add(clazz);
       }
 
+      // function
       final newFunctions = <MacroFunctionDeclaration>[];
-      for (var fn in entry.value.topLevelFunctions) {
+      for (var fn in entry.value.topLevelFunctions ?? const <MacroFunctionDeclaration>[]) {
         List<MacroConfig>? newConfigs;
         if (fn.configs.length > 1) {
           newConfigs = fn.configs.uniqueBy((v) => v.key.name);
@@ -205,18 +240,34 @@ class MacroAnalyzer extends BaseAnalyzer
         newFunctions.add(fn);
       }
 
-      entry.value.classes = newClasses;
-      entry.value.topLevelFunctions = newFunctions;
+      // records
+      final newRecords = <MacroRecordDeclaration>[];
+      for (var record in entry.value.records ?? const <MacroRecordDeclaration>[]) {
+        List<MacroConfig>? newConfigs;
+        if (record.configs.length > 1) {
+          newConfigs = record.configs.uniqueBy((v) => v.key.name);
+        }
+
+        if (newConfigs != null) {
+          record = record.copyWith(configs: newConfigs);
+        }
+
+        if (record.libraryId != generateForLibraryId) {
+          // filter out from generation
+          continue;
+        }
+
+        newRecords.add(record);
+      }
+
+      entry.value.update(
+        classes: newClasses,
+        topLevelFunctions: newFunctions,
+        records: newRecords,
+      );
     }
 
-    // step:6 run macro
-    await executeMacro(
-      path: path,
-      imports: imports,
-      libraryPaths: libraryPathById,
-      result: macroAnalyzeResult,
-      sharedClasses: sharedClasses,
-    );
+    return sharedClasses;
   }
 
   Future<void> processAssetSource(String path, List<AnalyzingAsset> assetMacros, ChangeType type) async {

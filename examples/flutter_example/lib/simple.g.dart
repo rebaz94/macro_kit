@@ -300,7 +300,20 @@ mixin UserProfile3Data {
     return UserProfile3(
       name: json['UserName'] as String,
       age: (json['age'] as num?)?.toInt(),
-      address: json['address'] as String?,
+      address: json['address'] == null
+          ? null
+          : (
+              json['address']['\$1'] as String,
+              building: json['address']['building'] as String,
+              country: json['address']['country'] as String?,
+            ),
+      address2: json['address2'] == null
+          ? null
+          : (
+              building: json['address2']['building'] as String,
+              country: json['address2']['country'] as String?,
+              data: json['address2']['data'] as String,
+            ),
     );
   }
 
@@ -309,20 +322,35 @@ mixin UserProfile3Data {
     return <String, dynamic>{
       'UserName': v.name,
       'age': ?v.age,
-      'address': ?v.address,
+      'address': ?(v.address == null
+          ? null
+          : <String, dynamic>{
+              '\$1': v.address!.$1,
+              'building': v.address!.building,
+              'country': ?v.address!.country,
+            }),
+      'address2': ?(v.address2 == null
+          ? null
+          : <String, dynamic>{
+              'building': v.address2!.building,
+              'country': ?v.address2!.country,
+              'data': v.address2!.data,
+            }),
     };
   }
 
   UserProfile3 copyWith({
     String? name,
     Option<int> age = const Option.undefined(),
-    String? address,
+    Option<(String, {String building, String? country})> address = const Option.undefined(),
+    Option<AddressInfo<String>> address2 = const Option.undefined(),
   }) {
     final v = this as UserProfile3;
     return UserProfile3(
       name: name ?? v.name,
       age: age.isUndefined ? v.age : age.casted(),
-      address: address ?? v.address,
+      address: address.isUndefined ? v.address : address.casted(),
+      address2: address2.isUndefined ? v.address2 : address2.casted(),
     );
   }
 
@@ -334,7 +362,8 @@ mixin UserProfile3Data {
             other is UserProfile3 &&
             (identical(other.name, v.name) || other.name == v.name) &&
             (identical(other.age, v.age) || other.age == v.age) &&
-            (identical(other.address, v.address) || other.address == v.address));
+            (identical(other.address, v.address) || other.address == v.address) &&
+            (identical(other.address2, v.address2) || other.address2 == v.address2));
   }
 
   @override
@@ -345,12 +374,22 @@ mixin UserProfile3Data {
       v.name,
       v.age,
       v.address,
+      v.address2,
     );
   }
 
   @override
   String toString() {
     final v = this as UserProfile3;
-    return 'UserProfile3{name: ${v.name}, age: ${v.age}, address: ${v.address}}';
+    return 'UserProfile3{name: ${v.name}, age: ${v.age}, address: ${v.address}, address2: ${v.address2}}';
   }
+}
+
+/// An example of Record macro that convert record definition into a class
+class ClsAddressInfo<T> {
+  ClsAddressInfo({required this.building, this.country, required this.data});
+
+  final String building;
+  final String? country;
+  final T data;
 }

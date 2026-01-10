@@ -18,6 +18,7 @@ typedef TypeInfoResult = ({
   String type,
   TypeInfo typeInfo,
   MacroClassDeclaration? classInfo,
+  MacroRecordDeclaration? recordInfo,
   MacroMethod? fnInfo,
   List<MacroProperty>? typeArguments,
 
@@ -83,6 +84,7 @@ mixin Types on BaseAnalyzer {
       filterMethods: cap.peek('filterMethods')?.toStringValue() ?? '',
       filterClassMethodMetadata: cap.peek('filterClassMethodMetadata')?.toStringValue() ?? '',
       topLevelFunctions: cap.peek('topLevelFunctions')?.toBoolValue() ?? false,
+      typeDefRecords: cap.peek('typeDefRecords')?.toBoolValue() ?? false,
       collectClassSubTypes: cap.peek('collectClassSubTypes')?.toBoolValue() ?? false,
       filterCollectSubTypes: cap.peek('filterCollectSubTypes')?.toStringValue() ?? '',
     );
@@ -105,6 +107,7 @@ mixin Types on BaseAnalyzer {
           typeInfo: typeRes.typeInfo,
           typeArguments: typeRes.typeArguments,
           classInfo: typeRes.classInfo,
+          recordInfo: typeRes.recordInfo,
           functionTypeInfo: typeRes.fnInfo,
           typeRefType: typeRes.typeRefType,
           fieldInitializer: null,
@@ -170,6 +173,7 @@ mixin Types on BaseAnalyzer {
           typeInfo: typeRes.typeInfo,
           typeArguments: typeRes.typeArguments,
           classInfo: typeRes.classInfo,
+          recordInfo: typeRes.recordInfo,
           functionTypeInfo: typeRes.fnInfo,
           typeRefType: typeRes.typeRefType,
           fieldInitializer: null,
@@ -286,6 +290,7 @@ mixin Types on BaseAnalyzer {
         typeArguments: null,
         fnInfo: null,
         classInfo: null,
+        recordInfo: null,
         typeRefType: null,
       );
     }
@@ -297,6 +302,7 @@ mixin Types on BaseAnalyzer {
     List<MacroProperty>? macroTypeArguments;
     MacroMethod? fnTypeInfo;
     MacroClassDeclaration? classInfo;
+    MacroRecordDeclaration? recordInfo;
     MacroProperty? typeRefType;
 
     if (type.isDartCoreInt) {
@@ -379,6 +385,7 @@ mixin Types on BaseAnalyzer {
           typeInfo: typeRes.typeInfo,
           functionTypeInfo: typeRes.fnInfo,
           classInfo: typeRes.classInfo,
+          recordInfo: typeRes.recordInfo,
           typeRefType: typeRes.typeRefType,
           typeArguments: typeRes.typeArguments,
           modifier: MacroModifier.getModifierInfoFrom(mainType),
@@ -407,16 +414,16 @@ mixin Types on BaseAnalyzer {
 
       Future<TypeInfo> fallbackCase() async {
         String forName;
+
         (typeInfo, forName) = switch (typeElem?.kind) {
-          _ when genericParams.firstWhereOrNull((e) => e.name == typeElemName) != null => const (
-            TypeInfo.generic,
-            'generic',
-          ),
+          _ when genericParams.any((e) => e.name == typeElemName) => const (TypeInfo.generic, 'generic'),
+          _ when type is TypeParameterType => const (TypeInfo.generic, 'generic'),
           ElementKind.CLASS => const (TypeInfo.clazz, 'class'),
           ElementKind.CLASS_AUGMENTATION => const (TypeInfo.clazzAugmentation, 'class_augmentation'),
           ElementKind.EXTENSION => const (TypeInfo.extension, 'extension'),
           ElementKind.EXTENSION_TYPE => const (TypeInfo.extensionType, 'extension_type'),
           ElementKind.ENUM => const (TypeInfo.enumData, 'enum'),
+          _ when type is RecordType => const (TypeInfo.recordData, 'record'),
           _ => const (TypeInfo.dynamic, 'dynamic'),
         };
 
@@ -435,8 +442,17 @@ mixin Types on BaseAnalyzer {
           classInfo = await parseClass(classFragment);
         } else if (typeInfo == TypeInfo.enumData && typeElem is EnumElement) {
           classInfo = await parseEnum(typeElem.firstFragment, fallbackCapability: capability);
+        } else if (typeInfo == TypeInfo.recordData && type is RecordType) {
+          recordInfo = await parseRecord(
+            type,
+            typeAliasName: type.alias?.element.name,
+            typeAliasAnnotation: type.alias?.element.metadata.annotations,
+            typeArguments: type.alias?.typeArguments,
+            fallbackUri: (elem is Element) ? elem.library?.uri.toString() : null,
+            fallbackCapability: capability,
+            forceParse: true,
+          );
         }
-        // TODO: do we need to inspect augment class?
 
         return typeInfo;
       }
@@ -477,6 +493,7 @@ mixin Types on BaseAnalyzer {
       typeArguments: macroTypeArguments,
       fnInfo: fnTypeInfo,
       classInfo: classInfo,
+      recordInfo: recordInfo,
       typeRefType: typeRefType,
     );
   }
@@ -549,6 +566,7 @@ mixin Types on BaseAnalyzer {
           typeInfo: typeRes.typeInfo,
           typeArguments: typeRes.typeArguments,
           classInfo: typeRes.classInfo,
+          recordInfo: typeRes.recordInfo,
           functionTypeInfo: typeRes.fnInfo,
           typeRefType: typeRes.typeRefType,
           modifier: MacroModifier.getModifierInfoFrom(
@@ -577,6 +595,7 @@ mixin Types on BaseAnalyzer {
       type: returnTypeRes.type,
       typeInfo: returnTypeRes.typeInfo,
       classInfo: returnTypeRes.classInfo,
+      recordInfo: returnTypeRes.recordInfo,
       functionTypeInfo: returnTypeRes.fnInfo,
       typeRefType: returnTypeRes.typeRefType,
       typeArguments: returnTypeRes.typeArguments,
@@ -616,6 +635,10 @@ mixin Types on BaseAnalyzer {
       return const [];
     } else if (type is DynamicType) {
       return const [];
+    } else if (type is RecordType) {
+      return type.alias?.typeArguments ?? const [];
+    } else if (type is InvalidType) {
+      return const [];
     }
 
     logger.warn(
@@ -644,6 +667,7 @@ mixin Types on BaseAnalyzer {
           type: typeRes.type,
           typeInfo: typeRes.typeInfo,
           classInfo: typeRes.classInfo,
+          recordInfo: typeRes.recordInfo,
           typeArguments: typeRes.typeArguments,
           functionTypeInfo: typeRes.fnInfo,
           typeRefType: typeRes.typeRefType,

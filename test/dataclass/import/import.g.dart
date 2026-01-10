@@ -389,3 +389,57 @@ mixin GenericData<T> {
     return 'Generic<$T>{data: ${v.data}}';
   }
 }
+
+mixin TupleModelData {
+  static TupleModel fromJson($c.Map<$c.String, $c.dynamic> json) {
+    return TupleModel(
+      value1: (
+        (json['value1']['\$1'] as $c.num).toInt(),
+        (json['value1']['\$2'] as $c.num).toInt(),
+      ),
+    );
+  }
+
+  $c.Map<$c.String, $c.dynamic> toJson() {
+    final v = this as TupleModel;
+    return <$c.String, $c.dynamic>{
+      'value1': <$c.String, $c.dynamic>{
+        '\$1': v.value1.$1,
+        '\$2': v.value1.$2,
+      },
+    };
+  }
+
+  TupleModel copyWith({
+    m.MyData? value1,
+  }) {
+    final v = this as TupleModel;
+    return TupleModel(
+      value1: value1 ?? v.value1,
+    );
+  }
+
+  @$c.override
+  $c.bool operator ==($c.Object other) {
+    final v = this as TupleModel;
+    return $c.identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is TupleModel &&
+            ($c.identical(other.value1, v.value1) || other.value1 == v.value1));
+  }
+
+  @$c.override
+  $c.int get hashCode {
+    final v = this as TupleModel;
+    return $c.Object.hash(
+      runtimeType,
+      v.value1,
+    );
+  }
+
+  @$c.override
+  $c.String toString() {
+    final v = this as TupleModel;
+    return 'TupleModel{value1: ${v.value1}}';
+  }
+}

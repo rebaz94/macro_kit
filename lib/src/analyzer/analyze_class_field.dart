@@ -102,6 +102,7 @@ mixin AnalyzeClassField on BaseAnalyzer {
           typeInfo: fieldTypeRes.typeInfo,
           functionTypeInfo: fieldTypeRes.fnInfo,
           classInfo: fieldTypeRes.classInfo,
+          recordInfo: fieldTypeRes.recordInfo,
           typeRefType: fieldTypeRes.typeRefType,
           typeArguments: fieldTypeRes.typeArguments,
           fieldInitializer: null,

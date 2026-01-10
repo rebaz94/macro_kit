@@ -1,6 +1,10 @@
-## 0.5.11
+## 0.6.0
 
-- Add version info in the plugin title
+- Added support for applying macros to record definitions
+- Enabled automatic encoding/decoding of record fields in classes when using `DataClassMacro`
+- Improved generic handling for certain edge cases
+- Renamed `MacroProperty.getTypeParameter` to `MacroProperty.buildTypeParameter`
+- Displayed version information in the plugin title
 
 ## 0.5.10
 

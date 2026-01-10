@@ -11,8 +11,8 @@ mixin AnalyzeClass on BaseAnalyzer {
   Future<MacroClassDeclaration?> parseClass(
     ClassFragment classFragment, {
     List<MacroConfig>? collectSubTypeConfig,
-    List<ElementAnnotation>? typeAliasAnnotation,
     String? typeAliasClassName,
+    List<ElementAnnotation>? typeAliasAnnotation,
   }) async {
     // combine all declared macro in one list and share with each config
     // (one class can have many metadata attached, we parsed config based on each metadata)
@@ -213,7 +213,7 @@ mixin AnalyzeClass on BaseAnalyzer {
     MacroCapability capability,
     List<TypeParameterElement> typeParameterElements,
   ) async {
-    // fake all type parameter just passed in case it referenced by
+    // fake it all type parameter in case of referenced it
     // do not use allTypeParams as final result
     final allTypeParams = typeParameterElements
         .map((e) => MacroProperty(name: e.name ?? '', importPrefix: '', type: '', typeInfo: TypeInfo.generic))
@@ -229,32 +229,36 @@ mixin AnalyzeClass on BaseAnalyzer {
           capability.filterClassMethodMetadata,
           capability,
         );
+        final bound = MacroProperty(
+          name: '',
+          importPrefix: typeBoundRes.importPrefix,
+          type: typeBoundRes.type,
+          typeInfo: typeBoundRes.typeInfo,
+          functionTypeInfo: typeBoundRes.fnInfo,
+          classInfo: typeBoundRes.classInfo,
+          recordInfo: typeBoundRes.recordInfo,
+          typeArguments: typeBoundRes.typeArguments,
+          typeRefType: typeBoundRes.typeRefType,
+          modifier: const MacroModifier({}),
+          // constantValue: tp.element.bound!.getDisplayString(), // not needed since type has it
+        );
 
         typeParams.add(
           MacroProperty(
-            name: tp.name ?? '',
-            importPrefix: typeBoundRes.importPrefix,
-            type: typeBoundRes.type,
-            typeInfo: typeBoundRes.typeInfo,
-            functionTypeInfo: typeBoundRes.fnInfo,
-            classInfo: typeBoundRes.classInfo,
-            typeArguments: typeBoundRes.typeArguments,
-            typeRefType: typeBoundRes.typeRefType,
-            modifier: const MacroModifier({}),
-            // constantValue: tp.element.bound!.getDisplayString(), // not needed since type has it
+            name: '',
+            importPrefix: '',
+            type: tp.name ?? '',
+            typeInfo: TypeInfo.generic,
+            bound: bound,
           ),
         );
       } else {
         typeParams.add(
           MacroProperty(
-            name: tp.name ?? '',
+            name: '',
             importPrefix: '',
-            type: '',
+            type: tp.name ?? '',
             typeInfo: TypeInfo.generic,
-            functionTypeInfo: null,
-            classInfo: null,
-            typeArguments: null,
-            modifier: const MacroModifier({}),
           ),
         );
       }

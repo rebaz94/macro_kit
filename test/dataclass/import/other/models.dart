@@ -10,3 +10,5 @@ class Person with PersonData {
 }
 
 enum MyEnum { a, b, c }
+
+typedef MyData = (int, int);

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_example/example_macro/form_macro.dart';
 import 'package:flutter_example/example_macro/json_schema_macro.dart';
+import 'package:flutter_example/example_macro/record_macro.dart';
 import 'package:flutter_example/example_macro/timed_macro.dart';
 import 'package:macro_kit/macro_kit.dart';
 
@@ -21,7 +22,7 @@ import 'package:macro_kit/macro_kit.dart';
 ///
 /// **Important:** Only change the value (`true`/`false`).
 /// Do not modify the getter name or signature.
-bool get autoRunMacro => true;
+bool get autoRunMacro => false;
 
 /// Defines the command used to launch macros in a separate process.
 ///
@@ -98,6 +99,7 @@ Future<void> setupMacro() async {
       'JsonSchemaMacro': JsonSchemaMacro.initialize,
       'FormMacro': FormMacro.initialize,
       'TimedMacro': TimedMacro.initialize,
+      'RecordMacro': RecordMacro.initialize,
     },
     assetMacros: {
       'assets': [

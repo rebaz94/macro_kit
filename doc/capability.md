@@ -34,7 +34,8 @@ For example:
 | `filterClassIncludeAnnotatedMethodOnly`   | `bool`   | `classMethods == true`         | Include only annotated methods.                                            |
 | `filterMethods`                           | `String` | `classMethods == true`         | Filter included methods (`"*"` or list: `build,toJson`)                    |
 | `filterClassMethodMetadata`               | `String` | `classMethods == true`         | Filter methods by metadata. `"*"` allowed.                                 |
-| `topLevelFunctions`                       | `bool`   | —                              | Collect all function declared in the library.                              |
+| `typeDefRecords`                          | `bool`   | —                              | Collect all typedef records declared in the library.                       |
+| `topLevelFunctions`                       | `bool`   | —                              | Collect all functions declared in the library.                             |
 | `collectClassSubTypes`                    | `bool`   | —                              | Collect all subclasses of this class (for polymorphic generation).         |
 | `filterCollectSubTypes`                   | `String` | `collectClassSubTypes == true` | Controls *which classes* can collect subtypes (`sealed`, `abstract`, `*`). |
 

@@ -29,6 +29,7 @@ class MacroCapability {
     this.filterClassIncludeAnnotatedMethodOnly = false,
     this.filterMethods = '',
     this.filterClassMethodMetadata = '',
+    this.typeDefRecords = false,
     this.topLevelFunctions = false,
     this.collectClassSubTypes = false,
     this.filterCollectSubTypes = '',
@@ -52,6 +53,7 @@ class MacroCapability {
       filterClassIncludeAnnotatedMethodOnly: (json['fciamo'] as bool?) ?? false,
       filterMethods: (json['fm'] as String?) ?? '',
       filterClassMethodMetadata: (json['fcmm'] as String?) ?? '',
+      typeDefRecords: (json['tdr'] as bool?) ?? false,
       topLevelFunctions: (json['tlf'] as bool?) ?? false,
       collectClassSubTypes: (json['ccst'] as bool?) ?? false,
       filterCollectSubTypes: (json['fccst'] as String?) ?? '',
@@ -161,6 +163,9 @@ class MacroCapability {
   /// To get all metadata, use '*' or filter by providing comma separated key 'JsonKey,CustomMetadata'
   final String filterClassMethodMetadata;
 
+  /// Whether to retrieve all typedef record declared in the library.
+  final bool typeDefRecords;
+
   /// Whether to retrieve all function declared in the library.
   final bool topLevelFunctions;
 
@@ -190,7 +195,7 @@ class MacroCapability {
 
   /// Whether at least one capability is enabled.
   bool get hasAnyCapability {
-    return classFields || classConstructors || classMethods;
+    return classFields || classConstructors || classMethods || topLevelFunctions || typeDefRecords;
   }
 
   MacroCapability combine(MacroCapability c) {
@@ -228,6 +233,7 @@ class MacroCapability {
           : filterClassIncludeAnnotatedMethodOnly,
       filterMethods: combineFilter(filterMethods, c.filterMethods),
       filterClassMethodMetadata: combineFilter(filterClassMethodMetadata, c.filterClassMethodMetadata),
+      typeDefRecords: c.typeDefRecords ? true : typeDefRecords,
       topLevelFunctions: c.topLevelFunctions ? true : topLevelFunctions,
       collectClassSubTypes: c.collectClassSubTypes ? true : collectClassSubTypes,
       filterCollectSubTypes: combineFilter(filterCollectSubTypes, c.filterCollectSubTypes),
@@ -252,6 +258,7 @@ class MacroCapability {
       if (filterClassIncludeAnnotatedMethodOnly) 'fciamo': true,
       if (filterMethods.isNotEmpty) 'fm': filterMethods,
       if (filterClassMethodMetadata.isNotEmpty) 'fcmm': filterClassMethodMetadata,
+      if (typeDefRecords) 'tdr': true,
       if (topLevelFunctions) 'tlf': true,
       if (collectClassSubTypes) 'ccst': true,
       if (filterCollectSubTypes.isNotEmpty) 'fccst': filterCollectSubTypes,
@@ -260,7 +267,7 @@ class MacroCapability {
 
   @override
   String toString() {
-    return 'MacroCapability{classFields: $classFields, filterClassInstanceFields: $filterClassInstanceFields, filterClassStaticFields: $filterClassStaticFields, filterClassIgnoreSetterOnly: $filterClassIgnoreSetterOnly, filterClassIncludeAnnotatedFieldOnly: $filterClassIncludeAnnotatedFieldOnly, filterClassFieldMetadata: $filterClassFieldMetadata, classConstructors: $classConstructors, filterClassConstructorParameterMetadata: $filterClassConstructorParameterMetadata, mergeClassFieldWithConstructorParameter: $mergeClassFieldWithConstructorParameter, inspectFieldInitializer: $inspectFieldInitializer, classMethods: $classMethods, filterClassInstanceMethod: $filterClassInstanceMethod, filterClassStaticMethod: $filterClassStaticMethod, filterClassIncludeAnnotatedMethodOnly: $filterClassIncludeAnnotatedMethodOnly, filterMethods: $filterMethods, filterClassMethodMetadata: $filterClassMethodMetadata, topLevelFunctions: $topLevelFunctions, collectClassSubTypes: $collectClassSubTypes, filterCollectSubTypes: $filterCollectSubTypes}';
+    return 'MacroCapability{classFields: $classFields, filterClassInstanceFields: $filterClassInstanceFields, filterClassStaticFields: $filterClassStaticFields, filterClassIgnoreSetterOnly: $filterClassIgnoreSetterOnly, filterClassIncludeAnnotatedFieldOnly: $filterClassIncludeAnnotatedFieldOnly, filterClassFieldMetadata: $filterClassFieldMetadata, classConstructors: $classConstructors, filterClassConstructorParameterMetadata: $filterClassConstructorParameterMetadata, mergeClassFieldWithConstructorParameter: $mergeClassFieldWithConstructorParameter, inspectFieldInitializer: $inspectFieldInitializer, classMethods: $classMethods, filterClassInstanceMethod: $filterClassInstanceMethod, filterClassStaticMethod: $filterClassStaticMethod, filterClassIncludeAnnotatedMethodOnly: $filterClassIncludeAnnotatedMethodOnly, filterMethods: $filterMethods, filterClassMethodMetadata: $filterClassMethodMetadata, typeDefRecords: $typeDefRecords, topLevelFunctions: $topLevelFunctions, collectClassSubTypes: $collectClassSubTypes, filterCollectSubTypes: $filterCollectSubTypes}';
   }
 }
 

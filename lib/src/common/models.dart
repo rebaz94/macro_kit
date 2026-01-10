@@ -346,6 +346,7 @@ class RunMacroMsg implements Message {
     required this.libraryPaths,
     this.sharedClasses = const {},
     this.classes,
+    this.records,
     this.topLevelFunctions,
     this.assetDeclaration,
     this.assetConfig,
@@ -358,7 +359,7 @@ class RunMacroMsg implements Message {
     final sharedDec = <String, MacroClassDeclaration>{};
     final pendingUpdate = <void Function()>[];
 
-    final (classesRes, functionRes) = runZoneGuarded(
+    final (classesRes, records, functionRes) = runZoneGuarded(
       fn: () {
         final rawSharedDec = json['sharedClasses'] as Map<String, dynamic>?;
 
@@ -371,12 +372,17 @@ class RunMacroMsg implements Message {
         // decode declarations
         final classes = <MacroClassDeclaration>[];
         for (final e in (json['classes'] as List?) ?? const []) {
-          classes.add(MacroClassDeclaration.fromJson(e));
+          classes.add(MacroClassDeclaration.fromJson(e as Map<String, dynamic>));
         }
 
         final functions = <MacroFunctionDeclaration>[];
         for (final e in (json['functions'] as List?) ?? const []) {
-          functions.add(MacroFunctionDeclaration.fromJson(e));
+          functions.add(MacroFunctionDeclaration.fromJson(e as Map<String, dynamic>));
+        }
+
+        final records = <MacroRecordDeclaration>[];
+        for (final e in (json['records'] as List?) ?? const []) {
+          records.add(MacroRecordDeclaration.fromJson(e as Map<String, dynamic>));
         }
 
         for (final update in pendingUpdate) {
@@ -384,7 +390,7 @@ class RunMacroMsg implements Message {
         }
         pendingUpdate.clear();
 
-        return (classes, functions);
+        return (classes, records, functions);
       },
       values: {
         #sharedClasses: sharedDec,
@@ -402,6 +408,7 @@ class RunMacroMsg implements Message {
       ),
       sharedClasses: sharedDec,
       classes: classesRes,
+      records: records,
       topLevelFunctions: functionRes,
       assetDeclaration: json['asset'] != null
           ? MacroAssetDeclaration.fromJson(json['asset'] as Map<String, dynamic>)
@@ -435,6 +442,9 @@ class RunMacroMsg implements Message {
   /// The class declarations of a processed dart code
   final List<MacroClassDeclaration>? classes;
 
+  /// The top level record declarations of a processed dart code
+  final List<MacroRecordDeclaration>? records;
+
   /// The top level function declarations of a processed dart code
   final List<MacroFunctionDeclaration>? topLevelFunctions;
 
@@ -466,6 +476,7 @@ class RunMacroMsg implements Message {
       'libraryPaths': libraryPaths.map((k, v) => MapEntry(k.toString(), v)),
       if (sharedClasses.isNotEmpty) 'sharedClasses': sharedClasses.map((k, v) => MapEntry(k, v.toJson())),
       if (classes?.isNotEmpty == true) 'classes': classes!.map((e) => e.toJson()).toList(),
+      if (records?.isNotEmpty == true) 'records': records!.map((e) => e.toJson()).toList(),
       if (topLevelFunctions?.isNotEmpty == true) 'functions': topLevelFunctions!.map((e) => e.toJson()).toList(),
       if (assetDeclaration != null) 'asset': assetDeclaration!.toJson(),
       if (assetConfig != null) 'assetConfig': assetConfig,

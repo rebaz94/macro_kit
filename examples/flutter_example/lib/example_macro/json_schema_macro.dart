@@ -111,9 +111,7 @@ class JsonSchemaMacro extends MacroGenerator {
 
   static JsonSchemaMacro initialize(MacroConfig macroConfig) {
     final key = macroConfig.key;
-    final props = Map.fromEntries(
-      key.properties.map((e) => MapEntry(e.name, e)),
-    );
+    final props = key.propertiesAsMap();
 
     return JsonSchemaMacro(
       capability: macroConfig.capability,

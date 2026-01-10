@@ -70,6 +70,15 @@ class Generic<T> with GenericData<T> {
   final T data;
 }
 
+@dataClassMacro
+class TupleModel with TupleModelData {
+  TupleModel({
+    required this.value1,
+  });
+
+  final m.MyData value1;
+}
+
 void main() {
   group('import types', () {
     test('DataClass are generated correctly', () {
@@ -120,6 +129,18 @@ void main() {
       expect(
         Generic<$c.String>(data: 'hello data').toString(),
         equals('Generic<String>{data: hello data}'),
+      );
+
+      expect(
+        TupleModel(value1: (1, 3)).toJson(),
+        equals({
+          'value1': {r'$1': 1, r'$2': 3},
+        }),
+      );
+
+      expect(
+        TupleModel(value1: (1, 3)).toString(),
+        equals('TupleModel{value1: (1, 3)}'),
       );
     });
   });

@@ -14,7 +14,7 @@ class TimedMacro extends MacroGenerator {
 
   static TimedMacro initialize(MacroConfig config) {
     final key = config.key;
-    final props = Map.fromEntries(key.properties.map((e) => MapEntry(e.name, e)));
+    final props = key.propertiesAsMap();
 
     return TimedMacro(
       capability: config.capability,
@@ -101,8 +101,8 @@ class TimedMacro extends MacroGenerator {
     }
 
     // Build type parameters
-    final typeParamsStr = typeParams.isNotEmpty ? MacroProperty.getTypeParameterWithBound(typeParams) : '';
-    final typeParamsCall = typeParams.isNotEmpty ? MacroProperty.getTypeParameter(typeParams) : '';
+    final typeParamsStr = typeParams.isNotEmpty ? MacroProperty.buildTypeParameterWithBound(typeParams) : '';
+    final typeParamsCall = typeParams.isNotEmpty ? MacroProperty.buildTypeParameter(typeParams) : '';
 
     // Separate positional and named parameters
     final requiredPositionalParams = <String>[];

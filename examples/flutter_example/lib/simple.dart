@@ -1,3 +1,4 @@
+import 'package:flutter_example/example_macro/record_macro.dart';
 import 'package:macro_kit/macro_kit.dart';
 
 part 'simple.g.dart';
@@ -52,12 +53,16 @@ class UserProfile2 with UserProfile2Data {
   final String? address;
 }
 
+@Macro(RecordMacro())
+typedef AddressInfo<T> = ({T data, String? country, String building});
+
 @dataClassMacro
 class UserProfile3 with UserProfile3Data {
   const UserProfile3({
     required this.name,
     this.age,
     this.address,
+    required this.address2,
   });
 
   @JsonKey(name: 'UserName')
@@ -66,7 +71,11 @@ class UserProfile3 with UserProfile3Data {
   @JsonKey(copyWithAsOption: true)
   final int? age;
 
-  final String? address;
+  @JsonKey(copyWithAsOption: true)
+  final (String, {String? country, String building})? address;
+
+  @JsonKey(copyWithAsOption: true)
+  final AddressInfo<String>? address2;
 }
 
 void test() {
@@ -81,4 +90,7 @@ void test() {
   // profile2 = profile2.copyWith(age: .nil()); // required dot shorthand feature
   // profile2 = profile2.copyWith(age: .value(33)); // required dot shorthand feature
   print(profile2);
+
+  final recordToMacroClass = ClsAddressInfo(building: 'building', data: 'data');
+  print(recordToMacroClass);
 }

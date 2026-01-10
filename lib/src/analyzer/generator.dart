@@ -31,18 +31,20 @@ mixin Generator on BaseAnalyzer {
           libraryPaths: libraryPaths,
           sharedClasses: sharedClasses,
           classes: analyzeRes.classes,
-          topLevelFunctions: analyzeRes.topLevelFunctions,
+          topLevelFunctions: analyzeRes.topLevelFunctions ?? [],
+          records: analyzeRes.records ?? [],
         );
       } else {
         res.classes!.addAll(analyzeRes.classes);
-        res.topLevelFunctions!.addAll(analyzeRes.topLevelFunctions);
+        res.records!.addAll(analyzeRes.records ?? const []);
+        res.topLevelFunctions!.addAll(analyzeRes.topLevelFunctions ?? const []);
       }
     }
 
     // step:2 configure the generated file path
     final (:genFilePath, partFromSource: partFromSource, :partFromGenerated) = server.buildGeneratedFileInfo(path);
-    // step:3 run the macro generator
 
+    // step:3 run the macro generator
     final generated = StringBuffer("part of '$partFromGenerated';");
     bool fileGenerated = false;
 
@@ -50,8 +52,10 @@ mixin Generator on BaseAnalyzer {
       final macroName = runConfigEntry.key;
       final msg = runConfigEntry.value;
 
-      // ignore message with empty class to not generate empty file
-      if (msg.classes?.isNotEmpty != true && msg.topLevelFunctions?.isNotEmpty != true) {
+      // ignore message with empty applied to not generate empty file
+      if (msg.classes?.isNotEmpty != true &&
+          msg.records?.isNotEmpty != true &&
+          msg.topLevelFunctions?.isNotEmpty != true) {
         continue;
       }
 

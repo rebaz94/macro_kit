@@ -90,10 +90,10 @@ mixin AnalyzeFunction on BaseAnalyzer {
     );
 
     if (combined) {
-      macroAnalyzeResult.putIfAbsent(macroNames.first, () => AnalyzeResult()).topLevelFunctions.add(declaration);
+      macroAnalyzeResult.putIfAbsent(macroNames.first, () => AnalyzeResult()).addTopLevelFunction(declaration);
     } else {
       for (final name in macroNames) {
-        macroAnalyzeResult.putIfAbsent(name, () => AnalyzeResult()).topLevelFunctions.add(declaration);
+        macroAnalyzeResult.putIfAbsent(name, () => AnalyzeResult()).addTopLevelFunction(declaration);
       }
     }
 

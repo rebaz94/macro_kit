@@ -264,8 +264,10 @@ class MacroProperty {
     required this.importPrefix,
     required this.type,
     required this.typeInfo,
+    this.bound,
     this.typeArguments,
     this.classInfo,
+    this.recordInfo,
     this.functionTypeInfo,
     this.typeRefType,
     this.extraMetadata,
@@ -285,9 +287,11 @@ class MacroProperty {
       importPrefix: (json['ip'] as String?) ?? '',
       type: (json['t'] as String?) ?? '',
       typeInfo: typeInfo,
+      bound: json['bo'] != null ? MacroProperty.fromJson(json['bo'] as Map<String, dynamic>) : null,
       typeRefType: json['trt'] != null ? MacroProperty.fromJson(json['trt'] as Map<String, dynamic>) : null,
       typeArguments: (json['ta'] as List?)?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>)).toList(),
       classInfo: json['ci'] == null ? null : MacroClassDeclaration.fromJson(json['ci'] as Map<String, dynamic>),
+      recordInfo: json['ri'] == null ? null : MacroRecordDeclaration.fromJson(json['ri'] as Map<String, dynamic>),
       functionTypeInfo: json['fti'] == null ? null : MacroMethod.fromJson(json['fti'] as Map<String, dynamic>),
       extraMetadata: json['em'] == null
           ? null
@@ -476,7 +480,7 @@ class MacroProperty {
 
     final end = t.lastIndexOf('>');
     if (end == -1) {
-      return (type: t, typeParams: const <String>[]);
+      return (type: t.substring(0, start), typeParams: const <String>[]);
     }
 
     return (
@@ -514,7 +518,7 @@ class MacroProperty {
     return result;
   }
 
-  static String getTypeParameter(List<MacroProperty> generics) {
+  static String buildTypeParameter(List<MacroProperty> generics) {
     if (generics.isEmpty) return '';
 
     final s = StringBuffer('<');
@@ -525,14 +529,14 @@ class MacroProperty {
         s.write(', ');
       }
 
-      s.write(generic.name);
+      s.write('${generic.importPrefix}${generic.type}');
     }
 
     s.write('>');
     return s.toString();
   }
 
-  static String getTypeParameterWithBound(List<MacroProperty> generics) {
+  static String buildTypeParameterWithBound(List<MacroProperty> generics) {
     if (generics.isEmpty) return '';
 
     final s = StringBuffer('<');
@@ -542,9 +546,9 @@ class MacroProperty {
         s.write(', ');
       }
 
-      s.write(generic.name);
-      if (generic.type.isNotEmpty) {
-        s.write(' extends ${generic.type}');
+      s.write('${generic.importPrefix}${generic.type}');
+      if (generic.bound != null) {
+        s.write(' extends ${generic.bound!.getDartType('')}');
       }
     }
 
@@ -552,19 +556,19 @@ class MacroProperty {
     return s.toString();
   }
 
-  static String getTypeParameterWithPrioritizedBound(List<MacroProperty> generics) {
+  static String buildTypeParameterWithPrioritizedBound(List<MacroProperty> generics) {
     if (generics.isEmpty) return '';
 
     // Group by name, keeping the one with bound if duplicates exist
     final uniqueGenerics = <String, MacroProperty>{};
 
     for (final currGeneric in generics) {
-      final existing = uniqueGenerics[currGeneric.name];
+      final existing = uniqueGenerics[currGeneric.type];
       if (existing == null) {
-        uniqueGenerics[currGeneric.name] = currGeneric;
+        uniqueGenerics[currGeneric.type] = currGeneric;
       } else if (existing.constantValue == null && currGeneric.constantValue != null) {
         // Replace unbounded with bounded version
-        uniqueGenerics[currGeneric.name] = currGeneric;
+        uniqueGenerics[currGeneric.type] = currGeneric;
       }
       // If existing has bound, keep it (don't replace)
     }
@@ -575,9 +579,9 @@ class MacroProperty {
         s.write(', ');
       }
 
-      s.write(generic.name);
-      if (generic.type.isNotEmpty) {
-        s.write(' extends ${generic.type}');
+      s.write('${generic.importPrefix}${generic.type}');
+      if (generic.bound != null) {
+        s.write(' extends ${generic.bound!.getDartType('')}');
       }
     }
 
@@ -599,6 +603,12 @@ class MacroProperty {
 
   /// Class declaration details when [typeInfo] is a class or enum type.
   final MacroClassDeclaration? classInfo;
+
+  /// Record declaration details when [typeInfo] is a [TypeInfo.recordData].
+  final MacroRecordDeclaration? recordInfo;
+
+  /// The generic type argument bound
+  final MacroProperty? bound;
 
   /// Type arguments for generic types (e.g., `T` in `List<T>`).
   final List<MacroProperty>? typeArguments;
@@ -647,19 +657,23 @@ class MacroProperty {
     String? name,
     String? type,
     MacroClassDeclaration? classInfo,
+    MacroRecordDeclaration? recordInfo,
     Object? constantValue,
     MacroModifier? constantModifier,
     bool? requireConversionToLiteral,
+    MacroProperty? bound,
   }) {
     return MacroProperty(
       name: name ?? this.name,
       importPrefix: classInfo != null && importPrefix.isEmpty ? classInfo.importPrefix : importPrefix,
       type: type ?? this.type,
       typeInfo: typeInfo,
+      bound: bound ?? this.bound,
       modifier: modifier,
       typeArguments: typeArguments,
       functionTypeInfo: functionTypeInfo,
       classInfo: classInfo ?? this.classInfo,
+      recordInfo: recordInfo ?? this.recordInfo,
       typeRefType: typeRefType,
       keys: keys,
       fieldInitializer: fieldInitializer,
@@ -675,8 +689,8 @@ class MacroProperty {
   /// this is only update name and type without deep update
   MacroProperty updateClassTypeParameter(Map<String, String> replacements) {
     return copyWith(
-      name: replaceTypeParameter(name, replacements),
       type: replaceTypeParameter(type, replacements),
+      bound: bound?.copyWith(type: replaceTypeParameter(bound?.type ?? '', replacements)),
     );
   }
 
@@ -792,10 +806,12 @@ class MacroProperty {
       importPrefix: importPrefix,
       type: newType,
       typeInfo: typeInfo,
+      bound: bound,
       modifier: MacroModifier({...modifier})..setIsNullable(intoNullable),
       typeArguments: typeArguments,
       functionTypeInfo: functionTypeInfo,
       classInfo: classInfo,
+      recordInfo: recordInfo,
       typeRefType: typeRefType,
       keys: keys,
       fieldInitializer: fieldInitializer,
@@ -880,7 +896,41 @@ class MacroProperty {
       case TypeInfo.clazzAugmentation:
       case TypeInfo.extension:
       case TypeInfo.extensionType:
+        if (classInfo case MacroClassDeclaration v?) {
+          final typeArgs = MacroProperty.buildTypeParameter(typeArguments ?? const []);
+          final nullable = isNullable ? '?' : '';
+          return '${v.importPrefix}${v.className}$typeArgs$nullable';
+        }
+
+        return '$importPrefix$type';
       case TypeInfo.record:
+        return '$importPrefix$type';
+      case TypeInfo.recordData:
+        if (recordInfo case MacroRecordDeclaration r?) {
+          final nullable = isNullable ? '?' : '';
+
+          if (r.recordName.isNotEmpty && !r.recordName.startsWith('(')) {
+            final typeArgs = MacroProperty.buildTypeParameter(typeArguments ?? const []);
+            return '${r.importPrefix}${r.recordName}$typeArgs$nullable';
+          }
+
+          final s = StringBuffer();
+          final posFields = r.fields?.where((f) => f.modifier.isRequiredPositional).toList() ?? const [];
+          final namedFields = r.fields?.where((f) => f.modifier.isNamed).toList() ?? const [];
+
+          s.write(posFields.map((field) => field.getDartType(dartCorePrefix)).join(', '));
+          if (posFields.isNotEmpty && namedFields.isNotEmpty) {
+            s.write(', ');
+          }
+          if (namedFields.isNotEmpty) {
+            s.write('{');
+            s.write(namedFields.map((field) => '${field.getDartType(dartCorePrefix)} ${field.name}').join(', '));
+            s.write('}');
+          }
+
+          return '$importPrefix(${s.toString()})$nullable';
+        }
+
         return '$importPrefix$type';
       case TypeInfo.enumData:
         if (type == 'Enum') {
@@ -981,8 +1031,10 @@ class MacroProperty {
       if (importPrefix.isNotEmpty) 'ip': importPrefix,
       if (type.isNotEmpty) 't': type,
       'ti': typeInfo.id,
+      if (bound != null) 'bo': bound!.toJson(),
       if (typeArguments?.isNotEmpty == true) 'ta': typeArguments!.map((e) => e.toJson()).toList(),
       if (classInfo != null) 'ci': classInfo!.toJson(),
+      if (recordInfo != null) 'ri': recordInfo!.toJson(),
       if (functionTypeInfo != null) 'fti': functionTypeInfo!.toJson(),
       if (typeRefType != null) 'trt': typeRefType!.toJson(),
       if (extraMetadata?.isNotEmpty == true) 'em': extraMetadata!.map((k, v) => MapEntry(k, v.toJson())),
@@ -998,7 +1050,7 @@ class MacroProperty {
 
   @override
   String toString() {
-    return 'MacroProperty{name: $name, importPrefix: $importPrefix, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, typeRefType: $typeRefType, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, fieldInitializer: $fieldInitializer, constantValue: $constantValue, constantModifier: $constantModifier, requireConversionToLiteral: $requireConversionToLiteral}';
+    return 'MacroProperty{name: $name, importPrefix: $importPrefix, type: $type, typeInfo: $typeInfo, classInfo: $classInfo, recordInfo: $recordInfo, typeArguments: $typeArguments, functionTypeInfo: $functionTypeInfo, typeRefType: $typeRefType, extraMetadata: $extraMetadata, modifier: $modifier, keys: $keys, fieldInitializer: $fieldInitializer, constantValue: $constantValue, constantModifier: $constantModifier, requireConversionToLiteral: $requireConversionToLiteral}';
   }
 }
 
@@ -1033,7 +1085,8 @@ enum TypeInfo implements Identifiable<int> {
   voidType(26),
   type(27),
   dynamic(28),
-  generic(29);
+  generic(29),
+  recordData(30);
 
   const TypeInfo(this.id);
 
@@ -1103,7 +1156,7 @@ class MacroMethod {
       str.write(' ');
     }
 
-    str.write('Function${MacroProperty.getTypeParameterWithBound(typeParams)}(');
+    str.write('Function${MacroProperty.buildTypeParameterWithBound(typeParams)}(');
 
     final posParams = <MacroProperty>[];
     final namedParams = <MacroProperty>[];
@@ -1405,6 +1458,134 @@ class MacroFunctionDeclaration {
   }
 }
 
+/// Represents a record declaration with its metadata, members, and macro configurations.
+class MacroRecordDeclaration {
+  const MacroRecordDeclaration({
+    required this.libraryId,
+    required this.recordId,
+    required this.configs,
+    required this.importPrefix,
+    required this.recordName,
+    required this.modifier,
+    required this.recordTypeParameters,
+    required this.fields,
+    this.ready = true,
+  });
+
+  /// Creates a pending declaration with unresolved members.
+  ///
+  /// Used during the initial analysis phase when the full record structure
+  /// is not yet available or being resolved.
+  factory MacroRecordDeclaration.pendingDeclaration({
+    required int libraryId,
+    required String recordId,
+    required String importPrefix,
+    required String recordName,
+    required List<MacroConfig> configs,
+    required MacroModifier modifier,
+    required List<MacroProperty>? recordTypeParameters,
+  }) {
+    return MacroRecordDeclaration(
+      libraryId: libraryId,
+      recordId: recordId,
+      importPrefix: importPrefix,
+      configs: configs,
+      recordName: recordName,
+      modifier: modifier,
+      recordTypeParameters: recordTypeParameters,
+      fields: null,
+      ready: false,
+    );
+  }
+
+  static MacroRecordDeclaration fromJson(Map<String, dynamic> json) {
+    final libraryId = (json['lid'] as num).toInt();
+    final recordId = json['rid'] as String;
+    final configs = (json['cf'] as List).map((e) => MacroConfig.fromJson(e as Map<String, dynamic>)).toList();
+    final ready = (json['rs'] as bool?) ?? true;
+
+    return MacroRecordDeclaration(
+      libraryId: libraryId,
+      recordId: recordId,
+      configs: configs,
+      importPrefix: (json['ip'] as String?) ?? '',
+      recordName: json['rn'] as String,
+      modifier: json['cm'] == null
+          ? const MacroModifier({})
+          : MacroModifier((json['cm'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
+      recordTypeParameters: (json['tp'] as List?)
+          ?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      fields: (json['f'] as List?)?.map((e) => MacroProperty.fromJson(e as Map<String, dynamic>)).toList(),
+      ready: ready,
+    );
+  }
+
+  /// The ID of the library where this record is declared.
+  ///
+  /// Use this ID to retrieve the full path of the declaration's source file.
+  final int libraryId;
+
+  /// Unique identifier for this record declaration.
+  final String recordId;
+
+  /// List of macro configurations applied to this record.
+  final List<MacroConfig> configs;
+
+  /// The import prefix used when importing this record (empty string if none).
+  final String importPrefix;
+
+  /// The name of the record, if defined from type alias.
+  final String recordName;
+
+  /// Modifiers applied to this record
+  final MacroModifier modifier;
+
+  /// Type parameters (generics) of the record, if any.
+  final List<MacroProperty>? recordTypeParameters;
+
+  /// Fields declared in this record.
+  final List<MacroProperty>? fields;
+
+  /// When `false`, the record has unresolved type references that are still being processed.
+  final bool ready;
+
+  MacroRecordDeclaration copyWith({int? libraryId, String? recordId, List<MacroConfig>? configs, bool? ready}) {
+    return MacroRecordDeclaration(
+      libraryId: libraryId ?? this.libraryId,
+      recordId: recordId ?? this.recordId,
+      configs: configs ?? this.configs,
+      importPrefix: importPrefix,
+      recordName: recordName,
+      modifier: modifier,
+      recordTypeParameters: recordTypeParameters,
+      fields: fields,
+      ready: ready ?? this.ready,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lid': libraryId,
+      'rid': recordId,
+      'cf': configs.map((e) => e.toJson()).toList(),
+      if (importPrefix.isNotEmpty) 'ip': importPrefix,
+      'rn': recordName,
+      if (ready == false) 'rs': false,
+      if (ready) ...{
+        if (modifier.value.isNotEmpty) 'cm': modifier.value,
+        if (recordTypeParameters?.isNotEmpty == true) 'tp': recordTypeParameters!.map((e) => e.toJson()).toList(),
+        if (fields?.isNotEmpty == true) 'f': fields!.map((e) => e.toJson()).toList(),
+      },
+    };
+  }
+
+  @override
+  String toString() {
+    return 'MacroRecordDeclaration{libraryId: $libraryId, recordId: $recordId, configs: $configs, importPrefix: $importPrefix, recordName: $recordName, modifier: $modifier, recordTypeParameters: $recordTypeParameters, fields: $fields, ready: $ready}';
+  }
+}
+
 /// Represents an asset file change event for macro processing.
 ///
 /// This class encapsulates information about an asset file that has been
@@ -1629,7 +1810,7 @@ enum AssetChangeType {
 }
 
 /// The target type that the macro has been applied to
-enum TargetType { clazz, function, enumType, asset }
+enum TargetType { clazz, typeDefRecord, function, enumType, asset }
 
 /// State information about the asset directory when processing asset-related macros.
 ///

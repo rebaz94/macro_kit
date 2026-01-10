@@ -687,10 +687,17 @@ class GitBlob with GitBlobData {
   });
 }
 
-/// ----------------- Examssmmplsse composite response -----------------
+/// -----------------  composite response -----------------
 
 @dataClassMacro
 class RepoFull with RepoFullData {
+  RepoFull({
+    required this.repository,
+    this.readme,
+    this.latestCommit,
+    this.issues,
+  });
+
   @JsonKey(name: 'repository')
   final Repository repository;
 
@@ -711,11 +718,4 @@ class RepoFull with RepoFullData {
   static Map<String, dynamic>? issuesToJson(Paginated<Issue>? issues) {
     return issues?.toJson((e) => e.toJson());
   }
-
-  RepoFull({
-    required this.repository,
-    this.readme,
-    this.latestCommit,
-    this.issues,
-  });
 }

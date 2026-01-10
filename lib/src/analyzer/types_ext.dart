@@ -121,6 +121,7 @@ extension DartObjectExt on DartObject {
         functionTypeInfo: typeRes.fnInfo,
         typeArguments: typeRes.typeArguments,
         classInfo: typeRes.classInfo,
+        recordInfo: typeRes.recordInfo,
         typeRefType: typeRes.typeRefType,
         modifier: dartType != null ? MacroModifier.getModifierInfoFrom(dartType) : const MacroModifier({}),
         fieldInitializer: null,

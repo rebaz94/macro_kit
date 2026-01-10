@@ -155,3 +155,198 @@ mixin EData {
     return 'E{e: ${v.e}, e2: ${v.e2}}';
   }
 }
+
+mixin IssueData {
+  static Issue fromJson(Map<String, dynamic> json) {
+    return Issue(
+      name: json['name'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as Issue;
+    return <String, dynamic>{
+      'name': v.name,
+    };
+  }
+
+  Issue copyWith({
+    String? name,
+  }) {
+    final v = this as Issue;
+    return Issue(
+      name: name ?? v.name,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Issue;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is Issue && (identical(other.name, v.name) || other.name == v.name));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Issue;
+    return Object.hash(
+      runtimeType,
+      v.name,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Issue;
+    return 'Issue{name: ${v.name}}';
+  }
+}
+
+mixin PaginatedData<T> {
+  static Paginated<T> fromJson<T>(Map<String, dynamic> json, T Function(Object? v) fromJsonT) {
+    return Paginated<T>(
+      value: fromJsonT(json['value']),
+    );
+  }
+
+  Map<String, dynamic> toJson(Object? Function(T v) toJsonT) {
+    final v = this as Paginated<T>;
+    return <String, dynamic>{
+      'value': toJsonT(v.value),
+    };
+  }
+
+  Paginated<T> copyWith({
+    T? value,
+  }) {
+    final v = this as Paginated<T>;
+    return Paginated<T>(
+      value: value ?? v.value,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Paginated<T>;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is Paginated<T> &&
+            (identical(other.value, v.value) || other.value == v.value));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Paginated<T>;
+    return Object.hash(
+      runtimeType,
+      v.value,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Paginated<T>;
+    return 'Paginated<$T>{value: ${v.value}}';
+  }
+}
+
+mixin Paginated2Data<T> {
+  static Paginated2<T> fromJson<T>(Map<String, dynamic> json, T Function(Object? v) fromJsonT) {
+    return Paginated2<T>(
+      value: fromJsonT(json['value']),
+    );
+  }
+
+  Map<String, dynamic> toJson(Object? Function(T v) toJsonT) {
+    final v = this as Paginated2<T>;
+    return <String, dynamic>{
+      'value': toJsonT(v.value),
+    };
+  }
+
+  Paginated2<T> copyWith({
+    T? value,
+  }) {
+    final v = this as Paginated2<T>;
+    return Paginated2<T>(
+      value: value ?? v.value,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Paginated2<T>;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is Paginated2<T> &&
+            (identical(other.value, v.value) || other.value == v.value));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Paginated2<T>;
+    return Object.hash(
+      runtimeType,
+      v.value,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Paginated2<T>;
+    return 'Paginated2<$T>{value: ${v.value}}';
+  }
+}
+
+mixin RepoFullData {
+  static RepoFull fromJson(Map<String, dynamic> json) {
+    return RepoFull(
+      issues: json['issues'] == null ? null : RepoFull.issuesFromJson(json['issues'] as Map<String, dynamic>?),
+      issues2: null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as RepoFull;
+    return <String, dynamic>{
+      'issues': ?RepoFull.issuesToJson(v.issues),
+    };
+  }
+
+  RepoFull copyWith({
+    Paginated<Issue>? issues,
+    Paginated2<Issue>? issues2,
+  }) {
+    final v = this as RepoFull;
+    return RepoFull(
+      issues: issues ?? v.issues,
+      issues2: issues2 ?? v.issues2,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as RepoFull;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is RepoFull &&
+            (identical(other.issues, v.issues) || other.issues == v.issues) &&
+            (identical(other.issues2, v.issues2) || other.issues2 == v.issues2));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as RepoFull;
+    return Object.hash(
+      runtimeType,
+      v.issues,
+      v.issues2,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as RepoFull;
+    return 'RepoFull{issues: ${v.issues}, issues2: ${v.issues2}}';
+  }
+}

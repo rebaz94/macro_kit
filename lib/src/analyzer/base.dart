@@ -288,6 +288,21 @@ abstract class BaseAnalyzer {
     String? typeAliasClassName,
   });
 
+  Future<MacroRecordDeclaration?> parseRecord(
+    RecordType recordType, {
+    MacroCapability? fallbackCapability,
+    String? fallbackUri,
+    String? typeAliasName,
+    List<ElementAnnotation>? typeAliasAnnotation,
+    List<DartType>? typeArguments,
+    bool forceParse = false,
+  });
+
+  Future<List<MacroProperty>> parseRecordTypeParameter(
+    MacroCapability capability,
+    List<DartType> typeArguments,
+  );
+
   Future<MacroFunctionDeclaration?> parseTopLevelFunction(TopLevelFunctionFragment functionFragment);
 
   Future<void> collectClassSubTypes(
@@ -456,5 +471,17 @@ abstract class BaseAnalyzer {
     final uri = enumFragment.element.library.uri.toString();
     final id = '$enumName:${generateHash('$capability$enumName$uri')}';
     return ('enumDec:$id', id);
+  }
+
+  (String, String) recordDeclarationCachedKey(
+    RecordType recordType,
+    MacroCapability capability,
+    String? typeAliasName,
+    List<DartType>? typeArguments,
+  ) {
+    final recordName = '${(typeAliasName ?? recordType.alias?.element.name ?? '')}${recordType.getDisplayString()}';
+    final uri = recordType.alias?.element.library.uri.toString();
+    final id = '$recordName:${generateHash('$capability$recordName$uri')}';
+    return ('recordDec:$id', id);
   }
 }

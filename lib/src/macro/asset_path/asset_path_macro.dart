@@ -75,7 +75,7 @@ class AssetPathMacro extends MacroGenerator {
   /// Initialize macro for execution
   static AssetPathMacro initialize(MacroConfig config) {
     final key = config.key;
-    final props = Map.fromEntries(key.properties.map((e) => MapEntry(e.name, e)));
+    final props = key.propertiesAsMap();
 
     return AssetPathMacro(
       capability: config.capability,
