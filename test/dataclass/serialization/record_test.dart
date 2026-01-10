@@ -3,8 +3,15 @@ import 'package:test/test.dart';
 
 part 'record_test.g.dart';
 
-typedef TypeDefTuple = (String, {int year});
-typedef TypeDefTupleGen<T> = (String, {T year, bool active});
+typedef TypeDefTuple = (
+  String, {
+  @JsonKey(name: 'current_year') int year,
+});
+typedef TypeDefTupleGen<T> = (
+  String, {
+  @JsonKey(name: 'current_year') T year,
+  @JsonKey(name: 'is_active') bool active,
+});
 
 @dataClassMacro
 class TupleModel with TupleModelData {
@@ -61,11 +68,11 @@ void main() {
           TupleModelData.fromJson({
             'value1': {r'$1': 'hi', r'$2': 100},
             'value2': {r'$1': 'hi', r'$2': 100, 'flag': true},
-            'value3': {r'$1': 'hi', 'year': 2026},
-            'value4': {r'$1': 'hi', 'year': 2026, 'active': true},
+            'value3': {r'$1': 'hi', 'current_year': 2026},
+            'value4': {r'$1': 'hi', 'current_year': 2026, 'is_active': true},
             'value5': {r'$1': 'hi', 'year': '2025', 'active': false},
             'value6': {r'$1': 'hi', 'year': 2025, 'active': false},
-            'value8': {r'$1': 'hi', 'year': '2026', 'active': true},
+            'value8': {r'$1': 'hi', 'current_year': '2026', 'is_active': true},
           }),
           TupleModel(
             value1: ('hi', 100),
@@ -83,21 +90,21 @@ void main() {
         final a = TupleModelData.fromJson({
           'value1': {r'$1': 'hi', r'$2': 100},
           'value2': {r'$1': 'hi', r'$2': 100, 'flag': true},
-          'value3': {r'$1': 'hi', 'year': 2026},
-          'value4': {r'$1': 'hi', 'year': 2026, 'active': true},
+          'value3': {r'$1': 'hi', 'current_year': 2026},
+          'value4': {r'$1': 'hi', 'current_year': 2026, 'is_active': true},
           'value5': {r'$1': 'hi', 'year': '2025', 'active': false},
           'value6': {r'$1': 'hi', 'year': 2025, 'active': false},
-          'value8': {r'$1': 'hi', 'year': '2026', 'active': true},
+          'value8': {r'$1': 'hi', 'current_year': '2026', 'is_active': true},
         });
 
         final json = {
           'value1': {r'$1': 'hi', r'$2': 100},
           'value2': {r'$1': 'hi', r'$2': 100, 'flag': true},
-          'value3': {r'$1': 'hi', 'year': 2026},
-          'value4': {r'$1': 'hi', 'year': 2026, 'active': true},
+          'value3': {r'$1': 'hi', 'current_year': 2026},
+          'value4': {r'$1': 'hi', 'current_year': 2026, 'is_active': true},
           'value5': {r'$1': 'hi', 'year': '2025', 'active': false},
           'value6': {r'$1': 'hi', 'year': 2025, 'active': false},
-          'value8': {r'$1': 'hi', 'year': '2026', 'active': true},
+          'value8': {r'$1': 'hi', 'current_year': '2026', 'is_active': true},
         };
         expect(a.toJson(), equals(json));
         expect(TupleModelData.fromJson(json), equals(a));
@@ -109,11 +116,11 @@ void main() {
             {
               'value1': {r'$1': 'hi', r'$2': 100},
               'value2': {r'$1': 'hi', r'$2': 100, 'flag': true, 'name': 'rebaz'},
-              'value3': {r'$1': 'hi', 'year': 2026},
-              'value4': {r'$1': 'hi', 'year': 2026, 'active': true},
+              'value3': {r'$1': 'hi', 'current_year': 2026},
+              'value4': {r'$1': 'hi', 'current_year': 2026, 'is_active': true},
               'value5': {r'$1': 'hi', 'year': '2025', 'active': false},
               'value6': {r'$1': 'hi', 'year': 2025, 'active': false},
-              'value8': {r'$1': 'hi', 'year': '2026', 'active': true},
+              'value8': {r'$1': 'hi', 'current_year': '2026', 'is_active': true},
             },
             (v) => v as int,
           ),
@@ -134,11 +141,11 @@ void main() {
           {
             'value1': {r'$1': 'hi', r'$2': 100},
             'value2': {r'$1': 'hi', r'$2': 100, 'flag': true, 'name': 'rebaz'},
-            'value3': {r'$1': 'hi', 'year': 2026},
-            'value4': {r'$1': 'hi', 'year': 2026, 'active': true},
+            'value3': {r'$1': 'hi', 'current_year': 2026},
+            'value4': {r'$1': 'hi', 'current_year': 2026, 'is_active': true},
             'value5': {r'$1': 'hi', 'year': '2025', 'active': false},
             'value6': {r'$1': 'hi', 'year': 2025, 'active': false},
-            'value8': {r'$1': 'hi', 'year': '2026', 'active': true},
+            'value8': {r'$1': 'hi', 'current_year': '2026', 'is_active': true},
           },
           (v) => v as int,
         );
@@ -146,11 +153,11 @@ void main() {
         final json = {
           'value1': {r'$1': 'hi', r'$2': 100},
           'value2': {r'$1': 'hi', r'$2': 100, 'flag': true, 'name': 'rebaz'},
-          'value3': {r'$1': 'hi', 'year': 2026},
-          'value4': {r'$1': 'hi', 'year': 2026, 'active': true},
+          'value3': {r'$1': 'hi', 'current_year': 2026},
+          'value4': {r'$1': 'hi', 'current_year': 2026, 'is_active': true},
           'value5': {r'$1': 'hi', 'year': '2025', 'active': false},
           'value6': {r'$1': 'hi', 'year': 2025, 'active': false},
-          'value8': {r'$1': 'hi', 'year': '2026', 'active': true},
+          'value8': {r'$1': 'hi', 'current_year': '2026', 'is_active': true},
         };
         expect(a.toJson((v) => v), equals(json));
         expect(

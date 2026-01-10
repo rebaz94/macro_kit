@@ -87,7 +87,7 @@ class MacroCapability {
   ///
   /// To get all metadata, use '*' or filter by providing comma separated key 'JsonKey,CustomMetadata'
   ///
-  /// Only applies when [classFields] is `true`.
+  /// Only applies when [classFields] is `true` or when getting record field metadata.
   final String filterClassFieldMetadata;
 
   /// Whether to retrieve all constructors declared in the class.

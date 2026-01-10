@@ -4,6 +4,7 @@ class RecordMacro extends MacroGenerator {
   const RecordMacro({
     super.capability = const MacroCapability(
       typeDefRecords: true,
+      filterClassFieldMetadata: 'JsonKey',
     ),
   });
 

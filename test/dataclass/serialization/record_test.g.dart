@@ -21,12 +21,12 @@ mixin TupleModelData {
       ),
       value3: (
         json['value3']['\$1'] as String,
-        year: (json['value3']['year'] as num).toInt(),
+        year: (json['value3']['current_year'] as num).toInt(),
       ),
       value4: (
         json['value4']['\$1'] as String,
-        active: json['value4']['active'] as bool,
-        year: (json['value4']['year'] as num).toInt(),
+        active: json['value4']['is_active'] as bool,
+        year: (json['value4']['current_year'] as num).toInt(),
       ),
       value5: (
         json['value5']['\$1'] as String,
@@ -46,8 +46,8 @@ mixin TupleModelData {
             ),
       value8: (
         json['value8']['\$1'] as String,
-        active: json['value8']['active'] as bool,
-        year: json['value8']['year'] as String,
+        active: json['value8']['is_active'] as bool,
+        year: json['value8']['current_year'] as String,
       ),
     );
   }
@@ -67,12 +67,12 @@ mixin TupleModelData {
       },
       'value3': <String, dynamic>{
         '\$1': v.value3.$1,
-        'year': v.value3.year,
+        'current_year': v.value3.year,
       },
       'value4': <String, dynamic>{
         '\$1': v.value4.$1,
-        'active': v.value4.active,
-        'year': v.value4.year,
+        'is_active': v.value4.active,
+        'current_year': v.value4.year,
       },
       'value5': <String, dynamic>{
         '\$1': v.value5.$1,
@@ -92,8 +92,8 @@ mixin TupleModelData {
             }),
       'value8': <String, dynamic>{
         '\$1': v.value8.$1,
-        'active': v.value8.active,
-        'year': v.value8.year,
+        'is_active': v.value8.active,
+        'current_year': v.value8.year,
       },
     };
   }
@@ -175,12 +175,12 @@ mixin TupleModel2Data<T> {
       ),
       value3: (
         json['value3']['\$1'] as String,
-        year: (json['value3']['year'] as num).toInt(),
+        year: (json['value3']['current_year'] as num).toInt(),
       ),
       value4: (
         json['value4']['\$1'] as String,
-        active: json['value4']['active'] as bool,
-        year: (json['value4']['year'] as num).toInt(),
+        active: json['value4']['is_active'] as bool,
+        year: (json['value4']['current_year'] as num).toInt(),
       ),
       value5: (
         json['value5']['\$1'] as String,
@@ -200,8 +200,8 @@ mixin TupleModel2Data<T> {
             ),
       value8: (
         json['value8']['\$1'] as String,
-        active: json['value8']['active'] as bool,
-        year: json['value8']['year'] as String,
+        active: json['value8']['is_active'] as bool,
+        year: json['value8']['current_year'] as String,
       ),
     );
   }
@@ -221,12 +221,12 @@ mixin TupleModel2Data<T> {
       },
       'value3': <String, dynamic>{
         '\$1': v.value3.$1,
-        'year': v.value3.year,
+        'current_year': v.value3.year,
       },
       'value4': <String, dynamic>{
         '\$1': v.value4.$1,
-        'active': v.value4.active,
-        'year': v.value4.year,
+        'is_active': v.value4.active,
+        'current_year': v.value4.year,
       },
       'value5': <String, dynamic>{
         '\$1': v.value5.$1,
@@ -246,8 +246,8 @@ mixin TupleModel2Data<T> {
             }),
       'value8': <String, dynamic>{
         '\$1': v.value8.$1,
-        'active': v.value8.active,
-        'year': v.value8.year,
+        'is_active': v.value8.active,
+        'current_year': v.value8.year,
       },
     };
   }

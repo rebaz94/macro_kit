@@ -2216,6 +2216,7 @@ const dataClassMacroCombined = Macro(
 
 const dataClassMacroCapability = MacroCapability(
   classConstructors: true,
+  filterClassFieldMetadata: 'JsonKey',
   filterClassConstructorParameterMetadata: 'JsonKey',
   mergeClassFieldWithConstructorParameter: true,
   collectClassSubTypes: true,

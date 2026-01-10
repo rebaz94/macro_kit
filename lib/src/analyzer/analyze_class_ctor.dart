@@ -99,9 +99,9 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
 
     // get @[Key] from the constructor or from classFields if exists
     var macroKeys = await computeMacroKeys(
-      capability.filterClassConstructorParameterMetadata,
-      param.metadata,
-      capability,
+      filter: capability.filterClassConstructorParameterMetadata,
+      capability: capability,
+      metadata: param.metadata,
     );
 
     // merge metadata with class field or get only the one from clas field
@@ -112,9 +112,9 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
         final classField = classFragment.fields.firstWhereOrNull((e) => e.name == paramName);
         if (classField != null) {
           fieldMacroKeys = await computeMacroKeys(
-            capability.filterClassConstructorParameterMetadata,
-            classField.metadata,
-            capability,
+            filter: capability.filterClassConstructorParameterMetadata,
+            capability: capability,
+            metadata: classField.metadata,
           );
         }
       } else {

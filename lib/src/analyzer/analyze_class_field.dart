@@ -66,12 +66,16 @@ mixin AnalyzeClassField on BaseAnalyzer {
       }
 
       bool? isGetterPropertyAbstract, isSetterPropertyAbstract;
-      var macroKeys = await computeMacroKeys(capability.filterClassFieldMetadata, field.metadata, capability);
+      var macroKeys = await computeMacroKeys(
+        filter: capability.filterClassFieldMetadata,
+        capability: capability,
+        metadata: field.metadata,
+      );
       if (fieldElem.getter != null && fieldElem.getter!.metadata.annotations.isNotEmpty) {
         final getterMacroKeys = await computeMacroKeys(
-          capability.filterClassFieldMetadata,
-          fieldElem.getter!.metadata,
-          capability,
+          filter: capability.filterClassFieldMetadata,
+          capability: capability,
+          metadata: fieldElem.getter!.metadata,
         );
         macroKeys ??= [];
         macroKeys.addAll(getterMacroKeys ?? const []);
@@ -80,9 +84,9 @@ mixin AnalyzeClassField on BaseAnalyzer {
 
       if (fieldElem.setter != null && fieldElem.setter!.metadata.annotations.isNotEmpty) {
         final setterMacroKeys = await computeMacroKeys(
-          capability.filterClassFieldMetadata,
-          fieldElem.setter!.metadata,
-          capability,
+          filter: capability.filterClassFieldMetadata,
+          capability: capability,
+          metadata: fieldElem.setter!.metadata,
         );
         macroKeys ??= [];
         macroKeys.addAll(setterMacroKeys ?? const []);

@@ -126,13 +126,19 @@ mixin Types on BaseAnalyzer {
   }
 
   @override
-  Future<List<MacroKey>?> computeMacroKeys(String filter, Metadata metadata, MacroCapability capability) async {
+  Future<List<MacroKey>?> computeMacroKeys({
+    required String filter,
+    required MacroCapability capability,
+    Metadata? metadata,
+    List<ElementAnnotation>? annotations,
+  }) async {
     if (filter.isEmpty) return null;
 
-    final targetKeys = filter == '*' ? null : filter.split(',');
+    final targetKeys = filter == '*' ? null : filter.split(',').toSet();
     final keys = <MacroKey>[];
 
-    for (final elem in metadata.annotations) {
+    annotations ??= metadata?.annotations ?? const [];
+    for (final elem in annotations) {
       final name = switch (elem.element) {
         GetterElement getterElement => getterElement.returnType.element?.displayName ?? '',
         ConstructorElement ctorElem => ctorElem.returnType.element.displayName,
@@ -444,13 +450,13 @@ mixin Types on BaseAnalyzer {
           classInfo = await parseEnum(typeElem.firstFragment, fallbackCapability: capability);
         } else if (typeInfo == TypeInfo.recordData && type is RecordType) {
           recordInfo = await parseRecord(
-            type,
-            typeAliasName: type.alias?.element.name,
-            typeAliasAnnotation: type.alias?.element.metadata.annotations,
-            typeArguments: type.alias?.typeArguments,
-            fallbackUri: (elem is Element) ? elem.library?.uri.toString() : null,
+            recordType: type,
+            recordTypeAliasElement: type.alias?.element,
+            typeArgumentOrParam: type.alias?.typeArguments,
+            libraryUri: type.alias?.element.library.uri ?? ((elem is Element) ? elem.library?.uri : null),
             fallbackCapability: capability,
             forceParse: true,
+            recordTypeAliasNode: null, // get it later if type is an alias record
           );
         }
 
@@ -552,7 +558,11 @@ mixin Types on BaseAnalyzer {
         filterMethodMetadata,
         capability,
       );
-      final macroKeys = await computeMacroKeys(filterMethodMetadata, param.metadata, capability);
+      final macroKeys = await computeMacroKeys(
+        filter: filterMethodMetadata,
+        capability: capability,
+        metadata: param.metadata,
+      );
       final defaultValue = param.computeConstantValue();
       final paramConstantValue = defaultValue == null
           ? null

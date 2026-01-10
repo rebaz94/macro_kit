@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/session.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
@@ -288,19 +289,25 @@ abstract class BaseAnalyzer {
     String? typeAliasClassName,
   });
 
-  Future<MacroRecordDeclaration?> parseRecord(
-    RecordType recordType, {
+  Future<MacroRecordDeclaration?> parseRecord({
+    required RecordType recordType,
+    TypeAliasElement? recordTypeAliasElement,
+    GenericTypeAlias? recordTypeAliasNode,
+    Uri? libraryUri,
+    List<Object /*DartType|TypeParameterElement*/>? typeArgumentOrParam,
     MacroCapability? fallbackCapability,
-    String? fallbackUri,
-    String? typeAliasName,
-    List<ElementAnnotation>? typeAliasAnnotation,
-    List<DartType>? typeArguments,
+
+    /// force parse even if there is no macro applied to it, this is used when inlined
     bool forceParse = false,
+
+    /// Whether to include record as separate declaration(if true, target macro applied to the record).
+    /// should be true only for top level declaration
+    bool included = false,
   });
 
   Future<List<MacroProperty>> parseRecordTypeParameter(
     MacroCapability capability,
-    List<DartType> typeArguments,
+    List<DartType> typeArgumentsOrParams,
   );
 
   Future<MacroFunctionDeclaration?> parseTopLevelFunction(TopLevelFunctionFragment functionFragment);
@@ -363,7 +370,12 @@ abstract class BaseAnalyzer {
 
   Future<MacroConfig?> computeMacroMetadata(ElementAnnotation macroMetadata);
 
-  Future<List<MacroKey>?> computeMacroKeys(String filter, Metadata metadata, MacroCapability capability);
+  Future<List<MacroKey>?> computeMacroKeys({
+    required String filter,
+    required MacroCapability capability,
+    Metadata? metadata,
+    List<ElementAnnotation>? annotations,
+  });
 
   Future<MacroKey?> computeMacroKey(String keyName, ElementAnnotation macroMetadata, MacroCapability capability);
 
@@ -477,11 +489,10 @@ abstract class BaseAnalyzer {
     RecordType recordType,
     MacroCapability capability,
     String? typeAliasName,
-    List<DartType>? typeArguments,
+    String libraryUri,
   ) {
-    final recordName = '${(typeAliasName ?? recordType.alias?.element.name ?? '')}${recordType.getDisplayString()}';
-    final uri = recordType.alias?.element.library.uri.toString();
-    final id = '$recordName:${generateHash('$capability$recordName$uri')}';
+    final recordName = '$typeAliasName${recordType.getDisplayString()}';
+    final id = '$recordName:${generateHash('$capability$recordName$libraryUri')}';
     return ('recordDec:$id', id);
   }
 }

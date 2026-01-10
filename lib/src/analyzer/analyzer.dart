@@ -8,8 +8,9 @@ import 'package:macro_kit/src/analyzer/analyze_class.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_ctor.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_field.dart';
 import 'package:macro_kit/src/analyzer/analyze_class_method.dart';
-import 'package:macro_kit/src/analyzer/analyze_enum_record.dart';
+import 'package:macro_kit/src/analyzer/analyze_enum.dart';
 import 'package:macro_kit/src/analyzer/analyze_function.dart';
+import 'package:macro_kit/src/analyzer/analyze_record.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
@@ -27,8 +28,8 @@ class MacroAnalyzer extends BaseAnalyzer
         AnalyzeClassMethod,
         AnalyzeFunction,
         AnalyzeEnum,
+        AnalyzeRecord,
         Generator {
-  ///
   MacroAnalyzer({
     required super.logger,
     super.server = const DefaultFakeServerInterface(),
@@ -128,12 +129,12 @@ class MacroAnalyzer extends BaseAnalyzer
             containsMacro = containsMacro ? true : macroClass != null;
           } else if (typeAliasElem.aliasedType is RecordType) {
             final macroRecord = await parseRecord(
-              typeAliasElem.aliasedType as RecordType,
-              typeAliasName: decFrag.name,
-              typeAliasAnnotation: decFrag.metadata.annotations,
-              typeArguments: typeAliasElem.aliasedType.alias?.typeArguments,
-              fallbackUri: typeAliasElem.library.uri.toString(),
-              includeInList: true,
+              recordType: typeAliasElem.aliasedType as RecordType,
+              recordTypeAliasElement: typeAliasElem,
+              typeArgumentOrParam: typeAliasElem.typeParameters,
+              libraryUri: typeAliasElem.library.uri,
+              recordTypeAliasNode: declaration,
+              included: true,
             );
             containsMacro = containsMacro ? true : macroRecord != null;
           }

@@ -1,200 +1,36 @@
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
-import 'package:collection/collection.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/core/modifier.dart';
 
-mixin AnalyzeEnum on BaseAnalyzer {
+mixin AnalyzeRecord on BaseAnalyzer {
   @override
-  Future<MacroClassDeclaration?> parseEnum(
-    EnumFragment enumFragment, {
-    required MacroCapability fallbackCapability,
-    List<ElementAnnotation>? typeAliasAnnotation,
-    String? typeAliasClassName,
-  }) async {
-    // combine all declared macro in one list and share with each config
-    // (one class can have many metadata attached, we parsed config based on each metadata)
-    List<MacroConfig> macroConfigs = [];
-    Set<String> macroNames = {};
-    bool combined = false;
-
-    final enumName = typeAliasClassName ?? enumFragment.element.name ?? '';
-
-    // 1. get all metadata attached to the class
-    final annotations = typeAliasAnnotation != null
-        ? CombinedListView([typeAliasAnnotation, enumFragment.metadata.annotations])
-        : enumFragment.metadata.annotations;
-
-    for (final macroAnnotation in annotations) {
-      if (!isValidAnnotation(macroAnnotation, className: 'Macro', pkgName: 'macro')) {
-        continue;
-      }
-
-      final macroConfig = await computeMacroMetadata(macroAnnotation);
-      if (macroConfig == null) {
-        // if no compute macro metadata, return
-        continue;
-      }
-
-      final capability = macroConfig.capability;
-      if (!capability.hasAnyCapability) {
-        // if there is no capability, return it
-        logger.info('Enum $enumName does not defined any Macro capability, ignored');
-        continue;
-      }
-
-      macroConfigs.add(macroConfig);
-      macroNames.add(macroConfig.key.name);
-    }
-
-    // 2. combine each requested capability to produce one result, then
-    //    at execution time only provide the requested capability.
-    //    * the generator maybe get extra data if not easily removed or for performance reason
-    MacroCapability capability;
-    if (macroConfigs.isEmpty) {
-      macroConfigs = [
-        MacroConfig(
-          capability: fallbackCapability,
-          combine: false,
-          key: MacroKey(name: '', properties: []),
-        ),
-      ];
-      capability = fallbackCapability;
-    } else {
-      capability = fallbackCapability.combine(macroConfigs.first.capability);
-    }
-
-    // combine capability
-    for (final config in macroConfigs.skip(1)) {
-      capability = capability.combine(config.capability);
-      combined = true;
-    }
-
-    List<MacroProperty>? enumTypeParams;
-    List<MacroProperty>? enumFields;
-    List<MacroClassConstructor>? constructors;
-    List<MacroMethod>? methods;
-    bool isInProgress;
-
-    final (cacheKey, enumId) = enumDeclarationCachedKey(enumFragment, capability, typeAliasClassName);
-    if (iterationCaches[cacheKey]?.value case MacroClassDeclaration declaration) {
-      iterationCaches[cacheKey] = iterationCaches[cacheKey]!.increaseCount();
-      // override library id?
-      return declaration.copyWith(classId: enumId, configs: macroConfigs);
-    }
-
-    final enumElem = enumFragment.element;
-    final importPrefix = importPrefixByElements[enumElem] ?? '';
-    final libraryPath = enumElem.library.uri.toString();
-    final libraryId = generateHash(libraryPath);
-    libraryPathById[libraryId] = libraryPath;
-
-    final classModifier = MacroModifier.create(
-      isAlias: typeAliasClassName?.isNotEmpty == true,
-      isPrivate: enumElem.isPrivate,
-    );
-
-    if (capability.classFields) {
-      (enumFields, enumTypeParams, isInProgress) = await parseClassFields(capability, enumFragment, null);
-      if (isInProgress) {
-        return MacroClassDeclaration.pendingDeclaration(
-          libraryId: libraryId,
-          classId: enumId,
-          importPrefix: importPrefix,
-          className: enumName,
-          configs: macroConfigs,
-          modifier: classModifier,
-          classTypeParameters: enumTypeParams,
-          subTypes: null,
-        );
-      }
-    }
-
-    if (capability.classConstructors) {
-      (constructors, enumTypeParams, isInProgress) = await parseClassConstructors(
-        capability,
-        enumFragment,
-        enumTypeParams,
-        enumFields,
-      );
-      if (isInProgress) {
-        return MacroClassDeclaration.pendingDeclaration(
-          libraryId: libraryId,
-          classId: enumId,
-          importPrefix: importPrefix,
-          className: enumName,
-          configs: macroConfigs,
-          modifier: classModifier,
-          classTypeParameters: enumTypeParams,
-          subTypes: null,
-        );
-      }
-    }
-
-    if (capability.classMethods) {
-      (methods, isInProgress) = await parseClassMethods(capability, enumFragment, enumTypeParams);
-      if (isInProgress) {
-        return MacroClassDeclaration.pendingDeclaration(
-          libraryId: libraryId,
-          classId: enumId,
-          importPrefix: importPrefix,
-          className: enumName,
-          configs: macroConfigs,
-          modifier: classModifier,
-          classTypeParameters: enumTypeParams,
-          subTypes: null,
-        );
-      }
-    }
-
-    final declaration = MacroClassDeclaration(
-      libraryId: libraryId,
-      classId: enumId,
-      configs: macroConfigs,
-      importPrefix: importPrefix,
-      className: enumName,
-      modifier: classModifier,
-      classTypeParameters: enumTypeParams,
-      classFields: enumFields,
-      constructors: constructors,
-      methods: methods,
-      subTypes: null,
-    );
-
-    if (combined) {
-      macroAnalyzeResult.putIfAbsent(macroNames.first, () => AnalyzeResult()).classes.add(declaration);
-    } else {
-      for (final name in macroNames) {
-        macroAnalyzeResult.putIfAbsent(name, () => AnalyzeResult()).classes.add(declaration);
-      }
-    }
-
-    iterationCaches[cacheKey] = CountedCache(declaration);
-    return declaration;
-  }
-
-  @override
-  Future<MacroRecordDeclaration?> parseRecord(
-    RecordType recordType, {
+  Future<MacroRecordDeclaration?> parseRecord({
+    required RecordType recordType,
+    TypeAliasElement? recordTypeAliasElement,
+    GenericTypeAlias? recordTypeAliasNode,
+    Uri? libraryUri,
+    List<Object /*DartType|TypeParameterElement*/>? typeArgumentOrParam,
     MacroCapability? fallbackCapability,
-    String? fallbackUri,
-    String? typeAliasName,
-    List<DartType>? typeArguments,
-    List<ElementAnnotation>? typeAliasAnnotation,
     bool forceParse = false,
-    bool includeInList = false,
+    bool included = false,
   }) async {
+    final typeAliasName = recordTypeAliasElement?.name;
+    final typeAliasAnnotation = recordTypeAliasElement?.metadata.annotations;
+
     // combine all declared macro in one list and share with each config
     // (one class can have many metadata attached, we parsed config based on each metadata)
     List<MacroConfig> macroConfigs = [];
     Set<String> macroNames = {};
     bool combined = false;
 
-    final recordName = typeAliasName ?? recordType.alias?.element.name ?? recordType.getDisplayString();
+    final recordName = typeAliasName ?? recordType.getDisplayString();
 
     // 1. get all metadata attached to the record
     final annotations = typeAliasAnnotation ?? recordType.alias?.element.metadata.annotations ?? const [];
@@ -256,30 +92,29 @@ mixin AnalyzeEnum on BaseAnalyzer {
     List<MacroProperty>? recordTypeParams;
     List<MacroProperty>? recordFields;
 
-    final (cacheKey, recordId) = recordDeclarationCachedKey(
-      recordType,
-      capability,
-      typeAliasName,
-      typeArguments,
-    );
+    final importPrefix = importPrefixByElements[recordTypeAliasElement] ?? '';
+    final libraryPath = recordTypeAliasElement?.library.uri.toString() ?? libraryUri?.toString() ?? '';
+    final libraryId = generateHash(libraryPath);
+    libraryPathById[libraryId] = libraryPath;
+
+    final (cacheKey, recordId) = recordDeclarationCachedKey(recordType, capability, typeAliasName, libraryPath);
     if (iterationCaches[cacheKey]?.value case MacroRecordDeclaration declaration) {
       iterationCaches[cacheKey] = iterationCaches[cacheKey]!.increaseCount();
       // override library id?
       return declaration.copyWith(recordId: recordId, configs: macroConfigs);
     }
 
-    final recordAliasElem = recordType.alias?.element;
-    final importPrefix = importPrefixByElements[recordAliasElem] ?? '';
-    final libraryPath = recordAliasElem?.library.uri.toString() ?? fallbackUri ?? '';
-    final libraryId = generateHash(libraryPath);
-    libraryPathById[libraryId] = libraryPath;
-
     final recordModifier = MacroModifier.create(
       isAlias: typeAliasName?.isNotEmpty == true,
-      isPrivate: recordAliasElem?.isPrivate ?? false,
+      isPrivate: recordTypeAliasElement?.isPrivate ?? false,
     );
 
-    (recordFields, recordTypeParams) = await parseRecordFields(capability, recordType);
+    (recordFields, recordTypeParams) = await parseRecordFields(
+      capability,
+      recordType,
+      recordTypeAliasNode,
+      typeArgumentOrParam,
+    );
 
     final declaration = MacroRecordDeclaration(
       libraryId: libraryId,
@@ -292,7 +127,7 @@ mixin AnalyzeEnum on BaseAnalyzer {
       fields: recordFields,
     );
 
-    if (includeInList) {
+    if (included) {
       if (combined) {
         macroAnalyzeResult.putIfAbsent(macroNames.first, () => AnalyzeResult()).addRecord(declaration);
       } else {
@@ -309,12 +144,23 @@ mixin AnalyzeEnum on BaseAnalyzer {
   Future<(List<MacroProperty>?, List<MacroProperty>?)> parseRecordFields(
     MacroCapability capability,
     RecordType recordType,
+    GenericTypeAlias? recordTypeAliasNode,
+    List<Object /*DartType|TypeParameterElement*/>? typeArgumentOrParam,
   ) async {
     final fields = <MacroProperty>[];
-    final recordTypeParams = await parseRecordTypeParameter(
-      capability,
-      recordType.alias?.typeArguments ?? const [],
-    );
+    final recordTypeParams = typeArgumentOrParam != null
+        ? await parseRecordTypeParameter(capability, typeArgumentOrParam)
+        : <MacroProperty>[];
+
+    // Extract field metadata from AST
+    Map<String, List<ElementAnnotation>> fieldMetadataMap = {};
+    if (recordTypeAliasNode == null && recordType.alias?.element != null) {
+      recordTypeAliasNode ??= await _getTypeAliasAstNode(recordType.alias!.element);
+    }
+
+    if (recordTypeAliasNode != null) {
+      fieldMetadataMap = _extractRecordFieldMetadata(recordTypeAliasNode);
+    }
 
     final positionalLen = recordType.positionalFields.length;
     final namedLen = recordType.namedFields.length;
@@ -329,12 +175,16 @@ mixin AnalyzeEnum on BaseAnalyzer {
         capability,
       );
 
+      // Get metadata from the AST mapping
       List<MacroKey>? macroKeys;
-      if (field.type.element?.metadata != null) {
+      final fieldName = isPositionalField ? '\$${i + 1}' : (field as RecordTypeNamedField).name;
+      final fieldAnnotations = fieldMetadataMap[fieldName];
+
+      if (fieldAnnotations?.isNotEmpty == true) {
         macroKeys = await computeMacroKeys(
-          capability.filterClassFieldMetadata,
-          field.type.element!.metadata,
-          capability,
+          filter: capability.filterClassFieldMetadata,
+          capability: capability,
+          annotations: fieldAnnotations!,
         );
       }
 
@@ -359,7 +209,7 @@ mixin AnalyzeEnum on BaseAnalyzer {
 
       fields.add(
         MacroProperty(
-          name: isPositionalField ? '\$${i + 1}' : (field as RecordTypeNamedField).name,
+          name: fieldName,
           importPrefix: fieldTypeRes.importPrefix,
           type: fieldTypeRes.type,
           typeInfo: fieldTypeRes.typeInfo,
@@ -381,20 +231,75 @@ mixin AnalyzeEnum on BaseAnalyzer {
     return (fields, recordTypeParams);
   }
 
+  /// Get the AST node for a TypeAliasElement
+  Future<GenericTypeAlias?> _getTypeAliasAstNode(TypeAliasElement aliasElement) async {
+    final libraryFragment = aliasElement.library.firstFragment;
+    final source = libraryFragment.source;
+
+    final session = currentSession!;
+    final result = await session.getResolvedUnit(source.fullName);
+    if (result is! ResolvedUnitResult) return null;
+
+    // Find the typedef declaration
+    for (final declaration in result.unit.declarations) {
+      if (declaration is GenericTypeAlias) {
+        if (declaration.declaredFragment?.element == aliasElement) {
+          return declaration;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /// Extract metadata from the AST
+  Map<String, List<ElementAnnotation>> _extractRecordFieldMetadata(GenericTypeAlias typeAliasNode) {
+    final result = <String, List<ElementAnnotation>>{};
+
+    final typeAnnotation = typeAliasNode.type;
+    if (typeAnnotation is! RecordTypeAnnotation) return result;
+
+    // positional fields
+    for (final (index, field) in typeAnnotation.positionalFields.indexed) {
+      if (field.metadata.isNotEmpty) {
+        final annotations = field.metadata.map((m) => m.elementAnnotation).whereType<ElementAnnotation>().toList();
+        result['\$${index + 1}'] = annotations;
+      }
+    }
+
+    // named fields
+    for (final field in typeAnnotation.namedFields?.fields ?? const <RecordTypeAnnotationNamedField>[]) {
+      if (field.metadata.isNotEmpty) {
+        final annotations = field.metadata.map((m) => m.elementAnnotation).whereType<ElementAnnotation>().toList();
+        result[field.name.lexeme] = annotations;
+      }
+    }
+
+    return result;
+  }
+
   @override
   Future<List<MacroProperty>> parseRecordTypeParameter(
     MacroCapability capability,
-    List<DartType> typeArguments,
+    List<Object /*DartType|TypeParameterElement*/> typeArgumentsOrParams,
   ) async {
     // fake it all type parameter in case of referenced it
     // do not use allTypeParams as final result
-    final allTypeParams = typeArguments
-        .map((e) => MacroProperty(name: '', importPrefix: '', type: e.getDisplayString(), typeInfo: TypeInfo.generic))
+    assert(typeArgumentsOrParams is List<DartType> || typeArgumentsOrParams is List<TypeParameterElement>);
+
+    final allTypeParams = typeArgumentsOrParams
+        .map(
+          (e) => MacroProperty(
+            name: '',
+            importPrefix: '',
+            type: e is DartType ? e.getDisplayString() : (e as TypeParameterElement).name ?? '',
+            typeInfo: TypeInfo.generic,
+          ),
+        )
         .toList();
 
     final typeParams = <MacroProperty>[];
-
-    for (final tp in typeArguments) {
+    for (final tp in typeArgumentsOrParams) {
       if (tp is TypeParameterType && tp.bound is! DynamicType) {
         final typeBoundRes = await getTypeInfoFrom(
           tp.bound,
@@ -428,14 +333,16 @@ mixin AnalyzeEnum on BaseAnalyzer {
         continue;
       }
 
-      typeParams.add(
-        MacroProperty(
-          name: '',
-          importPrefix: '',
-          type: tp.getDisplayString(),
-          typeInfo: TypeInfo.generic,
-        ),
-      );
+      if (tp is DartType) {
+        typeParams.add(
+          MacroProperty(
+            name: '',
+            importPrefix: '',
+            type: tp.getDisplayString(),
+            typeInfo: TypeInfo.generic,
+          ),
+        );
+      }
     }
 
     return typeParams;

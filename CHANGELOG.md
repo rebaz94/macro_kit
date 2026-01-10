@@ -1,3 +1,7 @@
+## 0.6.1
+
+- Added support for applying metadata annotations to individual record fields
+
 ## 0.6.0
 
 - Added support for applying macros to record definitions
