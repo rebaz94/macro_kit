@@ -67,6 +67,9 @@ class MacroPlugin extends Plugin implements MacroServerListener {
     client.autoReconnect = !client.isDisabledAutoStartServer();
 
     reconnectToServer();
+
+    // ensure always connected
+    Timer.periodic(const Duration(minutes: 5), (_) => reconnectToServer());
   }
 
   @override

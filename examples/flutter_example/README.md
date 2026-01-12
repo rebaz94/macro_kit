@@ -1,16 +1,12 @@
-# macro_test
+# flutter_example
 
-A new Flutter project.
+This example demonstrates various features of macro_kit.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+* macro_context.dart shows how to set up macro_kit and register macros.
+* main.dart demonstrates a sample macro called FormMacro, which generates a form from a provided
+  JSON schema. It also showcases the Embed macro, which embeds a specified asset directory directly
+  into the source code (the generated embed output is located in lib/embed).
+* The other files highlight different features of the built-in `DataClassMacro` and
+  `AssetPathMacro`.
+* The example_macro folder contains multiple macro examples, including how to create new macros and
+  how to apply macros to top-level functions, records, and classes.

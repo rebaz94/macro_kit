@@ -289,7 +289,7 @@ class AssetPathMacro extends MacroGenerator {
   static final RegExp _invalidCharsPattern = RegExp(r'[^a-zA-Z0-9_$]');
   static final RegExp _leadingUnderscoresPattern = RegExp(r'^_+');
   static final RegExp _startsWithNumberPattern = RegExp(r'^[0-9]');
-  static const _reservedWords = {
+  static const reservedWords = {
     'abstract', 'as', 'assert', 'async', 'await', 'break', 'case', 'catch', //
     'class', 'const', 'continue', 'covariant', 'default', 'deferred', 'do', //
     'dynamic', 'else', 'enum', 'export', 'extends', 'extension', 'external', //
@@ -314,7 +314,7 @@ class AssetPathMacro extends MacroGenerator {
     }
 
     // Handle Dart reserved keywords
-    if (_reservedWords.contains(sanitized)) {
+    if (reservedWords.contains(sanitized)) {
       sanitized = '${sanitized}Asset';
     }
 

@@ -1,3 +1,7 @@
+## 0.6.2
+
+- Added `EmbedMacro` to embed asset files directly into Dart code as byte arrays.
+
 ## 0.6.1
 
 - Added support for applying metadata annotations to individual record fields

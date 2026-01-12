@@ -173,9 +173,6 @@ class MacroAnalyzerServer implements MacroServerInterface {
       // Get paths for analysis context collection
       final analysisContextPaths = _contextRegistry.keys.toList();
 
-      // Get paths for file watching
-      final watchPaths = _getWatchPaths(_contextRegistry.values);
-
       // Check if contexts actually changed
       final contextsChanged =
           restartAnalyzer ||
@@ -211,6 +208,9 @@ class MacroAnalyzerServer implements MacroServerInterface {
       final autoRunMacroContexts = _contextRegistry.values
           .where((c) => c.sourceContext.autoRun && c.sourceContext.runCommand.isNotEmpty)
           .toList();
+
+      // Get paths for file watching
+      final watchPaths = _getWatchPaths(_contextRegistry.values);
 
       // Clear caches and setup watchers
       final assetContexts = _setupAssetMacroConfiguration();
@@ -294,7 +294,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     _assetsDir.clear();
 
     /// map each asset to absolute path with applied macros
-    final Set<String> outputsDir = {};
+    final Set<String> outputsDirs = {};
 
     /// setup asset macro
     for (final clientChannel in _clientChannels.values.toList()) {
@@ -303,13 +303,23 @@ class MacroAnalyzerServer implements MacroServerInterface {
         final assetDirRelative = entry.key;
         final assetMacros = entry.value;
 
-        if (!p.isRelative(assetDirRelative)) {
+        if (assetDirRelative.isEmpty) {
+          logger.warn(
+            'Skipping asset directory for: ${assetMacros.map((e) => e.macroName).join(', ')}: must be a relative path but got empty',
+          );
+          continue inner;
+        } else if (!p.isRelative(assetDirRelative)) {
           logger.warn('Skipping asset directory "$assetDirRelative": must be a relative path');
           continue inner;
         }
 
         // Combine each context with the provided asset directory
+        contextLoop:
         for (final contextInfo in _contextRegistry.values) {
+          if (!clientChannel.containsPackageOf(contextInfo.packageName, contextInfo.packageId)) {
+            continue contextLoop;
+          }
+
           final assetAbsolutePath = p.join(contextInfo.path, assetDirRelative);
           final assetAbsolutePaths = _assetsDir.putIfAbsent(assetAbsolutePath, () => {});
 
@@ -328,7 +338,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
             }
 
             final absoluteOutputPath = p.join(contextInfo.path, macro.output);
-            outputsDir.add(absoluteOutputPath);
+            outputsDirs.add(absoluteOutputPath);
             assetAbsolutePaths.add((
               macro: macro,
               relativeBasePath: assetDirRelative,
@@ -342,7 +352,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     // Remove any macro that generates output to same asset dir (prevents recursion)
     final inputDirs = _assetsDir.keys.toList();
     for (final inputDir in inputDirs) {
-      if (outputsDir.contains(inputDir)) {
+      if (outputsDirs.contains(inputDir)) {
         // remove input directory, because output to same location cause recursion
         _assetsDir.remove(inputDir);
         final msg =
@@ -369,23 +379,25 @@ class MacroAnalyzerServer implements MacroServerInterface {
     // setup source file watching
     final futures = <Future>[];
     for (final context in contexts) {
-      if (_subs.containsKey(context)) continue;
+      final subInfo = _subs[context];
+      if (subInfo != null && subInfo.fileSub != null) continue;
 
       final watcher = Watcher(context);
       futures.add(watcher.ready);
 
-      final sub = watcher.events.listen(_onWatchFileChanged, onError: _onWatchFileError);
-      _subs[context] = (fileSub: sub, autoRunMacroProcess: null);
+      final sub = watcher.events.listen(_onWatchFileChanged, onError: _onWatchFileError(context, false));
+      _subs[context] = (fileSub: sub, autoRunMacroProcess: subInfo?.autoRunMacroProcess);
     }
 
     // setup asset watching
     for (final context in assetContexts) {
-      if (_assetContextsSubs.containsKey(context)) continue;
+      final subInfo = _assetContextsSubs[context];
+      if (subInfo != null) continue;
 
       final watcher = Watcher(context);
       futures.add(watcher.ready);
 
-      final sub = watcher.events.listen(_onWatchAssetChanged, onError: _onWatchFileError);
+      final sub = watcher.events.listen(_onWatchAssetChanged, onError: _onWatchFileError(context, true));
       _assetContextsSubs[context] = sub;
     }
 
@@ -1079,8 +1091,26 @@ class MacroAnalyzerServer implements MacroServerInterface {
     return null;
   }
 
-  void _onWatchFileError(Object error, StackTrace _) {
-    logger.error('File watch encountered an error', error);
+  void Function(Object, StackTrace) _onWatchFileError(String context, bool assetContext) {
+    return (Object error, StackTrace _) {
+      logger.error('File watch for: $context encountered an error, re-listening..', error);
+
+      if (assetContext) {
+        final subInfo = _assetContextsSubs[context];
+        if (subInfo == null) return;
+
+        subInfo.cancel();
+        _assetContextsSubs.remove(context);
+      } else {
+        final subInfo = _subs[context];
+        if (subInfo == null) return;
+
+        subInfo.fileSub?.cancel();
+        _subs[context] = (fileSub: null, autoRunMacroProcess: subInfo.autoRunMacroProcess);
+      }
+
+      onContextChanged();
+    };
   }
 
   void _onWatchFileChanged(WatchEvent event) {

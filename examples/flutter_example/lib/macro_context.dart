@@ -100,6 +100,7 @@ Future<void> setupMacro() async {
       'FormMacro': FormMacro.initialize,
       'TimedMacro': TimedMacro.initialize,
       'RecordMacro': RecordMacro.initialize,
+      'EmbedMacro': EmbedMacro.initialize,
     },
     assetMacros: {
       'assets': [
@@ -107,6 +108,11 @@ Future<void> setupMacro() async {
           macroName: 'AssetPathMacro',
           output: 'lib',
           config: AssetPathConfig().toJson(),
+        ),
+        AssetMacroInfo(
+          macroName: 'EmbedMacro',
+          output: 'lib/embed',
+          config: EmbedMacroConfig(extension: '.jpg,.txt,.svg').toJson(),
         ),
       ],
     },
