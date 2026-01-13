@@ -10,6 +10,8 @@ dartdoc:
       markdown: "doc/data_class_macro.md"
     "Asset Path Macro":
       markdown: "doc/asset_path_macro.md"
+    "Embed Macro":
+      markdown: "doc/embed_macro.md"
     "Global Configuration":
       markdown: "doc/global_macro_config.md"
     "Write New Macro":
@@ -23,6 +25,7 @@ dartdoc:
     - "Models"
     - "Data Class Macro"
     - "Asset Path Macro"
+    - "Embed Macro"
     - "Global Configuration"
     - "Write New Macro"
     - "Capability"

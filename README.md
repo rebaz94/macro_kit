@@ -237,6 +237,39 @@ final asset = Image.asset(AssetPaths.logo);
 final asset = Image.asset(AssetPaths.icons.home);
 ```
 
+### EmbedMacro
+
+Embeds asset files directly into Dart source code as byte arrays. This macro scans a directory,
+generates Dart code containing the raw bytes of each asset, and exposes a virtual file system
+interface.
+
+```dart
+Future<void> setupMacro() async {
+  await runMacro(
+    macros: {
+      'EmbedMacro': EmbedMacro.initialize,
+    },
+    assetMacros: {
+      'assets': [
+        AssetMacroInfo(
+          macroName: 'EmbedMacro',
+          extension: '.png,.jpg',
+          output: 'lib/embed',
+        ),
+      ],
+    },
+  );
+}
+```
+
+For additional details, refer to the [Embed Macro](doc/embed_macro.md) documentation.
+
+```dart
+// Usage example
+final files = EmbedFs.current.listSync();
+final myImageBytes = EmbedFs.file('/assets/image.png').readAsByteSync();
+```
+
 ## 🎯 Why Macro Kit?
 
 | Feature          | Macro Kit            | build_runner       |
@@ -292,12 +325,13 @@ Enable auto-rebuild in `macro.json`:
 
 ## ⚠️ Current Limitations
 
-Macros can currently only be applied to classes. This covers most common use cases, but future
-updates will include:
+At the moment, macros can only be used on classes, top-level functions, and records. While this
+supports most common scenarios, upcoming releases are expected to add:
 
-- 🔜 Support for applying macros to variables and functions
-- 🔜 Additional macro capabilities for library developers
-- 🔜 More built-in macros for common patterns
+- 🔜 Compile-time value computation
+- 🔜 The ability to apply macros to variables
+- 🔜 Expanded macro features for library authors
+- 🔜 A broader set of built-in macros for common use cases
 
 Despite these limitations, Macro Kit handles the majority of day-to-day code generation needs
 efficiently.

@@ -268,15 +268,55 @@ class EmbedMacro extends MacroGenerator {
 
     buffer.writeln();
     buffer.writeln('''
+/// The main entry point for accessing the embedded file system.
+///
+/// This class provides static factory methods to create [EmbedFile] and
+/// [EmbedDirectory] instances that access files embedded at compile time.    
 final class $generatedClassName {
   $generatedClassName._();
   
   static final _EmbedRegistryImpl _registry = _EmbedRegistryImpl._();
   
+  /// Creates an [EmbedFile] instance for the file at the given [path].
+  ///
+  /// The [path] should be an absolute path (starting with '/') that matches
+  /// a file embedded during the macro generation phase.
+  ///
+  /// Example:
+  /// ```dart
+  /// final logo = EmbedFS.file('/images/logo.png');
+  /// final bytes = logo.readAsBytesSync();
+  /// ```
+  ///
+  /// Returns an [EmbedFile] that can be used to read the file's contents.
   static EmbedFile file(String path) => EmbedFile(path)..\$registry = _registry;
   
+  /// Creates an [EmbedDirectory] instance for the directory at the given [path].
+  ///
+  /// The [path] should be an absolute path (starting with '/') to a directory
+  /// in the embedded file system.
+  ///
+  /// Example:
+  /// ```dart
+  /// final assets = EmbedFS.directory('/assets');
+  /// final children = assets.listSync();
+  /// ```
+  ///
+  /// Returns an [EmbedDirectory] that can be used to list its contents.
   static EmbedDirectory directory(String path) => EmbedDirectory(path)..\$registry = _registry;
   
+  /// Returns the root directory ('/') of the embedded file system.
+  ///
+  /// This is a convenience getter equivalent to calling `directory('/')`.
+  /// Use this as a starting point to explore all embedded files.
+  ///
+  /// Example:
+  /// ```dart
+  /// final root = EmbedFS.current;
+  /// final allFiles = root.listSync(recursive: true);
+  /// ```
+  ///
+  /// Returns an [EmbedDirectory] representing the root of the file system.
   static EmbedDirectory get current => directory('/');
 }    
     

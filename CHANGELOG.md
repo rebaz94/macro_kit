@@ -1,3 +1,7 @@
+## 0.6.4
+
+- Add documentation for **EmbedMacro**
+
 ## 0.6.3
 
 - Support analyzer 9.0.0 
