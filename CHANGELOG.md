@@ -1,3 +1,7 @@
+## 0.6.3
+
+- Support analyzer 9.0.0 
+
 ## 0.6.2
 
 - Added `EmbedMacro` to embed asset files directly into Dart code as byte arrays.

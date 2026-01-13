@@ -1,7 +1,7 @@
 name: macro_kit
 description: A development-time macro system for Dart that generates code instantly for fast iteration without build_runner.
-version: 0.6.2
-version_code: 39
+version: 0.6.3
+version_code: 40
 repository: https://github.com/rebaz94/macro_kit
 topics:
   - codegen
@@ -13,14 +13,12 @@ topics:
 environment:
   sdk: ">=3.9.0 <4.0.0"
 
-# Add regular dependencies here.
 dependencies:
-  meta: ^1.16.0
-  analyzer: ^8.4.0
-  analyzer_plugin: ^0.13.10
-  analysis_server_plugin: ^0.3.3
-  source_helper: ^1.3.8
-  watcher: ^1.2.0
+  meta: ^1.17.0
+  analyzer: ^9.0.0
+  analysis_server_plugin: ^0.3.4
+  source_helper: ^1.3.9
+  watcher: ^1.2.1
   shelf: ^1.4.2
   shelf_router: ^1.1.4
   shelf_web_socket: ^3.0.0
