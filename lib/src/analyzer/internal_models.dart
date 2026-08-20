@@ -13,7 +13,7 @@ import 'package:web_socket_channel/web_socket_channel.dart' show WebSocketChanne
 
 final m.Random random = m.Random();
 
-int newId() => random.nextInt(100000);
+int newId() => random.nextInt(100000) + 1000;
 
 @internal
 class ContextInfo {

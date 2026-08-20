@@ -32,7 +32,6 @@ class MacroContextRule extends AnalysisRule {
     'macro context',
     uniqueName: 'macro_context',
     correctionMessage: '',
-    hasPublishedDocs: false,
     severity: DiagnosticSeverity.WARNING,
   );
 

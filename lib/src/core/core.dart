@@ -1043,7 +1043,7 @@ class MacroProperty {
       if (keys?.isNotEmpty == true) 'k': keys!.map((e) => e.toJson()).toList(),
       if (fieldInitializer != null) 'fi': fieldInitializer!.toJson(),
       if (typeId != '') 'cvType': typeId,
-      if (constantValueEncoded != null) 'cv': constantValueEncoded,
+      'cv': ?constantValueEncoded,
       if (constantModifier?.isNotEmpty == true) 'cm': constantModifier!,
       if (requireConversionToLiteral == true) 'rcl': true,
     };

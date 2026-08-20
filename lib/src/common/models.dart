@@ -518,7 +518,7 @@ class RunMacroResultMsg implements Message {
       'id': id,
       'result': result,
       if (generatedFiles?.isNotEmpty == true) 'generatedFiles': generatedFiles!,
-      if (error != null) 'error': error!,
+      'error': ?error,
     };
   }
 }

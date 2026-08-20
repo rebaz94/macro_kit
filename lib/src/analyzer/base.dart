@@ -9,10 +9,9 @@ import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
+
 // ignore: implementation_imports
 import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
-// ignore: implementation_imports
-import 'package:analyzer/src/dart/analysis/analysis_options.dart';
 // ignore: implementation_imports
 import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:dart_style/dart_style.dart';
@@ -137,14 +136,15 @@ abstract class BaseAnalyzer {
       byteStore: _byteStore,
       resourceProvider: PhysicalResourceProvider.INSTANCE,
       // fileContentCache: FileContentCache(PhysicalResourceProvider.INSTANCE),
-      updateAnalysisOptions4:
-          // >> from analysis server plugin
-          // Disable extra warning computation and lint computation, because
-          // these are reported in the main analysis server isolate, not in the
-          // plugins isolate.
-          ({required AnalysisOptionsImpl analysisOptions}) => analysisOptions
-            ..warning = false
-            ..lint = false,
+      configureAnalysisOptionsBuilder: ({required analysisOptionsBuilder}) {
+        // >> from analysis server plugin
+        // Disable extra warning computation and lint computation, because
+        // these are reported in the main analysis server isolate, not in the
+        // plugins isolate.
+        analysisOptionsBuilder
+          ..warning = false
+          ..lint = false;
+      },
       withFineDependencies: true,
     );
   }

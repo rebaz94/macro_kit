@@ -1,3 +1,7 @@
+## 0.7.0
+
+- Update analyzer version
+
 ## 0.6.4
 
 - Add documentation for **EmbedMacro**

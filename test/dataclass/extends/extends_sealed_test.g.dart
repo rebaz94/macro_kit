@@ -172,16 +172,15 @@ mixin ItemListData<T> {
   }) {
     final type = json['type'];
     return switch (type) {
-          'BrandList' => BrandListData.fromJson(json),
-          'ComparableItemList' => ComparableItemListData.fromJson<T$>(json, fromJsonT$),
-          'ComparableItemList1' => ComparableItemList1Data.fromJson<T1, T2>(json, fromJsonT1, fromJsonT2),
-          'KeyedItemList' => KeyedItemListData.fromJson<K, T$$>(json, fromJsonK, fromJsonT$$),
-          'NamedItemList' => NamedItemListData.fromJson<T$$$>(json, fromJsonT$$$),
-          _ => throw InvalidDiscriminatorException(
-            'Unrecognized discriminator value "$type" for ItemList. No default subtype is defined.',
-          ),
-        }
-        as ItemList<T>;
+      'BrandList' => BrandListData.fromJson(json),
+      'ComparableItemList' => ComparableItemListData.fromJson<T$>(json, fromJsonT$),
+      'ComparableItemList1' => ComparableItemList1Data.fromJson<T1, T2>(json, fromJsonT1, fromJsonT2),
+      'KeyedItemList' => KeyedItemListData.fromJson<K, T$$>(json, fromJsonK, fromJsonT$$),
+      'NamedItemList' => NamedItemListData.fromJson<T$$$>(json, fromJsonT$$$),
+      _ => throw InvalidDiscriminatorException(
+        'Unrecognized discriminator value "$type" for ItemList. No default subtype is defined.',
+      ),
+    } as ItemList<T>;
   }
 
   Map<String, dynamic> toJsonBy<T$ extends Comparable<T$>, T1 extends Map<String, T2>, T2, K, T$$, T$$$>({
@@ -246,14 +245,13 @@ mixin ItemListData<T> {
     NamedItemList<T$$$> Function(NamedItemList<T$$$> value)? namedItemList,
   }) {
     return switch (this) {
-          BrandList v => brandList != null ? brandList(v) : v.copyWith(),
-          ComparableItemList<T$> v => comparableItemList != null ? comparableItemList(v) : v.copyWith(),
-          ComparableItemList1<T1, T2> v => comparableItemList1 != null ? comparableItemList1(v) : v.copyWith(),
-          KeyedItemList<K, T$$> v => keyedItemList != null ? keyedItemList(v) : v.copyWith(),
-          NamedItemList<T$$$> v => namedItemList != null ? namedItemList(v) : v.copyWith(),
-          _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for ItemList.'),
-        }
-        as ItemList<T>;
+      BrandList v => brandList != null ? brandList(v) : v.copyWith(),
+      ComparableItemList<T$> v => comparableItemList != null ? comparableItemList(v) : v.copyWith(),
+      ComparableItemList1<T1, T2> v => comparableItemList1 != null ? comparableItemList1(v) : v.copyWith(),
+      KeyedItemList<K, T$$> v => keyedItemList != null ? keyedItemList(v) : v.copyWith(),
+      NamedItemList<T$$$> v => namedItemList != null ? namedItemList(v) : v.copyWith(),
+      _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for ItemList.'),
+    } as ItemList<T>;
   }
 
   @pragma('vm:prefer-inline')
@@ -564,16 +562,15 @@ mixin ItemList1Data<T> {
   }) {
     final type = json['type'];
     return switch (type) {
-          'BrandList1' => BrandList1Data.fromJson(json),
-          'ComparableItemList2' => ComparableItemList2Data.fromJson<T$>(json, fromJsonT$),
-          'ComparableItemList3' => ComparableItemList3Data.fromJson<T1, T2>(json, fromJsonT1, fromJsonT2),
-          'KeyedItemList1' => KeyedItemList1Data.fromJson<K, T$$>(json, fromJsonK, fromJsonT$$),
-          'NamedItemList1' => NamedItemList1Data.fromJson<T$$$>(json, fromJsonT$$$),
-          _ => throw InvalidDiscriminatorException(
-            'Unrecognized discriminator value "$type" for ItemList1. No default subtype is defined.',
-          ),
-        }
-        as ItemList1<T>;
+      'BrandList1' => BrandList1Data.fromJson(json),
+      'ComparableItemList2' => ComparableItemList2Data.fromJson<T$>(json, fromJsonT$),
+      'ComparableItemList3' => ComparableItemList3Data.fromJson<T1, T2>(json, fromJsonT1, fromJsonT2),
+      'KeyedItemList1' => KeyedItemList1Data.fromJson<K, T$$>(json, fromJsonK, fromJsonT$$),
+      'NamedItemList1' => NamedItemList1Data.fromJson<T$$$>(json, fromJsonT$$$),
+      _ => throw InvalidDiscriminatorException(
+        'Unrecognized discriminator value "$type" for ItemList1. No default subtype is defined.',
+      ),
+    } as ItemList1<T>;
   }
 
   Map<String, dynamic> toJsonBy<T$ extends Comparable<T$>, T1 extends Map<String, T2>, T2, K, T$$, T$$$>({
@@ -638,14 +635,13 @@ mixin ItemList1Data<T> {
     NamedItemList1<T$$$> Function(NamedItemList1<T$$$> value)? namedItemList1,
   }) {
     return switch (this) {
-          BrandList1 v => brandList1 != null ? brandList1(v) : v.copyWith(),
-          ComparableItemList2<T$> v => comparableItemList2 != null ? comparableItemList2(v) : v.copyWith(),
-          ComparableItemList3<T1, T2> v => comparableItemList3 != null ? comparableItemList3(v) : v.copyWith(),
-          KeyedItemList1<K, T$$> v => keyedItemList1 != null ? keyedItemList1(v) : v.copyWith(),
-          NamedItemList1<T$$$> v => namedItemList1 != null ? namedItemList1(v) : v.copyWith(),
-          _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for ItemList1.'),
-        }
-        as ItemList1<T>;
+      BrandList1 v => brandList1 != null ? brandList1(v) : v.copyWith(),
+      ComparableItemList2<T$> v => comparableItemList2 != null ? comparableItemList2(v) : v.copyWith(),
+      ComparableItemList3<T1, T2> v => comparableItemList3 != null ? comparableItemList3(v) : v.copyWith(),
+      KeyedItemList1<K, T$$> v => keyedItemList1 != null ? keyedItemList1(v) : v.copyWith(),
+      NamedItemList1<T$$$> v => namedItemList1 != null ? namedItemList1(v) : v.copyWith(),
+      _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for ItemList1.'),
+    } as ItemList1<T>;
   }
 
   @pragma('vm:prefer-inline')

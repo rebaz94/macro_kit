@@ -9,6 +9,7 @@ class Wrapped with WrappedData {
     required this.model,
   });
 
+  @JsonKey(name: 'id')
   final String id;
 
   @JsonKey(fromJson: ExternalModel.fromJson, toJson: toJsonExt)

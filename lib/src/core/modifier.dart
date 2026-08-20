@@ -51,9 +51,10 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isRequiredNamed: elem.isRequiredNamed,
         isRequiredPositional: elem.isRequiredPositional,
         hasDefaultValue: elem.hasDefaultValue,
-        isInitializingFormal: elem.isInitializingFormal,
+        // ignore: unnecessary_type_check
+        isInitializingFormal: elem is FieldFormalParameterElement,
         fieldFormalParameter: true,
-        superFormalParameter: elem.isSuperFormal,
+        superFormalParameter: elem is SuperFormalParameterElement,
       ),
       FormalParameterElement() => MacroModifier.create(
         isConst: elem.isConst,
@@ -73,9 +74,9 @@ extension type const MacroModifier(Map<String, bool> value) implements Map<Strin
         isRequiredNamed: elem.isRequiredNamed,
         isRequiredPositional: elem.isRequiredPositional,
         hasDefaultValue: elem.hasDefaultValue,
-        isInitializingFormal: elem.isInitializingFormal,
+        isInitializingFormal: elem is FieldFormalParameterElement,
         formalParameter: true,
-        superFormalParameter: elem.isSuperFormal,
+        superFormalParameter: elem is SuperFormalParameterElement,
       ),
       LocalVariableElement() => MacroModifier.create(
         isConst: elem.isConst,

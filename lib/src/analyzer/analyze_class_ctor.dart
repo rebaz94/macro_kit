@@ -321,7 +321,7 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
 
       for (final dec in cu.declarations) {
         if (dec is ClassDeclaration) {
-          for (final member in dec.members) {
+          for (final member in dec.body.members) {
             if (member is ConstructorDeclaration) {
               if (member.declaredFragment?.element == ctor) {
                 return member;
@@ -341,7 +341,7 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
     required InterfaceFragment? extendsElement,
     required List<InterfaceFragment> interfaceElements,
   }) {
-    return [if (extendsElement != null) extendsElement, ...interfaceElements]
+    return [?extendsElement, ...interfaceElements]
         .expand((e) => e.fields) //
         .where((f) => f.name == field.name)
         .map((f) => f.element)
@@ -419,11 +419,11 @@ mixin AnalyzeClassCtor on BaseAnalyzer {
             if (arg.name == param.name) {
               return (superConstructor?.formalParameters.elementAtOrNull(i), null);
             }
-          } else if (arg is NamedExpression) {
-            var exp = arg.expression;
+          } else if (arg is NamedArgument) {
+            var exp = arg.argumentExpression;
             if (exp is SimpleIdentifier) {
               if (exp.name == param.name) {
-                var superName = arg.name.label.name;
+                var superName = arg.name.lexeme;
                 return (
                   superConstructor?.formalParameters.firstWhereOrNull(
                     (p) => p.isNamed && p.name == superName,

@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.9.0 <4.0.0"
+  sdk: ">=3.10.0 <4.0.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -30,13 +30,18 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
-  json_schema_builder: ^0.1.3
-  flutter_svg: ^2.2.3
+  cupertino_icons: ^1.0.9
+  json_schema_builder: ^0.1.6
+  flutter_svg: ^2.3.0
+  platform: ^3.1.6
 
   macro_kit:
     path: ../..
-  vm_service: ^15.0.2
+  vm_service: ^15.3.0
+
+dependency_overrides:
+  platform:
+    path: /Users/rebo/Desktop/platform
 
 dev_dependencies:
   flutter_test:
@@ -47,7 +52,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

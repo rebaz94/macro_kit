@@ -595,13 +595,12 @@ mixin BaseTypeGenData<T> {
   static BaseTypeGen<T> fromJson<T>(Map<String, dynamic> json) {
     final type = json['disType'];
     return switch (type) {
-          'SubType2Gen' => SubType2GenData.fromJson(json),
-          'SubType1' => SubTypeGenData.fromJson(json),
-          _ => throw InvalidDiscriminatorException(
-            'Unrecognized discriminator value "$type" for BaseTypeGen. No default subtype is defined.',
-          ),
-        }
-        as BaseTypeGen<T>;
+      'SubType2Gen' => SubType2GenData.fromJson(json),
+      'SubType1' => SubTypeGenData.fromJson(json),
+      _ => throw InvalidDiscriminatorException(
+        'Unrecognized discriminator value "$type" for BaseTypeGen. No default subtype is defined.',
+      ),
+    } as BaseTypeGen<T>;
   }
 
   Map<String, dynamic> toJsonBy() {
@@ -641,11 +640,10 @@ mixin BaseTypeGenData<T> {
     SubTypeGen Function(SubTypeGen value)? subTypeGen,
   }) {
     return switch (this) {
-          SubType2Gen v => subType2Gen != null ? subType2Gen(v) : v.copyWith(),
-          SubTypeGen v => subTypeGen != null ? subTypeGen(v) : v.copyWith(),
-          _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for BaseTypeGen.'),
-        }
-        as BaseTypeGen<T>;
+      SubType2Gen v => subType2Gen != null ? subType2Gen(v) : v.copyWith(),
+      SubTypeGen v => subTypeGen != null ? subTypeGen(v) : v.copyWith(),
+      _ => throw InvalidDiscriminatorException('Unrecognized discriminator value "$runtimeType" for BaseTypeGen.'),
+    } as BaseTypeGen<T>;
   }
 
   @pragma('vm:prefer-inline')

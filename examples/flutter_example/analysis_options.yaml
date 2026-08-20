@@ -25,10 +25,6 @@ linter:
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
     prefer_const_constructors_in_immutables: false
 
-#analyzer:
-#  plugins:
-#    - macro_kit
-
 plugins:
   macro_kit:
     path: ../..
@@ -36,3 +32,12 @@ plugins:
 formatter:
   page_width: 120
   trailing_commas: preserve
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

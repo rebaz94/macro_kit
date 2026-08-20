@@ -214,12 +214,12 @@ extension DartObjectExt on DartObject {
 
       // fallback to get all value from class
       classConfig['__ctor__'] = classElement.constructors
-          .where((e) => (e.isGenerative || e.isConst) && !e.isSynthetic)
+          .where((e) => (e.isGenerative || e.isConst) && !e.isOriginDeclaration)
           .map((e) => '${e.name}:${e.formalParameters.length}')
           .toList();
 
       for (final field in classElement.fields) {
-        if (field.isPrivate || field.isStatic || field.isExternal || field.isSynthetic) continue;
+        if (field.isPrivate || field.isStatic || field.isExternal || field.isOriginDeclaration) continue;
 
         final fieldName = field.name ?? '';
         final obj = peek(fieldName);

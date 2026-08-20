@@ -591,7 +591,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       onError: (err) => logger.error('WebSocket channel error occurred', err),
       onDone: () async {
         final pluginInfo = _pluginChannels[pluginId];
-        logger.info('Removing plugin: $pluginId');
+        logger.info('Removing plugin: ID: $pluginId');
 
         if (pluginInfo == null) {
           // Plugin already removed from tracking, trigger immediate context update
@@ -615,10 +615,10 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
   Future<void> _onPluginContextReceived(int pluginId, PluginChannelInfo plugin, List<String> contexts) async {
     if (analyzer.pendingAnalyze.isNotEmpty) {
-      logger.info('waiting to pending complete: ${DateTime.now()}');
+      logger.info('Waiting to complete pending analyze: ${DateTime.now()}');
       // wait until work done before adding new context
       await analyzer.pendingAnalyzeCompleted.stream.first;
-      logger.info('waiting to pending completed: ${DateTime.now()}');
+      logger.info('Pending analyze completed: ${DateTime.now()}');
     }
 
     final excluded = excludedDirectory;
@@ -629,7 +629,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       _contextRegistry[context]?.autoRebuildExecuted = false;
     }
 
-    logger.info('New plugin connected: $pluginId');
+    logger.info('New plugin connected: ID: $pluginId, contexts: ${contexts.length}');
     _pluginChannels[pluginId] = plugin.copyWith(contextPaths: contexts);
     await onContextChanged();
   }
@@ -665,7 +665,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
             clientId = msg.id;
 
             // this will trigger auto rebuild if configured
-            logger.info('New Macro client connected: $clientId');
+            logger.info('New Macro client connected: ID: $clientId');
             await onContextChanged(connectedClient: client, triggerAutoBuild: true);
           default:
             _handleMessage(message, channel);
@@ -673,7 +673,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       },
       onError: (err) => logger.error('WebSocket channel error occurred', err),
       onDone: () {
-        logger.info('Removing Macro client: $clientId');
+        logger.info('Removing Macro client: ID: $clientId');
         _clientChannels.remove(clientId);
       },
     );
@@ -719,7 +719,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
     final sent = await _addMessageToClient(clientId, SyncMacrosConfigMsg(config: config));
     if (!sent) {
-      logger.error('Failed to send macro configuration to channel: $clientId');
+      logger.error('Failed to send macro configuration to channel: ID: $clientId');
     }
   }
 

@@ -19,7 +19,7 @@ class MacroPlugin extends Plugin implements MacroServerListener {
   }) : client = MacroServerClient(pluginId: pluginId, logger: logger);
 
   factory MacroPlugin() {
-    final pluginId = Random().nextInt(100);
+    final pluginId = 100 + Random().nextInt(999);
     final pluginLogId = generateHash(Platform.packageConfig ?? pluginId.toString());
     final sink = MacroLogger.getFileAppendLogger('plugin_$pluginLogId.log');
     final logger = MacroLogger.createLogger(name: 'MacroPlugin', into: sink.writeln);
