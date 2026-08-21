@@ -134,13 +134,16 @@ mixin AnalyzeVariable on BaseAnalyzer {
   /// Extract the compute body source text and optional encode/decode functions
   /// from a [TopLevelVariableDeclaration] AST node.
   ///
-  /// Returns null if no `compute(...)` call is found.
+  /// Returns a record containing:
+  /// - `body`: The source text of the compute function (e.g., `() => 42`)
+  /// - `encode`: The source text of the optional encode function, or null
+  /// - `decode`: The source text of the optional decode function, or null
+  ///
+  /// Returns null if no `compute(...)` call is found in the initializer.
   ({String body, String? encode, String? decode})? _extractComputeBody(TopLevelVariableDeclaration node) {
-    // Get the variable declaration list
     final varList = node.variables;
     if (varList.variables.isEmpty) return null;
 
-    // Get the first variable's initializer
     final firstVar = varList.variables.first;
     final initializer = firstVar.initializer;
     if (initializer == null) return null;
@@ -160,7 +163,16 @@ mixin AnalyzeVariable on BaseAnalyzer {
     return null;
   }
 
-  /// Parse the arguments of a compute() call to extract body, encode, and decode.
+  /// Parse the arguments of a `compute()` call to extract body, encode, and decode.
+  ///
+  /// Extracts:
+  /// - First positional argument as the compute body source text
+  /// - `encode` named argument (optional): function that serializes the runtime result
+  ///   to a string before it's sent back from the temp file execution
+  /// - `decode` named argument (optional): function that converts the encoded string
+  ///   back to a Dart literal for code generation
+  ///
+  /// Returns null if the argument list is empty.
   ({String body, String? encode, String? decode})? _parseComputeArgs(ArgumentList argumentList) {
     final args = argumentList.arguments;
     if (args.isEmpty) return null;
@@ -186,7 +198,13 @@ mixin AnalyzeVariable on BaseAnalyzer {
 
   /// Extract dependency identifiers from the `deps:` named argument of a compute() call.
   ///
-  /// Returns a list of identifier names, or null if no deps argument is provided.
+  /// Supports three forms:
+  /// - **List literal**: `deps: [a, b, c]` — extracts each identifier from the list
+  /// - **Constant list literal**: `deps: const [a, b, c]` — same as above (const keyword is ignored)
+  /// - **Bare variable reference**: `deps: myList` — returns the variable name itself;
+  ///   resolution of the variable's source text is deferred to [_resolveDepsSource]
+  ///
+  /// Returns a list of identifier names, or null if no `deps` argument is provided.
   List<String>? _extractDeps(TopLevelVariableDeclaration node) {
     final varList = node.variables;
     if (varList.variables.isEmpty) return null;
@@ -205,22 +223,54 @@ mixin AnalyzeVariable on BaseAnalyzer {
 
     for (final arg in argumentList.arguments) {
       if (arg is NamedArgument && arg.name.lexeme == 'deps') {
-        final listLiteral = arg.argumentExpression;
-        if (listLiteral is ListLiteral) {
-          return listLiteral.elements
-              .whereType<Identifier>()
-              .map((id) => id.name)
-              .toList();
-        }
+        return _extractDepsFromExpression(arg.argumentExpression);
       }
     }
     return null;
   }
 
-  /// Resolve the source text of each dependency identifier.
+  /// Extract dependency names from an AST expression.
   ///
-  /// For same-file identifiers, extracts the full declaration source.
-  /// For imported identifiers, extracts the declaration from the imported file.
+  /// Handles multiple expression forms:
+  /// - [ListLiteral]: `[a, b, c]` or `const [a, b, c]` — extracts identifiers directly
+  /// - [Identifier]: bare variable reference like `deps: myList` — returns the name
+  ///   for later resolution by [_resolveDepsSource]
+  ///
+  /// Returns the list of identifier names, or null for unrecognized expressions.
+  List<String>? _extractDepsFromExpression(Expression expr) {
+    // Case 1 & 2: [a, b, c] or const [a, b, c] — list literal (const has constKeyword set)
+    if (expr is ListLiteral) {
+      return _extractIdentifiersFromList(expr);
+    }
+
+    // Case 3: Variable reference — e.g., deps: myList
+    // Return the variable name itself; _resolveDepsSource will handle resolution.
+    if (expr is Identifier) {
+      return [expr.name];
+    }
+
+    return null;
+  }
+
+  /// Extract identifier names from a list literal's elements.
+  ///
+  /// Filters elements to only [Identifier] nodes (skips spread elements,
+  /// collection-if, etc.) and returns their names.
+  List<String> _extractIdentifiersFromList(ListLiteral list) {
+    return list.elements.whereType<Identifier>().map((id) => id.name).toList();
+  }
+
+  /// Resolve the source text of each dependency identifier for hashing.
+  ///
+  /// Performs a two-pass resolution:
+  /// 1. **Same-file pass**: checks [resolvedUnit]'s declarations for variables,
+  ///    functions, classes, and other top-level declarations matching the dep name
+  /// 2. **Imported pass**: uses [Scope.lookup] to find the element, resolves the
+  ///    containing library via [getResolvedLibraryByElement], then locates the
+  ///    declaration node by source offset or name matching across all units
+  ///
+  /// Returns a map of `depName -> sourceText` for all successfully resolved deps.
+  /// Unresolvable deps are silently skipped with a log message.
   Future<Map<String, String>> _resolveDepsSource(
     List<String> depNames,
     ResolvedUnitResult resolvedUnit,
@@ -236,6 +286,7 @@ mixin AnalyzeVariable on BaseAnalyzer {
         for (final variable in decl.variables.variables) {
           final fragment = variable.declaredFragment;
           if (fragment == null) continue;
+
           final element = fragment.element;
           if (remaining.remove(element.name)) {
             result[element.name!] = sourceContent.substring(decl.offset, decl.end);
@@ -244,6 +295,7 @@ mixin AnalyzeVariable on BaseAnalyzer {
       } else {
         final fragment = decl.declaredFragment;
         if (fragment == null) continue;
+
         final element = fragment.element;
         if (remaining.remove(element.name)) {
           result[element.name!] = sourceContent.substring(decl.offset, decl.end);
@@ -271,8 +323,47 @@ mixin AnalyzeVariable on BaseAnalyzer {
         final resolvedLib = await resolvedUnit.session.getResolvedLibraryByElement(libElement);
         if (resolvedLib is! ResolvedLibraryResult) continue;
 
-        final fragmentDecl = resolvedLib.getFragmentDeclaration(element.firstFragment);
-        final node = fragmentDecl?.node;
+        // Find the declaration node by looking at the element's source location.
+        // Try to get offset from the element's fragment.
+        final fragment = element.firstFragment;
+        final nameOffset = fragment.nameOffset ?? 0;
+
+        AstNode? node;
+        // First try: find by source offset in resolved units
+        if (nameOffset > 0) {
+          for (final unitResult in resolvedLib.units) {
+            final cu = unitResult.unit;
+            for (final decl in cu.declarations) {
+              if (decl.offset <= nameOffset && nameOffset < decl.end) {
+                node = decl;
+                break;
+              }
+            }
+            if (node != null) break;
+          }
+        }
+
+        // Second try: match by declaration name across all declaration types
+        if (node == null) {
+          for (final unitResult in resolvedLib.units) {
+            final cu = unitResult.unit;
+            for (final decl in cu.declarations) {
+              if (decl is TopLevelVariableDeclaration) {
+                for (final v in decl.variables.variables) {
+                  if (v.name.lexeme == depName) {
+                    node = decl;
+                    break;
+                  }
+                }
+              } else if (decl.declaredFragment?.element.name == depName) {
+                node = decl;
+              }
+              if (node != null) break;
+            }
+            if (node != null) break;
+          }
+        }
+
         if (node == null) continue;
 
         // Read the source file

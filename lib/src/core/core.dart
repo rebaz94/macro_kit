@@ -1550,7 +1550,8 @@ class MacroVariableDeclaration {
   /// Macro-specific data map.
   ///
   /// Use this to pass custom data to the macro generator.
-  /// For example, the compute macro stores `computedResult`, `asConst`, and `private` here.
+  /// For example, the compute macro stores `computeBody`, `encode`, `decode`,
+  /// `deps`, `depSources`, `combinedHash`, and `computedResult` here.
   final Map<String, dynamic> data;
 
   MacroVariableDeclaration copyWith({
@@ -2244,7 +2245,7 @@ class MacroState {
     final value = _data[key];
     if (value == null) return null;
 
-    assert(value is T);
+    assert(value is T, 'Expected value to be $T but got: ${value.runtimeType}');
     return value as T;
   }
 

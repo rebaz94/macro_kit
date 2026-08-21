@@ -186,7 +186,7 @@ List<String> get macroDartRunnerCommand {
 /// [autoRunMacro] is enabled. If the macro runner is executed separately
 /// for any reason, this environment variable must be provided manually.
 List<String> get macroFlutterRunnerCommand {
-  return const ['flutter', 'test', '--timeout', 'none', '--ignore-timeouts', 'lib/macro_context.dart'];
+  return const ['flutter', 'test', '--timeout', 'none', '--ignore-timeouts', '--no-dds', 'lib/macro_context.dart'];
 }
 
 /// Keeps the macro runner process alive when launched via test runners

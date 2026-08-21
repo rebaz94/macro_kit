@@ -23,24 +23,8 @@ class DartCode {
   /// [code] is the raw Dart expression to embed in generated code.
   const DartCode(this.code);
 
-  /// Creates a [DartCode] that wraps a value as a string literal.
-  ///
-  /// Convenience factory that quotes [value] as a Dart string literal.
-  factory DartCode.value(String value) {
-    final escaped = value
-        .replaceAll('\\', '\\\\')
-        .replaceAll("'", "\\'")
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '\\r')
-        .replaceAll('\t', '\\t');
-    return DartCode("'$escaped'");
-  }
-
   /// The raw Dart source code to embed.
   final String code;
-
-  /// Whether this instance represents raw code (true) or a value literal (false).
-  bool get isRawCode => true;
 
   @override
   String toString() => 'DartCode($code)';
@@ -49,16 +33,24 @@ class DartCode {
 /// Sentinel type used by the compute executor to distinguish
 /// [DartCode] results from regular values across isolate/process boundaries.
 ///
-/// This is not meant to be used directly by users.
+/// When a compute body returns a [DartCode], it's transported as a
+/// [DartCodeResult] across the isolate/process boundary, then serialized
+/// directly as raw Dart source in the generated code.
+///
+/// This is not meant to be used directly by users — it's an internal
+/// transport mechanism.
 class DartCodeResult {
   const DartCodeResult(this.code);
 
+  /// Creates a [DartCodeResult] from a JSON map with `'code'` key.
   factory DartCodeResult.fromJson(Map<String, dynamic> json) {
     return DartCodeResult(json['code'] as String);
   }
 
+  /// The raw Dart source code to embed in generated code.
   final String code;
 
+  /// Serializes to JSON for transport across isolate/process boundaries.
   Map<String, dynamic> toJson() => {'code': code};
 }
 

@@ -11,7 +11,6 @@ mixin TestData {
     return Test(
       id: json['id'] as String,
       name: json['name'] as String,
-      name2: json['name2'] as String,
     );
   }
 
@@ -20,20 +19,17 @@ mixin TestData {
     return <String, dynamic>{
       'id': v.id,
       'name': v.name,
-      'name2': v.name2,
     };
   }
 
   Test copyWith({
     String? id,
     String? name,
-    String? name2,
   }) {
     final v = this as Test;
     return Test(
       id: id ?? v.id,
       name: name ?? v.name,
-      name2: name2 ?? v.name2,
     );
   }
 
@@ -44,8 +40,7 @@ mixin TestData {
         (other.runtimeType == runtimeType &&
             other is Test &&
             (identical(other.id, v.id) || other.id == v.id) &&
-            (identical(other.name, v.name) || other.name == v.name) &&
-            (identical(other.name2, v.name2) || other.name2 == v.name2));
+            (identical(other.name, v.name) || other.name == v.name));
   }
 
   @override
@@ -55,34 +50,15 @@ mixin TestData {
       runtimeType,
       v.id,
       v.name,
-      v.name2,
     );
   }
 
   @override
   String toString() {
     final v = this as Test;
-    return 'Test{id: ${v.id}, name: ${v.name}, name2: ${v.name2}}';
+    return 'Test{id: ${v.id}, name: ${v.name}}';
   }
 }
 
-dynamic _processResult<T>(T raw, [String Function(T)? enc, String Function(String)? dec]) {
-  if (raw case DartCode raw) return {'__dartCode__': raw.code};
-  if (enc == null && dec == null) return raw;
-  final String encoded = enc != null ? enc(raw).toString() : raw.toString();
-  return dec != null ? dec(encoded) : encoded;
-}
-
-void computeRunner() async {
-  final resultFile = File('/Volumes/Projects/Server/swiftybase/macro/test/computed/computed_test_compute_3547781247.g.dart.result')..createSync(recursive: true);
-  try {
-    final results = <String, dynamic>{};
-    results['versionMacro'] = _processResult(await versionMacro.call());
-    resultFile.writeAsStringSync(jsonEncode({'type': 'value', 'data': results}));
-  } catch (e, s) {
-    resultFile.writeAsStringSync(jsonEncode({'type': 'error', 'message': e.toString(), 'stackTrace': s.toString()}));
-  }
-}
-
-const _versionMacro_computeHash = 2259548781;
-const version = '1';
+const _versionMacroHash = 3400724338;
+const version = '2';

@@ -80,25 +80,44 @@ FutureOr<T> Function() compute<T>(
   String Function(T value)? encode,
   String Function(String value)? decode,
   List<Object>? deps,
-}) =>
-    fn;
+}) => fn;
 
 /// A macro that executes a compute function at compile time and generates
-/// a constant/final/var with the result.
+/// a const/final/var variable (or getter) with the result.
 ///
-/// This macro can be applied to:
-/// - **Top-level variables**: generates a const/final/var variable
-/// - **Classes**: generates an abstract class with computed fields
+/// The generated declaration is controlled by [modifier]:
+/// - default → `const variableName = ...;`
+/// - `isFinal` → `final variableName = ...;`
+/// - `isVar` → `var variableName = ...;`
+/// - `isPrivate` → adds leading `_` to the generated name
 ///
-/// For class application, the macro declares `classFields: true` with
-/// `filterClassFieldMetadata: 'Macro'` to collect only fields annotated
-/// with `@Macro(...)`. The `onClassFields` callback processes these fields
-/// and generates computed values in an abstract class.
+/// ## Usage
+///
+/// ```dart
+/// // Default: const
+/// @Macro(ComputeMacro())
+/// final _versionMacro = compute(() => '1.0.0');
+/// // Generates: const version = '1.0.0';
+///
+/// // Explicit final
+/// @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true)))
+/// final _dynamicMacro = compute(() => DateTime.now().toString());
+/// // Generates: final dynamic = '...';
+///
+/// // Var
+/// @Macro(ComputeMacro(modifier: ComputeModifier(isVar: true)))
+/// final _mutableMacro = compute(() => 'rebuildable');
+/// // Generates: var mutable = '...';
+///
+/// // Private + final
+/// @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true, isPrivate: true)))
+/// final _secretMacro = compute(() => 'hidden');
+/// // Generates: final _secret = 'hidden';
+/// ```
 class ComputeMacro extends MacroGenerator {
   const ComputeMacro({
     super.capability = computeMacroCapability,
-    this.asConst = true,
-    this.private,
+    this.modifier = const ComputeModifier(),
   });
 
   /// Create a ComputeMacro instance from a MacroConfig
@@ -108,16 +127,17 @@ class ComputeMacro extends MacroGenerator {
 
     return ComputeMacro(
       capability: config.capability,
-      asConst: props['asConst']?.asBoolConstantValue() ?? true,
-      private: props['private']?.asBoolConstantValue(),
+      modifier: ComputeModifier.fromConstant(props['modifier']?.constantValue),
     );
   }
 
-  /// Whether to use `const` instead of `final` in generated code
-  final bool asConst;
-
-  /// Whether to make the generated variable private (add leading underscore)
-  final bool? private;
+  /// Modifier controlling the generated variable/getter.
+  ///
+  /// - default → generates `const`
+  /// - `isFinal` → generates `final`
+  /// - `isVar` → generates `var`
+  /// - `isPrivate` → adds leading underscore to generated name
+  final ComputeModifier modifier;
 
   @override
   String get suffixName => 'Computed';
@@ -134,9 +154,6 @@ class ComputeMacro extends MacroGenerator {
 
   @override
   Future<void> onClassFields(MacroState state, List<MacroProperty> fields) async {
-    // Store field data for onGenerate to use
-    // Note: compute body extraction from fields is done by the analyzer
-    // and stored in the declaration's data map
     state.set('classFields', fields);
   }
 
@@ -146,10 +163,10 @@ class ComputeMacro extends MacroGenerator {
 
     switch (state.targetType) {
       case TargetType.variable:
-        await _generateVariable(state, asConst, private, buff);
+        await _generateVariable(state, modifier, buff);
 
       case TargetType.clazz:
-        await _generateClass(state, asConst, private, buff);
+        await _generateClass(state, modifier, buff);
 
       default:
         throw MacroException('ComputeMacro: unexpected target type: ${state.targetType}');
@@ -158,11 +175,15 @@ class ComputeMacro extends MacroGenerator {
     state.reportGenerated(buff.toString(), canBeCombined: false);
   }
 
-  /// Generate code for a top-level variable
+  /// Generate code for a top-level variable.
+  ///
+  /// Produces one of:
+  /// - `const name = value;` (default)
+  /// - `final name = value;`
+  /// - `var name = value;`
   Future<void> _generateVariable(
     MacroState state,
-    bool useAsConst,
-    bool? makePrivate,
+    ComputeModifier mod,
     StringBuffer buff,
   ) async {
     final computedResult = state.get('computedResult');
@@ -171,53 +192,62 @@ class ComputeMacro extends MacroGenerator {
       throw MacroException('Compute body for ${state.targetName} returned empty result');
     }
 
-    final variableName = _deriveName(state.targetName, makePrivate);
-    final modifier = useAsConst ? 'const' : 'final';
+    final variableName = _deriveName(state.targetName, mod);
 
     // Add hash constant for incremental caching
     final combinedHash = state.getOrNull<int>('combinedHash');
     if (combinedHash != null) {
-      buff.write('const _${state.targetName}_computeHash = $combinedHash;\n');
+      buff.write('const _${state.targetName}Hash = $combinedHash;\n');
     }
 
-    buff.write('$modifier $variableName = $computedResult;\n');
+    // Variable case: determine keyword from modifier
+    String keyword;
+    if (mod.isFinal) {
+      keyword = 'final';
+    } else if (mod.isVar) {
+      keyword = 'var';
+    } else {
+      // Default to const when no keyword is specified
+      keyword = 'const';
+    }
+
+    buff.write('$keyword $variableName = $computedResult;\n');
   }
 
   /// Generate code for a class (abstract class with computed fields)
   Future<void> _generateClass(
     MacroState state,
-    bool useAsConst,
-    bool? makePrivate,
+    ComputeModifier mod,
     StringBuffer buff,
   ) async {
-    final classFields = state.getOrNull<Map<String, dynamic>>('classFields');
+    final classFields = state.getOrNull<List<MacroProperty>>('classFields');
     if (classFields == null || classFields.isEmpty) {
       throw MacroException('No computed fields found in class ${state.targetName}');
     }
 
     buff.write('abstract class ${state.targetName}$suffixName {\n');
 
-    for (final entry in classFields.entries) {
-      final fieldName = entry.key;
-      final fieldInfo = entry.value as Map<String, dynamic>;
-      final fieldType = fieldInfo['type'] as String? ?? 'dynamic';
+    final dartCorePrefix = state.imports[r"import dart:core"] ?? '';
+    for (final entry in classFields) {
+      final fieldName = entry.name;
+      final fieldType =
+          entry.functionTypeInfo?.returns.firstOrNull?.typeArguments?.firstOrNull?.getDartType(dartCorePrefix) ??
+          entry.type;
 
-      // Note: computedResult will be populated by the server after execute
-      // For now, generate a placeholder that will be filled in
-      final derivedName = _deriveName(fieldName, makePrivate);
+      final derivedName = _deriveName(fieldName, mod);
       buff.write('  $fieldType get $derivedName;\n');
     }
 
     buff.write('}\n');
   }
 
-  /// Derive the generated variable name from the raw name
+  /// Derive the generated variable name from the raw name.
   ///
   /// Rules:
   /// - Strip leading underscore
   /// - Strip trailing 'Macro' suffix
-  /// - If [forcePrivate] is true, add leading underscore
-  String _deriveName(String rawName, bool? forcePrivate) {
+  /// - If [mod] has `isPrivate`, add leading underscore
+  String _deriveName(String rawName, ComputeModifier mod) {
     var name = rawName;
 
     // Strip leading underscore
@@ -230,8 +260,8 @@ class ComputeMacro extends MacroGenerator {
       name = name.substring(0, name.length - 5);
     }
 
-    // Apply private option
-    if (forcePrivate == true && !name.startsWith('_')) {
+    // Apply private option from modifier
+    if (mod.isPrivate && !name.startsWith('_')) {
       name = '_$name';
     }
 
@@ -239,7 +269,112 @@ class ComputeMacro extends MacroGenerator {
   }
 }
 
-/// Shorthand annotation for the compute macro.
+/// User-friendly modifier for [ComputeMacro].
+///
+/// Controls what kind of declaration is generated: const, final, or var.
+/// Unlike [MacroModifier], this uses clear named booleans and works in const contexts.
+///
+/// ## Examples
+///
+/// ```dart
+/// // Default: const (omit modifier or use default)
+/// @Macro(ComputeMacro())
+/// final _versionMacro = compute(() => '1.0.0');
+/// // Generates: const version = '1.0.0';
+///
+/// // Final variable
+/// @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true)))
+/// final _dynamicMacro = compute(() => DateTime.now().toString());
+/// // Generates: final dynamic = '...';
+///
+/// // Private + final
+/// @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true, isPrivate: true)))
+/// final _secretMacro = compute(() => 'hidden');
+/// // Generates: final _secret = 'hidden';
+/// ```
+class ComputeModifier {
+  /// Creates a [ComputeModifier].
+  ///
+  /// - [isFinal]: generates `final name = value;`
+  /// - [isVar]: generates `var name = value;`
+  /// - [isPrivate]: prefixes the generated name with `_`
+  ///
+  /// When no keyword flag is set, `const` is generated.
+  const ComputeModifier({
+    this.isFinal = false,
+    this.isVar = false,
+    this.isPrivate = false,
+  });
+
+  /// Creates a [ComputeModifier] from the serialized constant annotation value.
+  ///
+  /// The analyzer serializes a const-constructed argument as a map with a
+  /// `'__named_args__'` entry. Returns the default modifier (const) when
+  /// [rawValue] is missing, null, or in an unexpected shape.
+  static ComputeModifier fromConstant(Object? rawValue) {
+    if (rawValue case Map m when m['__named_args__'] is Map) {
+      final namedArgs = m['__named_args__'] as Map;
+      return ComputeModifier(
+        isFinal: namedArgs['isFinal'] == true,
+        isVar: namedArgs['isVar'] == true,
+        isPrivate: namedArgs['isPrivate'] == true,
+      );
+    }
+    return const ComputeModifier();
+  }
+
+  /// Whether the generated declaration uses `final`.
+  final bool isFinal;
+
+  /// Whether the generated declaration uses `var`.
+  final bool isVar;
+
+  /// Whether the generated name is prefixed with `_`.
+  final bool isPrivate;
+}
+
+/// Processes a raw compute result before transport across isolate/process boundaries.
+///
+/// This function is called in the temp file's `main()` entrypoint. It handles:
+/// - **[DartCode]**: wraps the raw code as `{'__dartCode__': code}` for transport
+/// - **No encode/decode**: returns the raw value as-is (primitives, collections)
+/// - **With encode/decode**: applies encode to the raw value, then decode to the string
+///
+/// The result is sent back to the analyzer server which serializes it to a Dart literal.
+///
+/// [raw] is the runtime result of calling the compute function.
+/// [enc] is the optional encode function (converts runtime value to string).
+/// [dec] is the optional decode function (converts encoded string to Dart literal).
+Object? processComputedResult<T>(T raw, [String Function(T)? enc, String Function(String)? dec]) {
+  if (raw case DartCode raw) return {'__dartCode__': raw.code};
+  if (enc == null && dec == null) return raw;
+  final String encoded = enc != null ? enc(raw).toString() : raw.toString();
+  return dec != null ? dec(encoded) : encoded;
+}
+
+const _computeOnce = 1;
+
+/// Sentinel dependency list that marks a compute macro to build only once.
+///
+/// When used as `deps: macroBuildOnce`, the compute body is executed exactly once
+/// and the result is cached permanently. The hash stored in the generated `.g.dart`
+/// file will never trigger a rebuild since the hash value is constant.
+///
+/// ## Usage
+///
+/// ```dart
+/// @Macro(ComputeMacro())
+/// final _randomMacro = compute(
+///   () => Random().nextInt(1000),
+///   deps: macroBuildOnce,  // builds once, never rebuilds
+/// );
+/// ```
+///
+/// This is useful for values that are intentionally non-deterministic or
+/// expensive to compute, where you want to freeze the result at build time.
+const macroBuildOnce = [_computeOnce];
+
+/// Shorthand annotation for the compute macro (default: const).
 ///
 /// Usage:
 /// ```dart
@@ -248,7 +383,7 @@ class ComputeMacro extends MacroGenerator {
 /// ```
 const computeMacro = Macro(ComputeMacro(capability: computeMacroCapability));
 
-/// see [computeMacro]
+/// Shorthand annotation for the compute macro with code combining.
 const computeMacroCombined = Macro(
   combine: true,
   ComputeMacro(

@@ -1,23 +1,23 @@
 import 'package:macro_kit/macro_kit.dart';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:async';
-import 'dart:isolate';
-import 'package:macro_kit/macro_kit.dart';
+import 'package:test/test.dart';
 
 part 'computed_test.g.dart';
 
 @dataClassMacro
 class Test with TestData  {
-  Test({required this.id, required this.name, required this.name2});
+  Test({required this.id, required this.name});
 
   final String id;
   final String name;
-  final String name2;
 }
 
 
 @Macro(ComputeMacro())
-final versionMacro = compute(() => 1.toString());
+final versionMacro = compute(() => 2.toString());
 
-void main() => computeRunner();
+void main() {
+  group('Primitive value', () {
+    test('version', () => expect(version, '2'));
+    test('test class', () => expect(Test(id: '1', name: 'aa'), Test(id: '1', name: 'aa')));
+  });
+}

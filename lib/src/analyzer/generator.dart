@@ -45,20 +45,39 @@ mixin Generator on BaseAnalyzer {
     }
 
     // step:2 configure the generated file path
-    final (:genFilePath, partFromSource: partFromSource, :partFromGenerated) = server.buildGeneratedFileInfo(path);
+    final (:genFilePath, partFromSource: _, :partFromGenerated) = server.buildGeneratedFileInfo(path);
 
-    // step:2.5 execute compute macros for variables before sending to client
-    await _executeComputeBodies(runConfigs, path, genFilePath);
+    // step:2.1 read existing compute hashes BEFORE any file overwrites
+    final existingHashes = _readComputeHashes(genFilePath);
 
-    // step:3 run the macro generator
+    // step:2.2 separate compute variables from non-compute
+    // A macro config is "compute" if any of its topLevelVariables has computeBody.
+    RunMacroMsg? computeMsg;
+    final nonComputeConfigs = <String, RunMacroMsg>{};
+    for (final entry in runConfigs.entries) {
+      final hasCompute = entry.value.topLevelVariables?.any(
+        (v) => v.data['computeBody'] != null,
+      );
+      if (hasCompute == true) {
+        if (computeMsg != null) {
+          logger.warn(
+            'Multiple compute macro configs found for $path, only "${entry.key}" will be executed',
+          );
+        }
+        computeMsg = entry.value;
+      } else {
+        nonComputeConfigs[entry.key] = entry.value;
+      }
+    }
+
+    // step:3 generate non-compute macros first (Phase 1)
     final generated = StringBuffer("part of '$partFromGenerated';");
-    bool fileGenerated = false;
+    String nonComputeGeneratedCode = '';
 
-    for (final runConfigEntry in runConfigs.entries) {
+    for (final runConfigEntry in nonComputeConfigs.entries) {
       final macroName = runConfigEntry.key;
       final msg = runConfigEntry.value;
 
-      // ignore message with empty applied to not generate empty file
       if (msg.classes?.isNotEmpty != true &&
           msg.records?.isNotEmpty != true &&
           msg.topLevelFunctions?.isNotEmpty != true &&
@@ -66,41 +85,40 @@ mixin Generator on BaseAnalyzer {
         continue;
       }
 
-      var clientChannelId = server.getClientChannelIdByMacro(macroName, path);
-
-      if (clientChannelId == null) {
-        server.requestClientToConnect();
-        await Future.delayed(const Duration(seconds: 3));
-
-        clientChannelId = server.getClientChannelIdByMacro(macroName, path);
-        if (clientChannelId == null) {
-          logger.error('No Macro generator found for: $macroName');
-          server.onClientError(-1, 'No Macro generator found for: $macroName');
-          return;
-        }
-      }
-
-      final (runRes, err, trace) = await server.runMacroGenerator(clientChannelId, msg).awaitValueTraced();
-      if (err != null) {
-        server.onClientError(clientChannelId, err.toString(), err, trace);
-        return;
-      } else if (runRes!.error?.isNotEmpty == true) {
-        server.onClientError(clientChannelId, runRes.error!);
-        return;
-      }
-
-      fileGenerated = true;
+      final result = await _sendToClient(macroName, msg, path);
+      if (result == null) return;
+      nonComputeGeneratedCode += result;
       generated
-        ..write(runRes.result)
+        ..write(result)
         ..write('\n');
     }
 
-    if (!fileGenerated) {
+    // step:4 execute compute bodies with inlined non-compute code (Phase 2)
+    if (computeMsg != null) {
+      await _executeComputeBodies(
+        computeMsg,
+        path,
+        genFilePath,
+        nonComputeGeneratedCode: nonComputeGeneratedCode,
+        existingHashes: existingHashes,
+      );
+
+      // step:5 generate compute macros with results (Phase 3)
+      final result = await _sendToClient(computeMsg.macroName, computeMsg, path);
+      if (result == null) return;
+      generated
+        ..write(result)
+        ..write('\n');
+    }
+
+    // step:6 single write to .g.dart
+    final code = generated.toString();
+    final partOfHeader = "part of '$partFromGenerated';";
+    if (code.length <= partOfHeader.length + 1) {
       removeFile(genFilePath);
       return;
     }
 
-    // step:3 generate the part file
     final partFile = File(genFilePath);
     final codeRes = _formatCode(generated, genFilePath);
 
@@ -116,6 +134,35 @@ mixin Generator on BaseAnalyzer {
     if (error != null) {
       logger.error('Failed to write generated code into: $genFilePath', error);
     }
+  }
+
+  /// Send a [RunMacroMsg] to the client macro generator and return the code string.
+  /// Returns null if no client found or an error occurred (error already reported).
+  Future<String?> _sendToClient(String macroName, RunMacroMsg msg, String path) async {
+    var clientChannelId = server.getClientChannelIdByMacro(macroName, path);
+
+    if (clientChannelId == null) {
+      server.requestClientToConnect();
+      await Future.delayed(const Duration(seconds: 3));
+
+      clientChannelId = server.getClientChannelIdByMacro(macroName, path);
+      if (clientChannelId == null) {
+        logger.error('No Macro generator found for: $macroName');
+        server.onClientError(-1, 'No Macro generator found for: $macroName');
+        return null;
+      }
+    }
+
+    final (runRes, err, trace) = await server.runMacroGenerator(clientChannelId, msg).awaitValueTraced();
+    if (err != null) {
+      server.onClientError(clientChannelId, err.toString(), err, trace);
+      return null;
+    } else if (runRes!.error?.isNotEmpty == true) {
+      server.onClientError(clientChannelId, runRes.error!);
+      return null;
+    }
+
+    return runRes.result;
   }
 
   Future<void> executeAssetMacro({
@@ -144,30 +191,8 @@ mixin Generator on BaseAnalyzer {
     // step:2 run the macro generator
     // final generatedFiles = <String>[];
     for (final msg in runConfigs) {
-      var clientChannelId = server.getClientChannelIdByMacro(msg.macroName, path);
-
-      if (clientChannelId == null) {
-        server.requestClientToConnect();
-        await Future.delayed(const Duration(seconds: 3));
-
-        clientChannelId = server.getClientChannelIdByMacro(msg.macroName, path);
-        if (clientChannelId == null) {
-          logger.error('No Macro generator found for: ${msg.macroName}');
-          server.onClientError(-1, 'No Macro generator found for: ${msg.macroName}');
-          return;
-        }
-      }
-
-      final (runRes, err, trace) = await server.runMacroGenerator(clientChannelId, msg).awaitValueTraced();
-      if (err != null) {
-        server.onClientError(clientChannelId, err.toString(), err, trace);
-        return;
-      } else if (runRes?.error?.isNotEmpty == true) {
-        server.onClientError(clientChannelId, runRes!.error!);
-        return;
-      }
-
-      // generatedFiles.addAll(runRes.generatedFiles ?? const []);
+      final result = await _sendToClient(msg.macroName, msg, path);
+      if (result == null) return;
     }
 
     // TODO: process generated file?
@@ -187,76 +212,68 @@ mixin Generator on BaseAnalyzer {
 
   /// Execute compute bodies for all variable declarations that have compute data.
   ///
-  /// Compares combinedHash against stored hashes in the existing `.g.dart` file.
-  /// Only recomputes when the hash differs. When deps are specified, only
-  /// changes to the compute body or listed dependencies change the hash.
-  /// When deps are omitted, any file change changes the hash.
+  /// [nonComputeGeneratedCode] is the generated code from non-compute macros
+  /// that gets inlined into the temp file so compute bodies can reference
+  /// generated types (e.g., data class mixins).
+  /// [existingHashes] are pre-read hashes from the existing `.g.dart` file,
+  /// read before any overwrites to preserve cache state.
   Future<void> _executeComputeBodies(
-    Map<String, RunMacroMsg> runConfigs,
+    RunMacroMsg computeMsg,
     String sourceFilePath,
-    String genFilePath,
-  ) async {
-    // Read existing hashes from the generated file
-    final existingHashes = _readComputeHashes(genFilePath);
-
+    String genFilePath, {
+    String nonComputeGeneratedCode = '',
+    Map<String, ({int hash, String value})> existingHashes = const {},
+  }) async {
     // Collect all compute bodies that need execution
     final allComputeBodies = <String, ComputeBodyInfo>{};
     final declarationsByVariableId = <String, MacroVariableDeclaration>{};
 
-    for (final runConfigEntry in runConfigs.entries) {
-      final msg = runConfigEntry.value;
-      if (msg.topLevelVariables?.isNotEmpty != true) continue;
+    if (computeMsg.topLevelVariables?.isNotEmpty != true) return;
 
-      for (final varDecl in msg.topLevelVariables!) {
-        final computeBody = varDecl.data['computeBody'] as String?;
-        if (computeBody == null || computeBody.isEmpty) continue;
+    for (final varDecl in computeMsg.topLevelVariables!) {
+      final computeBody = varDecl.data['computeBody'] as String?;
+      if (computeBody == null || computeBody.isEmpty) continue;
 
-        // Compare combinedHash directly against stored value
-        final combinedHash = varDecl.data['combinedHash'] as int?;
-        if (combinedHash != null && existingHashes.containsKey(varDecl.variableName)) {
-          final stored = existingHashes[varDecl.variableName]!;
-          if (stored.hash == combinedHash) {
-            // Hash matches — reuse cached computed value
-            final newData = Map<String, dynamic>.from(varDecl.data);
-            newData['computedResult'] = stored.value;
-            // Update the declaration in the message with cached result
-            for (final runConfigEntry in runConfigs.entries) {
-              final msg = runConfigEntry.value;
-              if (msg.topLevelVariables == null) continue;
-              final idx = msg.topLevelVariables!.indexWhere(
-                (v) => v.variableName == varDecl.variableName,
-              );
-              if (idx >= 0) {
-                msg.topLevelVariables![idx] = varDecl.copyWith(data: newData);
-                break;
-              }
-            }
-            continue;
+      // Compare combinedHash directly against stored value
+      final combinedHash = varDecl.data['combinedHash'] as int?;
+      final storedHash = existingHashes[varDecl.variableName];
+      if (combinedHash != null && storedHash != null && storedHash.hash == combinedHash) {
+        // Hash matches — reuse cached computed value
+        final newData = Map<String, dynamic>.from(varDecl.data);
+        newData['computedResult'] = storedHash.value;
+
+        // Update the declaration in the message with cached result
+        if (computeMsg.topLevelVariables != null) {
+          final idx = computeMsg.topLevelVariables!.indexWhere(
+            (v) => v.variableName == varDecl.variableName,
+          );
+          if (idx >= 0) {
+            computeMsg.topLevelVariables![idx] = varDecl.copyWith(data: newData);
           }
         }
-
-        allComputeBodies[varDecl.variableName] = ComputeBodyInfo(
-          body: computeBody,
-          encode: varDecl.data['encode'] as String?,
-          decode: varDecl.data['decode'] as String?,
-        );
-        declarationsByVariableId[varDecl.variableName] = varDecl;
+        continue;
       }
+
+      allComputeBodies[varDecl.variableName] = ComputeBodyInfo(
+        body: computeBody,
+        encode: varDecl.data['encode'] as String?,
+        decode: varDecl.data['decode'] as String?,
+      );
+      declarationsByVariableId[varDecl.variableName] = varDecl;
     }
 
     if (allComputeBodies.isEmpty) return;
 
     // Get runner type from server context (dart or flutter)
     final runnerType = server.getRunnerType(sourceFilePath);
-    final defaultStrategy = runnerType == 'flutter'
-        ? ComputeStrategy.flutterTest
-        : ComputeStrategy.dartRun;
+    final defaultStrategy = runnerType == 'flutter' ? ComputeStrategy.flutterTest : ComputeStrategy.dartRun;
 
     // Execute all compute bodies that need recomputation
     final results = await ComputeExecutor.executeAll(
       sourceFilePath: sourceFilePath,
       computeBodies: allComputeBodies,
       defaultStrategy: defaultStrategy,
+      nonComputeGeneratedCode: nonComputeGeneratedCode,
     );
 
     // Store results in declarations
@@ -271,15 +288,12 @@ mixin Generator on BaseAnalyzer {
         newData['computedResult'] = result.dartLiteral;
 
         // Replace the declaration in the message with updated data
-        for (final runConfigEntry in runConfigs.entries) {
-          final msg = runConfigEntry.value;
-          if (msg.topLevelVariables == null) continue;
-          final idx = msg.topLevelVariables!.indexWhere(
+        if (computeMsg.topLevelVariables != null) {
+          final idx = computeMsg.topLevelVariables!.indexWhere(
             (v) => v.variableName == entry.key,
           );
           if (idx >= 0) {
-            msg.topLevelVariables![idx] = varDecl.copyWith(data: newData);
-            break;
+            computeMsg.topLevelVariables![idx] = varDecl.copyWith(data: newData);
           }
         }
       } else {
@@ -291,7 +305,7 @@ mixin Generator on BaseAnalyzer {
   /// Read stored compute hashes and computed values from the generated `.g.dart` file.
   ///
   /// Returns a map of variableName -> (combinedHash, computedValue).
-  /// The hash is stored as: `const _<name>_computeHash = <combinedHash>;`
+  /// The hash is stored as: `const _<name>Hash = <combinedHash>;`
   /// The value follows on the next line: `const <derivedName> = <value>;`
   Map<String, ({int hash, String value})> _readComputeHashes(String genFilePath) {
     final result = <String, ({int hash, String value})>{};
@@ -304,7 +318,7 @@ mixin Generator on BaseAnalyzer {
 
       // Pattern: hash line followed by value line
       final pattern = RegExp(
-        r'const\s+_(\w+)_computeHash\s*=\s*(-?\d+)\s*;\s*\n'
+        r'const\s+_(\w+)Hash\s*=\s*(-?\d+)\s*;\s*\n'
         r'(?:const|final|var)\s+\w+\s*=\s*(.+);',
         multiLine: true,
       );

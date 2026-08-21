@@ -22,19 +22,26 @@ enum ComputeStrategy {
   flutterTest,
 }
 
-/// Result of executing a compute body
+/// Result of executing a single compute body.
+///
+/// Contains either a pre-serialized Dart literal string (on success)
+/// or an error message (on failure).
 class ComputeResult {
   const ComputeResult({
     required this.dartLiteral,
     this.error,
   });
 
-  /// The pre-serialized Dart literal string (e.g., `'1.0.0'` or `{'key': 'value'}`)
+  /// The pre-serialized Dart literal string ready for code generation.
+  ///
+  /// Examples: `'hello world'`, `42`, `true`, `null`, `[1, 2, 3]`,
+  /// `{'key': 'value'}`, or raw Dart code like `Color(0xFFFF0000)`.
   final String dartLiteral;
 
-  /// Error message if execution failed
+  /// Error message if execution failed, null on success.
   final String? error;
 
+  /// Whether execution succeeded (no error).
   bool get isSuccess => error == null;
 }
 
@@ -59,10 +66,14 @@ class ComputeExecutor {
   /// [sourceFilePath] is the path to the original source file.
   /// [computeBodies] maps variableName to the compute body info.
   /// [defaultStrategy] is the project-level default (from macro server context).
+  /// [nonComputeGeneratedCode] is the generated code from non-compute macros
+  /// that gets inlined into the temp file so compute bodies can reference
+  /// generated types (e.g., data class mixins).
   static Future<Map<String, ComputeResult>> executeAll({
     required String sourceFilePath,
     required Map<String, ComputeBodyInfo> computeBodies,
     required ComputeStrategy defaultStrategy,
+    String? nonComputeGeneratedCode,
   }) async {
     if (computeBodies.isEmpty) return {};
 
@@ -74,6 +85,7 @@ class ComputeExecutor {
       sourceFilePath: sourceFilePath,
       computeBodies: computeBodies,
       strategy: strategy,
+      nonComputeGeneratedCode: nonComputeGeneratedCode,
     );
 
     if (tempFile == null) {
@@ -98,7 +110,7 @@ class ComputeExecutor {
         ),
         ComputeStrategy.flutterTest => await _executeViaProcess(
           'flutter',
-          ['test', '--timeout', 'none', '--ignore-timeouts', tempFile.path],
+          ['test', '--timeout', 'none', '--ignore-timeouts', '--no-dds', tempFile.path],
           tempFile,
           computeBodies,
         ),
@@ -106,7 +118,7 @@ class ComputeExecutor {
       return results;
     } finally {
       try {
-        // tempFile.deleteSync();
+        tempFile.deleteSync();
       } catch (_) {}
     }
   }
@@ -309,11 +321,13 @@ class ComputeExecutor {
   }
 
   /// Create a temp source file by copying the original file content,
-  /// commenting out part directives, and appending a main() entrypoint.
+  /// commenting out part directives, appending inlined generated code
+  /// from non-compute macros, and adding a main() entrypoint.
   static File? _createTempSourceFile({
     required String sourceFilePath,
     required Map<String, ComputeBodyInfo> computeBodies,
     required ComputeStrategy strategy,
+    String? nonComputeGeneratedCode,
   }) {
     try {
       final sourceFile = File(sourceFilePath);
@@ -328,16 +342,16 @@ class ComputeExecutor {
       final tempFile = File(
         p.join(sourceDir, '${baseName}_$fileHash.g.dart'),
       );
-      final resultFilePath = p.join(sourceDir, '${baseName}_compute_$fileHash.g.dart.result');
+      final resultFilePath = p.join(sourceDir, '${baseName}_$fileHash.g.dart.result');
 
       final buf = StringBuffer();
       final lines = sourceContent.split('\n');
 
       // Add required imports at the top
-      buf.writeln("import 'dart:convert';");
-      buf.writeln("import 'dart:io';");
       buf.writeln("import 'dart:async';");
+      buf.writeln("import 'dart:convert';");
       buf.writeln("import 'dart:isolate';");
+      buf.writeln("import 'dart:io';");
 
       // Copy original file content, commenting out part directives
       // and removing any existing main() to avoid conflicts with generated main
@@ -366,8 +380,16 @@ class ComputeExecutor {
         buf.writeln(line);
       }
 
+      // Inline non-compute generated code so compute bodies can reference
+      // generated types (e.g., data class mixins, fromJson, etc.)
+      if (nonComputeGeneratedCode != null && nonComputeGeneratedCode.isNotEmpty) {
+        buf.writeln();
+        buf.writeln('// --- generated non-compute code ---');
+        buf.writeln(nonComputeGeneratedCode);
+        buf.writeln('// --- end generated code ---');
+      }
+
       // Append the main() entrypoint
-      buf.writeln();
       if (strategy == ComputeStrategy.isolate) {
         _writeIsolateMain(buf, computeBodies);
       } else {
@@ -387,12 +409,6 @@ class ComputeExecutor {
     StringBuffer buf,
     Map<String, ComputeBodyInfo> computeBodies,
   ) {
-    buf.writeln('dynamic _processResult<T>(T raw, [String Function(T)? enc, String Function(String)? dec]) {');
-    buf.writeln('  if (raw case DartCode raw) return {\'__dartCode__\': raw.code};');
-    buf.writeln('  final String encoded = enc != null ? enc(raw).toString() : raw.toString();');
-    buf.writeln('  return dec != null ? dec(encoded) : encoded;');
-    buf.writeln('}');
-    buf.writeln();
     buf.writeln('void main(List<String> _, SendPort port) async {');
     buf.writeln('  try {');
     buf.writeln('    final results = <String, dynamic>{};');
@@ -405,7 +421,7 @@ class ComputeExecutor {
         if (decode != null || encode != null) encode ?? 'null',
         ?decode,
       ];
-      buf.writeln('    results[\'$variableName\'] = _processResult(${args.join(', ')});');
+      buf.writeln('    results[\'$variableName\'] = processComputedResult(${args.join(', ')});');
     }
     buf.writeln('    port.send({\'type\': \'value\', \'data\': results});');
     buf.writeln('  } catch (e, s) {');
@@ -421,13 +437,6 @@ class ComputeExecutor {
     Map<String, ComputeBodyInfo> computeBodies,
     String resultFilePath,
   ) {
-    buf.writeln('dynamic _processResult<T>(T raw, [String Function(T)? enc, String Function(String)? dec]) {');
-    buf.writeln('  if (raw case DartCode raw) return {\'__dartCode__\': raw.code};');
-    buf.writeln('  if (enc == null && dec == null) return raw;');
-    buf.writeln('  final String encoded = enc != null ? enc(raw).toString() : raw.toString();');
-    buf.writeln('  return dec != null ? dec(encoded) : encoded;');
-    buf.writeln('}');
-    buf.writeln();
     buf.writeln('void main() async {');
     buf.writeln("  final resultFile = File('$resultFilePath')..createSync(recursive: true);");
     buf.writeln('  try {');
@@ -442,7 +451,7 @@ class ComputeExecutor {
         ?decode,
       ];
 
-      buf.writeln('    results[\'$variableName\'] = _processResult(${args.join(', ')});');
+      buf.writeln('    results[\'$variableName\'] = processComputedResult(${args.join(', ')});');
     }
     buf.writeln("    resultFile.writeAsStringSync(jsonEncode({'type': 'value', 'data': results}));");
     buf.writeln('  } catch (e, s) {');
@@ -455,6 +464,10 @@ class ComputeExecutor {
 }
 
 /// Information about a compute body to execute.
+///
+/// Captures the source text of the compute function and its optional
+/// encode/decode functions. Used by [ComputeExecutor] to generate the
+/// temp file's `main()` entrypoint.
 class ComputeBodyInfo {
   const ComputeBodyInfo({
     required this.body,
@@ -462,15 +475,28 @@ class ComputeBodyInfo {
     this.decode,
   });
 
-  /// The compute body source text (e.g., `() => '1.0.0'`).
+  /// The compute body source text (e.g., `() => '1.0.0'` or `() { return 42; }`).
+  ///
+  /// This is the literal source text extracted from the AST, not a closure.
+  /// It's embedded in the temp file's `main()` as `await variableName.call()`.
   final String body;
 
   /// Optional encode function source (e.g., `(v) => v.toIso8601String()`).
-  /// When provided, called on the result before serialization.
-  /// Not called for DartCode results.
+  ///
+  /// When provided, called on the raw runtime result before serialization.
+  /// This allows converting complex runtime types (like `DateTime` or `Color`)
+  /// to a string representation that can survive JSON transport across
+  /// isolate/process boundaries.
+  ///
+  /// Not called for [DartCode] results — raw code bypasses encode/decode.
   final String? encode;
 
   /// Optional decode function source (e.g., `(v) => "DateTime.parse('$v')"`).
-  /// When provided, called on the encoded string to produce a Dart literal.
+  ///
+  /// When provided, called on the encoded string to produce the final
+  /// Dart literal for code generation. The decode function converts the
+  /// serialized string back into valid Dart source code.
+  ///
+  /// If not provided, the encoded string is used as-is in generated code.
   final String? decode;
 }

@@ -4,22 +4,11 @@
 // ignore_for_file: unused_element, unused_local_variable, unnecessary_overrides, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 // dart format off
 
-part of 'test.dart';
+part of 'computed.dart';
 
-const __versionMacro_computeHash = 1764528427;
-const version = '2';
+abstract class MyClassComputed {
+  String get versionField => '';
+}
 
-const __version2Macro_computeHash = 88299903;
-const version2 = '30';
-
-const __version3Macro_computeHash = 1764528427;
-const version3 = 948;
-
-const __version4Macro_computeHash = 1764528427;
-const version4 = 4;
-
-const __version5Macro_computeHash = 1764528427;
-const version5 = Color(4283215696);
-
-const __version6Macro_computeHash = 1764528427;
-const version6 = 2 | 10;
+const __versionMacroHash = 2953536757;
+const version = '1';

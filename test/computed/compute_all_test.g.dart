@@ -6,98 +6,136 @@
 
 part of 'compute_all_test.dart';
 
-const __stringValMacro_computeHash = 2218081105;
+const __stringValMacroHash = 901429572;
 const stringVal = 'hello world';
 
-const __intValMacro_computeHash = 2218081105;
+const __intValMacroHash = 901429572;
 const intVal = 42;
 
-const __doubleValMacro_computeHash = 2218081105;
+const __doubleValMacroHash = 901429572;
 const doubleVal = 3.14;
 
-const __boolValMacro_computeHash = 2218081105;
+const __boolValMacroHash = 901429572;
 const boolVal = true;
 
-const __nullValMacro_computeHash = 2218081105;
+const __nullValMacroHash = 901429572;
 const nullVal = null;
 
-const __negativeIntMacro_computeHash = 2218081105;
+const __negativeIntMacroHash = 901429572;
 const negativeInt = -100;
 
-const __zeroValMacro_computeHash = 2218081105;
+const __zeroValMacroHash = 901429572;
 const zeroVal = 0;
 
-const __emptyStringMacro_computeHash = 2218081105;
+const __emptyStringMacroHash = 901429572;
 const emptyString = '';
 
-const __interpolationMacro_computeHash = 2218081105;
+const __interpolationMacroHash = 901429572;
 const interpolation = 'year=2026';
 
-const __concatMacro_computeHash = 2218081105;
+const __concatMacroHash = 901429572;
 const concat = 'foobar';
 
-const __blockBodyMacro_computeHash = 2218081105;
+const __blockBodyMacroHash = 901429572;
 const blockBody = 30;
 
-const __blockBodyStringMacro_computeHash = 2218081105;
+const __blockBodyStringMacroHash = 901429572;
 const blockBodyString = 'a-b-c';
 
-const __listValMacro_computeHash = 2218081105;
+const __listValMacroHash = 901429572;
 const listVal = [1, 2, 3];
 
-const __mapValMacro_computeHash = 2218081105;
+const __mapValMacroHash = 901429572;
 const mapVal = {'a': 1, 'b': 2};
 
-const __nestedListMacro_computeHash = 2218081105;
+const __nestedListMacroHash = 901429572;
 const nestedList = [
   [1, 2],
   [3, 4],
 ];
 
-const __nestedMapMacro_computeHash = 2218081105;
+const __nestedMapMacroHash = 901429572;
 const nestedMap = {
   'users': {'alice': 1, 'bob': 2},
 };
 
-const __dartCodeSimpleMacro_computeHash = 2218081105;
+const __emptyListMacroHash = 901429572;
+const emptyList = [];
+
+const __emptyMapMacroHash = 901429572;
+const emptyMap = {};
+
+const __dartCodeSimpleMacroHash = 901429572;
 const dartCodeSimple = 2 | 10;
 
-const __dartCodeExprMacro_computeHash = 2218081105;
+const __dartCodeExprMacroHash = 901429572;
 const dartCodeExpr = Duration(seconds: 300);
 
-const __encodeStringMacro_computeHash = 2218081105;
-const encodeString = 'HELLO';
-
-const __encodeIntMacro_computeHash = 2218081105;
-const encodeInt = 84;
-
-const __depsSameFileMacro_computeHash = 950100574;
-const depsSameFile = 'MyApp v2.1.0';
-
-const __depsFuncMacro_computeHash = 1992698252;
-const depsFunc = 'App-1.0';
-
-const __depsMultiMacro_computeHash = 19184522;
-const depsMulti = 'retries=3, timeout=5000';
-
-const __dartCodeBypassMacro_computeHash = 2218081105;
+const __dartCodeBypassMacroHash = 901429572;
 const dartCodeBypass = Color(0xFF00007b);
 
-const __randomMacro_computeHash = 2218081105;
-const random = 47577;
+const __encodeStringMacroHash = 901429572;
+const encodeString = 'HELLO';
 
-const __tagCountMacro_computeHash = 275753531;
+const __encodeIntMacroHash = 901429572;
+const encodeInt = 84;
+
+const __myFavColorMacroHash = 901429572;
+const myFavColor = Color(4278255360);
+
+const __versionMacroHash = 901429572;
+const version = '1';
+
+const __myAgeMacroHash = 116800019;
+const myAge = 'MyAge: 32';
+
+const __depsSameFileMacroHash = 950100574;
+const depsSameFile = 'MyApp v2.1.0';
+
+const __depsFuncMacroHash = 1992698252;
+const depsFunc = 'App-1.0';
+
+const __depsMultiMacroHash = 19184522;
+const depsMulti = 'retries=3, timeout=5000';
+
+const __randomNumberMacroHash = 340677358;
+const randomNumber = 140;
+
+const __tagCountMacroHash = 275753531;
 const tagCount = 3;
 
-const __ternaryMacro_computeHash = 2218081105;
+const __randomMacroHash = 901429572;
+const random = 46685;
+
+const __ternaryMacroHash = 901429572;
 const ternary = 'yes';
 
-const __largeStringMacro_computeHash = 2218081105;
+const __largeStringMacroHash = 901429572;
 const largeString =
     'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
 
-const __mathMacro_computeHash = 2218081105;
+const __mathMacroHash = 901429572;
 const math = 12;
 
-const __stringOpsMacro_computeHash = 2218081105;
+const __stringOpsMacroHash = 901429572;
 const stringOps = 5;
+
+const __finalIntMacroHash = 901429572;
+final finalInt = 50;
+
+const __finalDartCodeMacroHash = 901429572;
+final finalDartCode = () {
+  return 99 / 33;
+}();
+
+const __mutableMacroHash = 901429572;
+var mutable = 'mutable with initial value computed';
+
+const __privateMacroHash = 901429572;
+const _private = 'secret';
+
+const __finalPrivateMacroHash = 901429572;
+final _finalPrivate = 'final-private';
+
+const __nestedDartCodeMacroHash = 901429572;
+final nestedDartCode = List<int>.generate(3, (i) => i * 10);
