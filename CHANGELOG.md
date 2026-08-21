@@ -1,3 +1,17 @@
+## 0.7.1
+
+- Added **ComputeMacro** for executing code at compile time and materializing the result into a
+  generated top-level variable:
+    - Annotate a top-level variable with `@Macro(ComputeMacro())` and initialize it with
+      `compute(() => ...)`, e.g. `final _versionMacro = compute(() => '1.0.0');` generates
+      `const version = '1.0.0';`
+    - Generates `const` by default; use `ComputeModifier(isFinal: true)`, `isVar` or `isPrivate`
+      to control the generated declaration
+    - Custom serialization of runtime values via `encode`/`decode` callbacks
+    - Embed raw Dart source into generated code using `DartCode`
+    - Incremental caching: only re-execute when the body or listed `deps` change, or build once
+      forever with `deps: macroBuildOnce`
+
 ## 0.7.0
 
 - Update analyzer version
@@ -8,7 +22,7 @@
 
 ## 0.6.3
 
-- Support analyzer 9.0.0 
+- Support analyzer 9.0.0
 
 ## 0.6.2
 
