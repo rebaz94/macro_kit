@@ -5,6 +5,11 @@
 - Added `rebuild [target]` CLI command to force regeneration of macro generated code — without a
   target every registered context is rebuilt; with a package name/id or path only matching contexts
   are rebuilt
+- **ComputeMacro** `deps` now supports file dependencies: string entries containing `/`
+  (e.g. `deps: ['assets/data.json']`) are hashed relative to the project root and invalidate the
+  variable when the file content changes
+- **ComputeMacro** bodies now execute with the working directory set to the project root, so
+  relative paths inside the body (e.g. `File('assets/config.json')`) resolve from the project root
 
 ## 0.7.3
 

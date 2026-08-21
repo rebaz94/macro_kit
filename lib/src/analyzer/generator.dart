@@ -280,6 +280,9 @@ mixin Generator on BaseAnalyzer {
       computeBodies: allComputeBodies,
       defaultStrategy: defaultStrategy,
       nonComputeGeneratedCode: nonComputeGeneratedCode,
+      // Run compute bodies with the project root as working directory so
+      // relative paths (e.g. file deps like 'assets/data.json') resolve correctly
+      workingDirectory: server.getContextRootForPath(sourceFilePath),
     );
 
     // Store results in declarations

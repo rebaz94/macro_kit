@@ -1,5 +1,9 @@
 // ignore_for_file: unused_element
 
+import 'dart:convert';
+
+import 'package:path/path.dart' as p;
+import 'dart:io';
 import 'dart:math';
 
 import 'package:macro_kit/macro_kit.dart';
@@ -304,6 +308,29 @@ final _nestedDartCodeMacro = compute<DartCode>(
 );
 
 // ============================================================
+// 23. deps: file dependency (content hashed relative to project root)
+// ============================================================
+
+@Macro(ComputeMacro())
+final _fileDepMacro = compute(
+  () {
+    try {
+      final file = File(p.absolute('./computed/data/deps_data.json'));
+      return jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    } catch (_) {
+      return const <String, dynamic>{'version': 1, 'label': 'deps-data'};
+    }
+  },
+  deps: ['computed/data/deps_data.json'],
+);
+
+@Macro(ComputeMacro())
+final _mixedDepsMacro = compute(
+  () => '$appVersion/config-v1',
+  deps: [appVersion, './computed/data/deps_data.json'],
+);
+
+// ============================================================
 // Tests
 // ============================================================
 
@@ -430,5 +457,10 @@ void main() {
 
   group('Nested DartCode', () {
     test('nested dart code produces result', () => expect(nestedDartCode, isNotNull));
+  });
+
+  group('Deps: file dependency', () {
+    test('file dep value', () => expect(fileDep, {'version': 1, 'label': 'deps-data'}));
+    test('mixed identifier + file deps', () => expect(mixedDeps, '2.1.0/config-v1'));
   });
 }

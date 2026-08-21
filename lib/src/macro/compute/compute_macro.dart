@@ -75,6 +75,15 @@ import 'package:macro_kit/macro_kit.dart';
 /// for incremental rebuilds. When provided, only changes to the compute body
 /// or listed dependencies trigger re-execution. When omitted, the full file
 /// content is used for hashing (any file change triggers rebuild).
+///
+/// String entries in [deps] are treated as file dependencies when they contain
+/// a path separator (`/`), e.g. `deps: ['assets/data.json']` or
+/// `deps: ['./data.json']`. Paths are resolved relative to the root of the
+/// project that owns the source file (`../` and absolute paths also work).
+/// The content hash of each tracked file participates in the rebuild decision,
+/// so editing the file invalidates the variable on the next generation pass —
+/// including an explicit rebuild via the CLI (`macro rebuild`). Missing files
+/// log a warning; adding the file later triggers a rebuild.
 FutureOr<T> Function() compute<T>(
   FutureOr<T> Function() fn, {
   String Function(T value)? encode,

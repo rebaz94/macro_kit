@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/analyzer/utils/spawner.dart';
+import 'package:macro_kit/src/common/common.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/macro/compute/dart_code.dart';
 import 'package:path/path.dart' as p;
@@ -57,9 +58,9 @@ class ComputeResult {
 class ComputeExecutor {
   ComputeExecutor._();
 
-  static const _isolateComment = '// --macro-use-isolate-computer';
-  static const _flutterComment = '// --macro-use-flutter-computer';
-  static const _dartComment = '// --macro-use-dart-computer';
+  static const _isolateComment = '// macro-runner: isolate';
+  static const _flutterComment = '// macro-runner: flutter';
+  static const _dartComment = '// macro-runner: dart';
 
   /// Execute multiple compute bodies and return results.
   ///
@@ -69,11 +70,16 @@ class ComputeExecutor {
   /// [nonComputeGeneratedCode] is the generated code from non-compute macros
   /// that gets inlined into the temp file so compute bodies can reference
   /// generated types (e.g., data class mixins).
+  /// [workingDirectory] is the directory compute bodies run in (the project
+  /// root), so relative paths like `File('assets/data.json')` resolve from the
+  /// project root. When null, the source file's directory is used for process
+  /// strategies and no directory switch happens for isolates.
   static Future<Map<String, ComputeResult>> executeAll({
     required String sourceFilePath,
     required Map<String, ComputeBodyInfo> computeBodies,
     required ComputeStrategy defaultStrategy,
     String? nonComputeGeneratedCode,
+    String? workingDirectory,
   }) async {
     if (computeBodies.isEmpty) return {};
 
@@ -103,16 +109,18 @@ class ComputeExecutor {
       final results = switch (strategy) {
         ComputeStrategy.isolate => await _executeViaIsolate(tempFile, computeBodies),
         ComputeStrategy.dartRun => await _executeViaProcess(
-          'dart',
+          dartBinary,
           ['run', tempFile.path],
           tempFile,
           computeBodies,
+          workingDirectory: workingDirectory,
         ),
         ComputeStrategy.flutterTest => await _executeViaProcess(
-          'flutter',
+          flutterBinary,
           ['test', '--timeout', 'none', '--ignore-timeouts', '--no-dds', tempFile.path],
           tempFile,
           computeBodies,
+          workingDirectory: workingDirectory,
         ),
       };
       return results;
@@ -232,8 +240,9 @@ class ComputeExecutor {
     String executable,
     List<String> arguments,
     File tempFile,
-    Map<String, ComputeBodyInfo> computeBodies,
-  ) async {
+    Map<String, ComputeBodyInfo> computeBodies, {
+    String? workingDirectory,
+  }) async {
     final results = <String, ComputeResult>{};
     final resultFile = File('${tempFile.path}.result');
 
@@ -241,7 +250,7 @@ class ComputeExecutor {
       final process = await Process.start(
         executable,
         arguments,
-        workingDirectory: p.dirname(tempFile.path),
+        workingDirectory: workingDirectory ?? p.dirname(tempFile.path),
         environment: const {'managed_by_macro_server': 'true'},
       );
 
@@ -323,6 +332,10 @@ class ComputeExecutor {
   /// Create a temp source file by copying the original file content,
   /// commenting out part directives, appending inlined generated code
   /// from non-compute macros, and adding a main() entrypoint.
+  ///
+  /// When [workingDirectory] is provided, the generated main() switches
+  /// `Directory.current` to it before running compute bodies and restores
+  /// the previous value afterwards.
   static File? _createTempSourceFile({
     required String sourceFilePath,
     required Map<String, ComputeBodyInfo> computeBodies,

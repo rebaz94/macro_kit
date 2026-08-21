@@ -21,7 +21,8 @@ step separately.
 * ✅ **Custom Serialization**: Convert any runtime value with `encode`/`decode` callbacks
 * ✅ **Incremental Caching**: Results are cached and only recomputed when the body or declared
   dependencies change
-* ✅ **Flexible Output**: Generate `const`, `final`, or `var` declarations with optional private names
+* ✅ **Flexible Output**: Generate `const`, `final`, or `var` declarations with optional private
+  names
 
 ## Setup
 
@@ -44,6 +45,7 @@ Future<void> setupMacro() async {
 Annotate a top-level variable whose initializer is a `compute(...)` call:
 
 ```dart
+
 @Macro(ComputeMacro())
 final _versionMacro = compute(() => '1.0.0');
 ```
@@ -51,12 +53,14 @@ final _versionMacro = compute(() => '1.0.0');
 Generates:
 
 ```dart
+
 const version = '1.0.0';
 ```
 
 The shorthand annotation works as well:
 
 ```dart
+
 @computeMacro
 final _versionMacro = compute(() => '1.0.0');
 ```
@@ -65,12 +69,12 @@ final _versionMacro = compute(() => '1.0.0');
 
 The generated variable name is derived from the annotated variable name:
 
-| Annotated Name       | Generated Name | Rule                          |
-|----------------------|----------------|-------------------------------|
-| `_versionMacro`      | `version`      | Leading `_` removed           |
-| `_appVersionMacro`   | `appVersion`   | Trailing `Macro` removed      |
-| `counterMacro`       | `counter`      | Underscore not required       |
-| `_secretMacro`       | `_secret`      | With `isPrivate` modifier     |
+| Annotated Name     | Generated Name | Rule                      |
+|--------------------|----------------|---------------------------|
+| `_versionMacro`    | `version`      | Leading `_` removed       |
+| `_appVersionMacro` | `appVersion`   | Trailing `Macro` removed  |
+| `counterMacro`     | `counter`      | Underscore not required   |
+| `_secretMacro`     | `_secret`      | With `isPrivate` modifier |
 
 ## Generated Declaration Modifiers
 
@@ -100,11 +104,11 @@ final _secretMacro = compute(() => 'hidden');
 
 ### `ComputeModifier` Options
 
-| Option      | Type    | Default | Description                                    |
-|-------------|---------|---------|------------------------------------------------|
-| `isFinal`   | `bool`  | `false` | Generates `final name = value;`                |
-| `isVar`     | `bool`  | `false` | Generates `var name = value;`                  |
-| `isPrivate` | `bool`  | `false` | Prefixes the generated name with `_`           |
+| Option      | Type   | Default | Description                          |
+|-------------|--------|---------|--------------------------------------|
+| `isFinal`   | `bool` | `false` | Generates `final name = value;`      |
+| `isVar`     | `bool` | `false` | Generates `var name = value;`        |
+| `isPrivate` | `bool` | `false` | Prefixes the generated name with `_` |
 
 When no keyword flag is set, `const` is generated.
 
@@ -117,6 +121,7 @@ Primitives (`String`, `int`, `double`, `bool`, `null`), `List`s, and `Map`s of s
 serialized automatically:
 
 ```dart
+
 @Macro(ComputeMacro())
 final _listValMacro = compute(() => [1, 2, 3]);
 // Generates: const listVal = [1, 2, 3];
@@ -129,9 +134,10 @@ into the generated code verbatim—useful for types that don't exist at generati
 serialized (e.g., Flutter's `Color`):
 
 ```dart
+
 @Macro(ComputeMacro())
 final _colorMacro = compute<DartCode>(
-  () => DartCode('Color(0xFF${123.toRadixString(16).padLeft(6, '0')})'),
+      () => DartCode('Color(0xFF${123.toRadixString(16).padLeft(6, '0')})'),
 );
 // Generates: const color = Color(0xFF00007B);
 ```
@@ -143,9 +149,10 @@ For runtime values that aren't automatically serializable (e.g., `DateTime`, enu
 the encoded string back into a Dart expression:
 
 ```dart
+
 @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true)))
 final _dateMacro = compute(
-  () => DateTime.now(),
+      () => DateTime.now(),
   encode: (v) => v.toIso8601String(),
   decode: (v) => "DateTime.parse('$v')",
 );
@@ -182,17 +189,44 @@ The entire source file content is hashed. Any edit in the file triggers re-execu
 Only changes to the compute body itself or to the listed dependencies trigger re-execution:
 
 ```dart
+
 final config = Config.parse('...');
 final helper = Helper();
 
 @Macro(ComputeMacro())
 final _resultMacro = compute(
-  () => helper.process(config),
+      () => helper.process(config),
   deps: [config, helper], // only rebuild when these change
 );
 ```
 
 Dependencies may reference same-file variables, functions, or identifiers imported from other files.
+
+### File Dependencies
+
+String entries in `deps` are treated as file dependencies when they contain a path separator
+(`/`); strings without `/` are rejected with a warning. The content hash of each tracked file is
+part of the rebuild decision, so editing the file invalidates the variable on the next generation
+pass—including an explicit rebuild via `macro rebuild`:
+
+```dart
+
+@Macro(ComputeMacro())
+final _appConfigMacro = compute(
+      () => jsonDecode(File('assets/config.json').readAsStringSync()),
+  deps: ['assets/config.json'], // rebuilds when the file content changes
+);
+```
+
+Paths are resolved relative to the root of the project that owns the source file, so
+`'./data.json'`, `'../shared/data.json'`, and absolute paths also work. Missing files log a
+warning; adding the file later triggers a rebuild. Compute bodies themselves also run with the
+project root as their working directory, so code like `File('assets/config.json')` inside the body
+resolves from the project root too.
+
+> [!NOTE]
+> Dependency files are not watched—invalidation happens whenever the source regenerates (watched
+> change in the same library, connect rebuilds, or `macro rebuild`).
 
 ### Build Once
 
@@ -200,9 +234,10 @@ Use the `macroBuildOnce` sentinel to execute exactly once and cache the result p
 for non-deterministic or expensive values you want frozen at first build:
 
 ```dart
+
 @Macro(ComputeMacro())
 final _randomNumberMacro = compute(
-  () => Random().nextInt(1000),
+      () => Random().nextInt(1000),
   deps: macroBuildOnce, // builds once, never rebuilds
 );
 ```
@@ -214,14 +249,15 @@ final _randomNumberMacro = compute(
 
 ## Execution Strategies
 
-Compute bodies are executed in a temporary copy of your source file placed in the same directory.
+Compute bodies are executed in a temporary copy of your source file placed in the same directory,
+with the working directory set to the project root.
 Add one of the following comments at the top of the file to force a specific strategy:
 
-| Comment                             | Strategy                                                          |
-|-------------------------------------|-------------------------------------------------------------------|
-| `// --macro-use-isolate-computer`   | Pure Dart isolate via `Isolate.spawnUri` (no Flutter imports)     |
-| `// --macro-use-dart-computer`      | Dart VM via `dart run <tempFile>`                                 |
-| `// --macro-use-flutter-computer`   | Flutter test runner via `flutter test <tempFile>`                 |
+| Comment                    | Strategy                                                      |
+|----------------------------|---------------------------------------------------------------|
+| `// macro-runner: isolate` | Pure Dart isolate via `Isolate.spawnUri` (no Flutter imports) |
+| `// macro-runner: dart`    | Dart VM via `dart run <tempFile>`                             |
+| `// macro-runner: flutter` | Flutter test runner via `flutter test <tempFile>`             |
 
 When no comment is present, the strategy matches the project runner type: `flutter test` for Flutter
 projects, `dart run` otherwise. Generated code from other macros in the same file is inlined into

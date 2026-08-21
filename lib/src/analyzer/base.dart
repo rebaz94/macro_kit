@@ -52,6 +52,10 @@ abstract class MacroServerInterface {
 
   void onClientError(int channelId, String message, [Object? err, StackTrace? trace]);
 
+  /// Returns the root path of the project/context that contains [filePath],
+  /// or null if no registered context contains it.
+  String? getContextRootForPath(String filePath);
+
   /// Returns the runner type for the given path: 'dart' or 'flutter'.
   String getRunnerType(String path);
 }
@@ -87,6 +91,9 @@ class DefaultFakeServerInterface implements MacroServerInterface {
 
   @override
   void sendMessageMacroClients(GeneralMessage message, {int? clientId}) {}
+
+  @override
+  String? getContextRootForPath(String filePath) => null;
 
   @override
   String getRunnerType(String path) => 'dart';

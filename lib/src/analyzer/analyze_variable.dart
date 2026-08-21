@@ -8,6 +8,7 @@ import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/utils/hash.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/core/modifier.dart';
+import 'package:path/path.dart' as p;
 
 /// Mixin that provides generic top-level variable analysis for any macro.
 ///
@@ -80,19 +81,33 @@ mixin AnalyzeVariable on BaseAnalyzer {
 
         // Parse deps list from compute() call
         final depsInfo = _extractDeps(astNode);
-        if (depsInfo != null && depsInfo.isNotEmpty && resolvedUnit != null) {
-          data['deps'] = depsInfo;
-          // Resolve dependency source text for targeted hashing
-          final depSources = await _resolveDepsSource(depsInfo, resolvedUnit, sourceContent);
-          data['depSources'] = depSources;
-
-          // Targeted hash: body + each dependency's source
+        if (depsInfo != null &&
+            (depsInfo.identifiers.isNotEmpty || depsInfo.filePaths.isNotEmpty) &&
+            resolvedUnit != null) {
+          // Targeted hash: body + each dependency's source + file dep content hashes
           final buffer = StringBuffer();
           buffer.write(computeInfo.body);
-          for (final entry in depSources.entries) {
-            buffer.write(entry.key);
-            buffer.write(entry.value);
+
+          if (depsInfo.identifiers.isNotEmpty) {
+            data['deps'] = depsInfo.identifiers;
+            // Resolve dependency source text for targeted hashing
+            final depSources = await _resolveDepsSource(depsInfo.identifiers, resolvedUnit, sourceContent);
+            data['depSources'] = depSources;
+            for (final entry in depSources.entries) {
+              buffer.write(entry.key);
+              buffer.write(entry.value);
+            }
           }
+
+          if (depsInfo.filePaths.isNotEmpty) {
+            data['fileDeps'] = depsInfo.filePaths;
+            final fileHashes = _resolveFileDepsHashes(depsInfo.filePaths, resolvedUnit);
+            for (final entry in fileHashes.entries) {
+              buffer.write(entry.key);
+              buffer.write(entry.value);
+            }
+          }
+
           data['combinedHash'] = generateHash(buffer.toString());
         } else {
           // Full file hash: hash entire source content
@@ -193,16 +208,18 @@ mixin AnalyzeVariable on BaseAnalyzer {
     return (body: body, encode: encode, decode: decode);
   }
 
-  /// Extract dependency identifiers from the `deps:` named argument of a compute() call.
+  /// Extract dependency identifiers and file paths from the `deps:` named argument of a compute() call.
   ///
   /// Supports three forms:
-  /// - **List literal**: `deps: [a, b, c]` — extracts each identifier from the list
-  /// - **Constant list literal**: `deps: const [a, b, c]` — same as above (const keyword is ignored)
+  /// - **List literal**: `deps: [a, b, 'assets/data.json']` — extracts each identifier from the list,
+  ///   plus string elements containing a path separator (`/`) as file paths. String elements
+  ///   without `/` are invalid and skipped with a warning.
+  /// - **Constant list literal**: `deps: const [a, b]` — same as above (const keyword is ignored)
   /// - **Bare variable reference**: `deps: myList` — returns the variable name itself;
   ///   resolution of the variable's source text is deferred to [_resolveDepsSource]
   ///
-  /// Returns a list of identifier names, or null if no `deps` argument is provided.
-  List<String>? _extractDeps(TopLevelVariableDeclaration node) {
+  /// Returns the extracted identifiers/file paths, or null if no `deps` argument is provided.
+  ({List<String> identifiers, List<String> filePaths})? _extractDeps(TopLevelVariableDeclaration node) {
     final varList = node.variables;
     if (varList.variables.isEmpty) return null;
 
@@ -226,35 +243,76 @@ mixin AnalyzeVariable on BaseAnalyzer {
     return null;
   }
 
-  /// Extract dependency names from an AST expression.
+  /// Extract dependency names and file paths from an AST expression.
   ///
   /// Handles multiple expression forms:
-  /// - [ListLiteral]: `[a, b, c]` or `const [a, b, c]` — extracts identifiers directly
+  /// - [ListLiteral]: `[a, b, 'assets/data.json']` or `const [a, b]` — extracts identifiers directly,
+  ///   and string elements containing `/` as file paths resolved relative to the project root
   /// - [Identifier]: bare variable reference like `deps: myList` — returns the name
   ///   for later resolution by [_resolveDepsSource]
-  ///
-  /// Returns the list of identifier names, or null for unrecognized expressions.
-  List<String>? _extractDepsFromExpression(Expression expr) {
+  ({List<String> identifiers, List<String> filePaths})? _extractDepsFromExpression(Expression expr) {
     // Case 1 & 2: [a, b, c] or const [a, b, c] — list literal (const has constKeyword set)
     if (expr is ListLiteral) {
-      return _extractIdentifiersFromList(expr);
+      final identifiers = <String>[];
+      final filePaths = <String>[];
+      for (final element in expr.elements) {
+        if (element is Identifier) {
+          identifiers.add(element.name);
+        } else if (element is SimpleStringLiteral) {
+          final value = element.stringValue;
+          if (value != null && value.contains('/')) {
+            filePaths.add(value);
+          } else {
+            logger.warn(
+              'Compute dep "$value" must contain a path separator "/" to be treated as a file dependency, ignored',
+            );
+          }
+        }
+      }
+      return (identifiers: identifiers, filePaths: filePaths);
     }
 
     // Case 3: Variable reference — e.g., deps: myList
     // Return the variable name itself; _resolveDepsSource will handle resolution.
     if (expr is Identifier) {
-      return [expr.name];
+      return (identifiers: [expr.name], filePaths: const []);
     }
 
     return null;
   }
 
-  /// Extract identifier names from a list literal's elements.
+  /// Compute a content hash for each file dependency.
   ///
-  /// Filters elements to only [Identifier] nodes (skips spread elements,
-  /// collection-if, etc.) and returns their names.
-  List<String> _extractIdentifiersFromList(ListLiteral list) {
-    return list.elements.whereType<Identifier>().map((id) => id.name).toList();
+  /// Paths are relative to the project root of the context that owns [resolvedUnit]
+  /// (e.g. `'assets/data.json'`, `'./data.json'`, `'../shared/x.json'`). Absolute
+  /// paths are used as-is.
+  ///
+  /// Missing or unreadable files log a warning and contribute an empty value,
+  /// but their path name still participates in the combined hash so adding
+  /// the file later triggers a rebuild.
+  Map<String, String> _resolveFileDepsHashes(List<String> filePaths, ResolvedUnitResult resolvedUnit) {
+    final result = <String, String>{};
+    final root = server.getContextRootForPath(resolvedUnit.path);
+    for (final rel in filePaths) {
+      String value = '';
+      if (root == null) {
+        logger.warn('Unable to resolve project root for compute file dependency "$rel" in ${resolvedUnit.path}');
+      } else {
+        final absPath = p.normalize(p.isAbsolute(rel) ? rel : p.join(root, rel));
+        try {
+          final file = File(absPath);
+          if (file.existsSync()) {
+            value = hashFile(file).toString();
+          } else {
+            logger.warn('Compute file dependency not found: $absPath');
+          }
+        } catch (e, s) {
+          logger.error('Failed to read compute file dependency: $absPath', e, s);
+        }
+      }
+      result[rel] = value;
+    }
+    return result;
   }
 
   /// Resolve the source text of each dependency identifier for hashing.

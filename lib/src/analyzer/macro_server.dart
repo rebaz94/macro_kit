@@ -813,6 +813,9 @@ class MacroAnalyzerServer implements MacroServerInterface {
     return null;
   }
 
+  @override
+  String? getContextRootForPath(String filePath) => getContextInfoForPath(filePath)?.path;
+
   MacroClientConfiguration getMacroConfigFor(String path) {
     final contextInfo = getContextInfoForPath(path);
     return contextInfo?.config ?? MacroClientConfiguration.defaultConfig;
