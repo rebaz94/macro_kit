@@ -6,19 +6,16 @@
 
 part of 'computed.dart';
 
-const __versionMacroHash = 906264747;
+const __versionMacroHash = 285619463;
 const version = '1';
 
 const __myAgeMacroHash = 116800019;
 const myAge = 'MyAge: 32';
 
 const __randomNumberMacroHash = 340677358;
-const randomNumber = 262;
+const randomNumber = 551;
 
-const __myFavColorMacroHash = 906264747;
-const myFavColor = Color(4283215696);
-
-const __rawCodeMacroHash = 906264747;
+const __rawCodeMacroHash = 285619463;
 final rawCode = () {
   return 99 / 33;
 }();

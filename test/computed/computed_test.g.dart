@@ -60,5 +60,5 @@ mixin TestData {
   }
 }
 
-const _versionMacroHash = 3400724338;
+const _versionMacroHash = 3860371886;
 const version = '2';

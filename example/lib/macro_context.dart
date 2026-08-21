@@ -91,6 +91,7 @@ Future<void> setupMacro() async {
     enabled: true,
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
+      'ComputeMacro': ComputeMacro.initialize,
     },
   );
 }

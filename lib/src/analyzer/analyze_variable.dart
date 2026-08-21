@@ -14,9 +14,6 @@ import 'package:macro_kit/src/core/modifier.dart';
 /// This mixin detects `@Macro(...)` annotations on top-level variables,
 /// checks the [MacroCapability.topLevelVariables] flag, and creates
 /// [MacroVariableDeclaration] instances that can be used by any macro generator.
-///
-/// Class fields are handled by [AnalyzeClass] via the [MacroCapability.classFields]
-/// capability — no separate field-level parsing is needed here.
 mixin AnalyzeVariable on BaseAnalyzer {
   /// Parse a top-level variable declaration that has a `@Macro(...)` annotation.
   ///

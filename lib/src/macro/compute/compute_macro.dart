@@ -83,7 +83,7 @@ FutureOr<T> Function() compute<T>(
 }) => fn;
 
 /// A macro that executes a compute function at compile time and generates
-/// a const/final/var variable (or getter) with the result.
+/// a const/final/var variable with the result.
 ///
 /// The generated declaration is controlled by [modifier]:
 /// - default → `const variableName = ...;`
@@ -131,7 +131,7 @@ class ComputeMacro extends MacroGenerator {
     );
   }
 
-  /// Modifier controlling the generated variable/getter.
+  /// Modifier controlling the generated variable.
   ///
   /// - default → generates `const`
   /// - `isFinal` → generates `final`
@@ -147,30 +147,16 @@ class ComputeMacro extends MacroGenerator {
 
   @override
   Future<void> init(MacroState state) async {
-    if (state.targetType != TargetType.variable && state.targetType != TargetType.clazz) {
-      throw MacroException('ComputeMacro can only be applied to variables or classes, but got: ${state.targetType}');
+    if (state.targetType != TargetType.variable) {
+      throw MacroException('ComputeMacro can only be applied to top-level variables, but got: ${state.targetType}');
     }
-  }
-
-  @override
-  Future<void> onClassFields(MacroState state, List<MacroProperty> fields) async {
-    state.set('classFields', fields);
   }
 
   @override
   Future<void> onGenerate(MacroState state) async {
     final buff = StringBuffer();
 
-    switch (state.targetType) {
-      case TargetType.variable:
-        await _generateVariable(state, modifier, buff);
-
-      case TargetType.clazz:
-        await _generateClass(state, modifier, buff);
-
-      default:
-        throw MacroException('ComputeMacro: unexpected target type: ${state.targetType}');
-    }
+    await _generateVariable(state, modifier, buff);
 
     state.reportGenerated(buff.toString(), canBeCombined: false);
   }
@@ -212,33 +198,6 @@ class ComputeMacro extends MacroGenerator {
     }
 
     buff.write('$keyword $variableName = $computedResult;\n');
-  }
-
-  /// Generate code for a class (abstract class with computed fields)
-  Future<void> _generateClass(
-    MacroState state,
-    ComputeModifier mod,
-    StringBuffer buff,
-  ) async {
-    final classFields = state.getOrNull<List<MacroProperty>>('classFields');
-    if (classFields == null || classFields.isEmpty) {
-      throw MacroException('No computed fields found in class ${state.targetName}');
-    }
-
-    buff.write('abstract class ${state.targetName}$suffixName {\n');
-
-    final dartCorePrefix = state.imports[r"import dart:core"] ?? '';
-    for (final entry in classFields) {
-      final fieldName = entry.name;
-      final fieldType =
-          entry.functionTypeInfo?.returns.firstOrNull?.typeArguments?.firstOrNull?.getDartType(dartCorePrefix) ??
-          entry.type;
-
-      final derivedName = _deriveName(fieldName, mod);
-      buff.write('  $fieldType get $derivedName;\n');
-    }
-
-    buff.write('}\n');
   }
 
   /// Derive the generated variable name from the raw name.
@@ -394,12 +353,6 @@ const computeMacroCombined = Macro(
 /// Default capability for the compute macro.
 ///
 /// - [MacroCapability.topLevelVariables]: collect top-level variables
-/// - [MacroCapability.classFields]: collect class fields
-/// - [MacroCapability.filterClassFieldMetadata]: only fields with `@Macro(...)` annotation
 const computeMacroCapability = MacroCapability(
   topLevelVariables: true,
-  classFields: true,
-  filterClassInstanceFields: true,
-  filterClassStaticFields: true,
-  filterClassFieldMetadata: 'Macro',
 );
