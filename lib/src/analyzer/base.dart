@@ -142,12 +142,12 @@ abstract class BaseAnalyzer {
       byteStore: _byteStore,
       resourceProvider: PhysicalResourceProvider.INSTANCE,
       // fileContentCache: FileContentCache(PhysicalResourceProvider.INSTANCE),
-      configureAnalysisOptionsBuilder: ({required analysisOptionsBuilder}) {
+      updateAnalysisOptions4: ({required analysisOptions}) {
         // >> from analysis server plugin
         // Disable extra warning computation and lint computation, because
         // these are reported in the main analysis server isolate, not in the
         // plugins isolate.
-        analysisOptionsBuilder
+        analysisOptions
           ..warning = false
           ..lint = false;
       },

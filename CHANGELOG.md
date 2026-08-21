@@ -1,3 +1,7 @@
+## 0.7.3
+
+- Update analyzer constraint to >=13.3.0 <14.0.0
+
 ## 0.7.2
 
 - Add documentation for **ComputeMacro**
