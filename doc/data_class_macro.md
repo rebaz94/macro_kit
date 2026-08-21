@@ -339,4 +339,4 @@ options under `"macros"` → `"DataClassMacro"` in your `macro.json` file as sho
 
 ---
 
-<p align="right"><a href="../topics/Asset Path Macro-topic.html">Next: Asset Path Macro</a></p>
+<p align="right"><a href="../topics/Computed Macro-topic.html">Next: Computed Macro</a></p>

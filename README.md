@@ -204,6 +204,27 @@ class UserProfile with UserProfileData {
 
 For more information, see the [Data Class Macro](doc/data_class_macro.md) documentation.
 
+### ComputeMacro
+
+Executes Dart code at compile time and embeds the result directly into generated code as a
+constant—perfect for build-time values like versions, timestamps, colors, or derived configuration.
+
+```dart
+@Macro(ComputeMacro())
+final _versionMacro = compute(() => '1.0.0');
+```
+
+Generates:
+
+```dart
+const version = '1.0.0';
+```
+
+Supports custom serialization via `encode`/`decode`, raw code embedding via `DartCode`, and
+incremental caching with `deps` (or build-once semantics via `macroBuildOnce`).
+
+For more information, see the [Computed Macro](doc/computed_macro.md) documentation.
+
 ### AssetPathMacro
 
 Generates type-safe constants for your asset paths. Never hardcode asset strings again!
@@ -325,11 +346,10 @@ Enable auto-rebuild in `macro.json`:
 
 ## ⚠️ Current Limitations
 
-At the moment, macros can only be used on classes, top-level functions, and records. While this
-supports most common scenarios, upcoming releases are expected to add:
+At the moment, macros can only be used on classes, top-level functions, records, and top-level
+variables (see [ComputeMacro](doc/computed_macro.md)). While this supports most common scenarios,
+upcoming releases are expected to add:
 
-- 🔜 Compile-time value computation
-- 🔜 The ability to apply macros to variables
 - 🔜 Expanded macro features for library authors
 - 🔜 A broader set of built-in macros for common use cases
 

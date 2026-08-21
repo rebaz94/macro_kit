@@ -1,3 +1,7 @@
+## 0.7.2
+
+- Add documentation for **ComputeMacro**
+
 ## 0.7.1
 
 - Added **ComputeMacro** for executing code at compile time and materializing the result into a
