@@ -9,13 +9,19 @@ import 'package:macro_kit/src/macro/compute/compute_executor.dart';
 
 mixin Generator on BaseAnalyzer {
   /// group parsed macro code and run user code generation
+  ///
+  /// When [forceCompute] is true (forced rebuild, e.g. `always_rebuild_on_connect`
+  /// or CLI rebuild), stored compute hashes are ignored and all compute bodies
+  /// are re-executed even when nothing in the source changed.
   Future<void> executeMacro({
     required String path,
     required Map<String, String> imports,
     required Map<int, String> libraryPaths,
     required Map<String, AnalyzeResult> result,
     required Map<String, MacroClassDeclaration> sharedClasses,
+    bool forceCompute = false,
   }) async {
+
     // step:1 group macro by name
     Map<String, RunMacroMsg> runConfigs = {};
     for (final entry in result.entries) {
@@ -48,7 +54,7 @@ mixin Generator on BaseAnalyzer {
     final (:genFilePath, partFromSource: _, :partFromGenerated) = server.buildGeneratedFileInfo(path);
 
     // step:2.1 read existing compute hashes BEFORE any file overwrites
-    final existingHashes = _readComputeHashes(genFilePath);
+    final existingHashes = forceCompute ? const <String, ({int hash, String value})>{} : _readComputeHashes(genFilePath);
 
     // step:2.2 separate compute variables from non-compute
     // A macro config is "compute" if any of its topLevelVariables has computeBody.

@@ -28,7 +28,7 @@ import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 
 typedef PendingPath = ({String path, ChangeType type});
-typedef PendingAnalyze = ({List<AnalyzingAsset>? asset});
+typedef PendingAnalyze = ({List<AnalyzingAsset>? asset, bool forceCompute});
 
 typedef AnalyzingAsset = ({
   AssetMacroInfo macro,
@@ -118,7 +118,7 @@ abstract class BaseAnalyzer {
   final Set<int> mayContainsMacroCache = {};
   final Map<PendingPath, PendingAnalyze> pendingAnalyze = {};
   final StreamController<bool> pendingAnalyzeCompleted = StreamController.broadcast();
-  final PendingAnalyze defaultNullPendingAnalyzeValue = const (asset: null);
+  final PendingAnalyze defaultNullPendingAnalyzeValue = const (asset: null, forceCompute: false);
   final Stopwatch stopWatch = Stopwatch();
   String currentAnalyzingPath = '';
   String lastChangedPath = '';

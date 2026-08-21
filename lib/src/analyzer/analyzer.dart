@@ -37,13 +37,13 @@ class MacroAnalyzer extends BaseAnalyzer
     super.server = const DefaultFakeServerInterface(),
   });
 
-  Future<void> processDartSource(String path) async {
+  Future<void> processDartSource(String path, {bool forceCompute = false}) async {
     stopWatch
       ..reset()
       ..start();
 
     try {
-      await _analyzeCodeAndRun(path);
+      await _analyzeCodeAndRun(path, forceCompute: forceCompute);
     } catch (e, s) {
       logger.error('Processing code failed', e, s);
       server.sendMessageMacroClients(GeneralMessage(message: 'Processing code failed\n$e\n$s', level: Level.SEVERE));
@@ -61,7 +61,7 @@ class MacroAnalyzer extends BaseAnalyzer
     }
   }
 
-  Future<void> _analyzeCodeAndRun(String path) async {
+  Future<void> _analyzeCodeAndRun(String path, {bool forceCompute = false}) async {
     // ensure context is fresh
     final analysisContext = contextCollection.contextFor(path);
     analysisContext.changeFile(path);
@@ -182,6 +182,7 @@ class MacroAnalyzer extends BaseAnalyzer
       libraryPaths: libraryPathById,
       result: macroAnalyzeResult,
       sharedClasses: sharedClasses,
+      forceCompute: forceCompute,
     );
   }
 

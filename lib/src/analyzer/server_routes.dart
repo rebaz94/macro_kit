@@ -30,6 +30,7 @@ void startMacroServer() async {
       ),
     )
     ..get('/contexts', _getServerContexts)
+    ..post('/rebuild', _onRebuild)
     ..post('/shutdown', _onShutdown)
     ..post('/restart-analyzer', _onRestartAnalyzer);
 
@@ -87,4 +88,19 @@ Future<Response> _onShutdown(Request request) async {
 Future<Response> _onRestartAnalyzer(Request request) async {
   MacroAnalyzerServer.instance.restartAnalyzer();
   return Response.ok('');
+}
+
+Future<Response> _onRebuild(Request request) async {
+  final target = request.url.queryParameters['target'];
+  final (error, results) = await MacroAnalyzerServer.instance.forceRegenerate(target: target);
+
+  return Response.ok(
+    jsonEncode({
+      'error': error,
+      'results': results.map((e) => e.toJson()).toList(),
+    }),
+    headers: {
+      HttpHeaders.contentTypeHeader: ContentType.json.value,
+    },
+  );
 }

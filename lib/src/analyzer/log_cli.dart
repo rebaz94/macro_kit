@@ -26,6 +26,10 @@ MacroKit
 Commands:
   restart-server        Restart the macro server
   restart-analyzer      Restart the macro analysis context
+  rebuild [target]      Force regenerate macro generated code. Without a target,
+                        every registered context is rebuilt; with a target, only
+                        contexts matching the package name/id or path are rebuilt.
+                        Compute bodies always re-execute on rebuild.
 
 Options:
   --log=server          Stream macro server logs

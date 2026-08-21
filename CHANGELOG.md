@@ -1,3 +1,11 @@
+## 0.7.4
+
+- **ComputeMacro** now honors forced rebuilds: `always_rebuild_on_connect` re-executes all compute
+  bodies even when nothing changed in the source, instead of serving cached results
+- Added `rebuild [target]` CLI command to force regeneration of macro generated code — without a
+  target every registered context is rebuilt; with a package name/id or path only matching contexts
+  are rebuilt
+
 ## 0.7.3
 
 - Update analyzer constraint to >=13.3.0 <14.0.0

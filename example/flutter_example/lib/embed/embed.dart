@@ -10,7 +10,7 @@ import 'package:macro_kit/macro_kit.dart';
 
 import 'images/flutter.dart' as i3356018501;
 import 'images/dart.dart' as i3657187921;
-import 'butterfly.dart' as i2123351816;
+import './butterfly.dart' as i2123351816;
 
 /// The main entry point for accessing the embedded file system.
 ///

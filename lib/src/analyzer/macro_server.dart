@@ -155,6 +155,48 @@ class MacroAnalyzerServer implements MacroServerInterface {
     }
   }
 
+  /// Request a forced rebuild of macro generated code from the running MacroServer.
+  ///
+  /// When [target] is provided, only the context matching that package name/id
+  /// or path is rebuilt; otherwise every registered context is rebuilt.
+  /// Compute bodies are re-executed even when nothing changed.
+  static Future<bool> rebuildMacroCode({String? target}) async {
+    try {
+      final uri = Uri.parse('http://localhost:3232/rebuild').replace(
+        queryParameters: target == null ? null : {'target': target},
+      );
+      final res = await http.post(uri, body: '{}');
+      if (res.statusCode != HttpStatus.ok) {
+        stderr.writeln('Failed to rebuild macro code: status ${res.statusCode}');
+        return false;
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final error = data['error'] as String?;
+      if (error != null) {
+        stderr.writeln(error);
+        return false;
+      }
+
+      for (final e in (data['results'] as List? ?? const [])) {
+        final result = RegeneratedContextResult.fromJson(e as Map<String, dynamic>);
+        if (result.isSuccess) {
+          stdout.writeln('Rebuilt: ${result.package} (${result.completedInMilliseconds}ms)');
+        } else {
+          stderr.writeln('Failed to rebuild: ${result.package}\n${result.error}');
+        }
+      }
+      return true;
+    } catch (e) {
+      if (e is SocketException && e.message.contains('Connection refused')) {
+        stderr.writeln('MacroServer is not running. Start it first with: macro');
+        return false;
+      }
+      stderr.writeln('Failed to rebuild macro code: $e');
+      return false;
+    }
+  }
+
   void restartAnalyzer() {
     onContextChanged(restartAnalyzer: true);
   }
@@ -1009,6 +1051,81 @@ class MacroAnalyzerServer implements MacroServerInterface {
     onContextChanged(connectedClient: connectedClient, triggerAutoBuild: true);
   }
 
+  /// Force regeneration of macro generated code.
+  ///
+  /// When [target] is null, every registered context is rebuilt. Otherwise only
+  /// contexts whose package name, package id, or path matches [target] are
+  /// rebuilt (a path matches when it is inside or contains the context path).
+  ///
+  /// This is a forced rebuild: compute macro bodies are re-executed even when
+  /// their cached hash is unchanged. Returns an error message on failure
+  /// (e.g., no matching context), null on success along with per-context results.
+  Future<(String?, List<RegeneratedContextResult>)> forceRegenerate({String? target}) async {
+    final normalizedTarget = target == null ? null : p.normalize(p.absolute(target));
+
+    final matchedContexts = <ContextInfo>[];
+    for (final contextInfo in _contextRegistry.values) {
+      if (normalizedTarget == null) {
+        matchedContexts.add(contextInfo);
+        continue;
+      }
+
+      final cPath = p.normalize(contextInfo.path);
+      final matches =
+          target == contextInfo.packageName ||
+          target == contextInfo.packageId ||
+          cPath == normalizedTarget ||
+          p.isWithin(cPath, normalizedTarget) ||
+          p.isWithin(normalizedTarget, cPath);
+      if (matches) matchedContexts.add(contextInfo);
+    }
+
+    if (matchedContexts.isEmpty) {
+      return ('No analysis context found for: $target', const <RegeneratedContextResult>[]);
+    }
+
+    logger.info('Force rebuilding macro generated code for: ${matchedContexts.map((e) => e.packageName).join(', ')}');
+
+    return await rebuildLock.synchronized(() async {
+      final results = <RegeneratedContextResult>[];
+      final s = Stopwatch();
+
+      for (final contextInfo in matchedContexts) {
+        s
+          ..reset()
+          ..start();
+
+        final err = await _forceRegenerateContext(contextInfo);
+
+        results.add(
+          RegeneratedContextResult(
+            package: contextInfo.packageName,
+            context: contextInfo.path,
+            error: err,
+            completedInMilliseconds: s.elapsedMilliseconds,
+          ),
+        );
+
+        if (err != null) {
+          logger.error('Force rebuild failed for: ${contextInfo.packageName}', err);
+        } else {
+          logger.info('Completed force rebuild for: ${contextInfo.packageName} in ${s.elapsed.inSeconds}s');
+          contextInfo.autoRebuildExecuted = true;
+        }
+      }
+
+      final clientIds = matchedContexts.map((c) => getClientChannelIdByContextInfo(c)).toSet().nonNulls;
+      for (final clientId in clientIds) {
+        _addMessageToClient(
+          clientId,
+          AutoRebuildOnConnectResultMsg(results: results),
+        );
+      }
+
+      return (null, results);
+    });
+  }
+
   Future<void> _runAutoRebuildOnConnect(
     int clientId,
     List<ContextInfo> contextInfos,
@@ -1063,13 +1180,20 @@ class MacroAnalyzerServer implements MacroServerInterface {
       return 'No analysis context found for: $contextPath';
     }
 
+    return _forceRegenerateContext(contextInfo);
+  }
+
+  /// Queue every file of [contextInfo] for regeneration and wait until the
+  /// pending analysis queue is drained. Compute bodies are forced to re-execute.
+  Future<String?> _forceRegenerateContext(ContextInfo contextInfo) async {
     void addFiles(String directoryPath, bool checkingAsset) {
       final watchDir = Directory(directoryPath);
       if (!watchDir.existsSync()) return;
 
       for (final entity in watchDir.listSync(recursive: true, followLinks: false)) {
         if (entity is File) {
-          _addPendingGeneration(entity.path, checkingAsset);
+          // forced rebuild: compute bodies must re-execute even when hashes match
+          _addPendingGeneration(entity.path, checkingAsset, forceCompute: true);
         }
       }
     }
@@ -1078,7 +1202,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
     addFiles(watchPath, false);
 
     for (final asseCtx in _assetsDir.keys.toList()) {
-      if (p.isWithin(contextPath, asseCtx)) {
+      if (p.isWithin(contextInfo.path, asseCtx)) {
         addFiles(asseCtx, true);
       }
     }
@@ -1175,7 +1299,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
 
     if (analyzer.currentAnalyzingPath.isEmpty || analyzer.currentAnalyzingPath == path) {
       // its first time or file changed during current analyzing, so we have to run it again
-      analyzer.pendingAnalyze[(path: path, type: changeType)] = (asset: assetMacros);
+      analyzer.pendingAnalyze[(path: path, type: changeType)] = (asset: assetMacros, forceCompute: false);
     } else if (analyzer.pendingAnalyze.containsKey((path: path, type: changeType))) {
       // its already in pending list, so no duplicate, next time it process it
       return;
@@ -1185,19 +1309,21 @@ class MacroAnalyzerServer implements MacroServerInterface {
   }
 
   @pragma('vm:prefer-inline')
-  void _addPendingGeneration(String path, bool checkingAsset) {
+  void _addPendingGeneration(String path, bool checkingAsset, {bool forceCompute = false}) {
     if (checkingAsset) {
       final assetMacros = _assetsDir.isEmpty ? null : _maybeRunAssetMacro(path);
       if (assetMacros == null) return;
 
-      analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = (asset: assetMacros);
+      analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = (asset: assetMacros, forceCompute: forceCompute);
     } else {
       if ((p.extension(path, 2) != '.dart')) {
         // logger.fine('Ignored: $path');
         return;
       }
 
-      analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = analyzer.defaultNullPendingAnalyzeValue;
+      analyzer.pendingAnalyze[(path: path, type: ChangeType.MODIFY)] = forceCompute
+          ? (asset: null, forceCompute: true)
+          : analyzer.defaultNullPendingAnalyzeValue;
     }
   }
 
@@ -1254,7 +1380,7 @@ class MacroAnalyzerServer implements MacroServerInterface {
       } else if (currentAnalyze.asset != null) {
         await analyzer.processAssetSource(key.path, currentAnalyze.asset!, key.type);
       } else {
-        await analyzer.processDartSource(key.path);
+        await analyzer.processDartSource(key.path, forceCompute: currentAnalyze.forceCompute);
       }
     } catch (e, s) {
       logger.error('Failed to parse source code', e, s);

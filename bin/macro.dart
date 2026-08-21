@@ -16,6 +16,12 @@ void main(List<String> args) async {
       case ['restart-analyzer']:
         final shutdown = await MacroAnalyzerServer.restartMacroAnalyzer();
         exit(shutdown ? 0 : 1);
+      case ['rebuild']:
+        final ok = await MacroAnalyzerServer.rebuildMacroCode();
+        exit(ok ? 0 : 1);
+      case ['rebuild', final target]:
+        final ok = await MacroAnalyzerServer.rebuildMacroCode(target: target);
+        exit(ok ? 0 : 1);
       default:
         return await startLogHandler(args);
     }

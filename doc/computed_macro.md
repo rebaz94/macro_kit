@@ -161,6 +161,18 @@ Every generated variable stores a hash constant next to its value, e.g.
 `const _versionMacroHash = 2953536757;`. On regeneration, stored hashes are compared against fresh
 hashes so unchanged values are never re-executed—results stay stable across saves.
 
+### Forced Rebuilds
+
+Caching is bypassed entirely during **forced rebuilds**, where all compute bodies re-execute even
+when nothing changed in the source:
+
+* When a client connects and `always_rebuild_on_connect: true` is set in `macro.json`
+* When running `macro rebuild [target]` from the CLI (useful in CI to regenerate data before
+  compiling—other tools can consume the freshly written `.g.dart` file)
+
+Without a target, `macro rebuild` regenerates every registered context; with a package name/id or
+path, only matching contexts are rebuilt.
+
 ### Without `deps`
 
 The entire source file content is hashed. Any edit in the file triggers re-execution.
@@ -194,6 +206,11 @@ final _randomNumberMacro = compute(
   deps: macroBuildOnce, // builds once, never rebuilds
 );
 ```
+
+> [!NOTE]
+> `macroBuildOnce` values are still re-executed during **forced rebuilds** (e.g.,
+> `always_rebuild_on_connect` or `macro rebuild`). Use it to skip rebuilds on regular saves, not to
+> guarantee a permanent value across forced regenerations.
 
 ## Execution Strategies
 
