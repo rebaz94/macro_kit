@@ -1,0 +1,292 @@
+import 'dart:io';
+
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:macro_kit/src/analyzer/base.dart';
+import 'package:macro_kit/src/analyzer/internal_models.dart';
+import 'package:macro_kit/src/analyzer/utils/hash.dart';
+import 'package:macro_kit/src/core/core.dart';
+import 'package:macro_kit/src/core/modifier.dart';
+
+/// Mixin that provides generic top-level variable analysis for any macro.
+///
+/// This mixin detects `@Macro(...)` annotations on top-level variables,
+/// checks the [MacroCapability.topLevelVariables] flag, and creates
+/// [MacroVariableDeclaration] instances that can be used by any macro generator.
+///
+/// Class fields are handled by [AnalyzeClass] via the [MacroCapability.classFields]
+/// capability — no separate field-level parsing is needed here.
+mixin AnalyzeVariable on BaseAnalyzer {
+  /// Parse a top-level variable declaration that has a `@Macro(...)` annotation.
+  ///
+  /// Only macros with [MacroCapability.topLevelVariables] = true are included.
+  /// Returns a [MacroVariableDeclaration] if the variable has qualifying macro
+  /// annotations, null otherwise. The declaration is also added to
+  /// [macroAnalyzeResult].
+  ///
+  /// [astNode] and [sourceContent] are used to extract the compute body source
+  /// text and compute content hashes for incremental caching.
+  /// [resolvedUnit] is used to resolve dependency identifiers for targeted hashing.
+  Future<MacroVariableDeclaration?> parseTopLevelVariable(
+    VariableElement element, {
+    TopLevelVariableDeclaration? astNode,
+    String? sourceContent,
+    ResolvedUnitResult? resolvedUnit,
+  }) async {
+    final macroConfigs = <MacroConfig>[];
+    final macroNames = <String>{};
+    for (final annotation in element.metadata.annotations) {
+      if (!isValidAnnotation(annotation, className: 'Macro', pkgName: 'macro')) {
+        continue;
+      }
+
+      final config = await computeMacroMetadata(annotation);
+      if (config == null) continue;
+
+      // Skip macros that don't request top-level variable data
+      if (!config.capability.topLevelVariables) {
+        final variableName = element.name ?? '<unknown>';
+        logger.info('Variable: $variableName does not define topLevelVariables capability, ignored');
+        continue;
+      }
+
+      macroConfigs.add(config);
+      macroNames.add(config.key.name);
+    }
+
+    if (macroConfigs.isEmpty) return null;
+
+    final fragment = element.firstFragment;
+    final nameOffset = fragment.nameOffset ?? 0;
+    final nameLength = fragment.name?.length ?? 0;
+
+    final importPrefix = importPrefixByElements[element] ?? '';
+    final libraryPath = element.library?.uri.toString() ?? '';
+    final libraryId = generateHash(libraryPath);
+    libraryPathById[libraryId] = libraryPath;
+
+    final variableName = element.name ?? '<unknown>';
+
+    // Extract compute body and compute content hashes if AST + source available
+    final data = <String, dynamic>{};
+    if (astNode != null && sourceContent != null) {
+      final computeInfo = _extractComputeBody(astNode);
+      if (computeInfo != null) {
+        data['computeBody'] = computeInfo.body;
+        if (computeInfo.encode != null) {
+          data['encode'] = computeInfo.encode;
+        }
+        if (computeInfo.decode != null) {
+          data['decode'] = computeInfo.decode;
+        }
+
+        // Parse deps list from compute() call
+        final depsInfo = _extractDeps(astNode);
+        if (depsInfo != null && depsInfo.isNotEmpty && resolvedUnit != null) {
+          data['deps'] = depsInfo;
+          // Resolve dependency source text for targeted hashing
+          final depSources = await _resolveDepsSource(depsInfo, resolvedUnit, sourceContent);
+          data['depSources'] = depSources;
+
+          // Targeted hash: body + each dependency's source
+          final buffer = StringBuffer();
+          buffer.write(computeInfo.body);
+          for (final entry in depSources.entries) {
+            buffer.write(entry.key);
+            buffer.write(entry.value);
+          }
+          data['combinedHash'] = generateHash(buffer.toString());
+        } else {
+          // Full file hash: hash entire source content
+          data['combinedHash'] = generateHash(sourceContent);
+        }
+      } else {
+        // No compute body — full file hash
+        data['combinedHash'] = generateHash(sourceContent);
+      }
+    }
+
+    final declaration = MacroVariableDeclaration(
+      libraryId: libraryId,
+      variableId: '${element.name}:${generateHash(libraryPath)}',
+      configs: macroConfigs,
+      importPrefix: importPrefix,
+      variableName: variableName,
+      startLine: nameOffset,
+      endLine: nameOffset + nameLength,
+      modifier: MacroModifier.create(
+        isPrivate: element.isPrivate,
+        isLate: element.isLate,
+        isFinal: element.isFinal,
+        isConst: element.isConst,
+      ),
+      data: data,
+    );
+
+    for (final name in macroNames) {
+      macroAnalyzeResult.putIfAbsent(name, () => AnalyzeResult()).addTopLevelVariable(declaration);
+    }
+
+    return declaration;
+  }
+
+  /// Extract the compute body source text and optional encode/decode functions
+  /// from a [TopLevelVariableDeclaration] AST node.
+  ///
+  /// Returns null if no `compute(...)` call is found.
+  ({String body, String? encode, String? decode})? _extractComputeBody(TopLevelVariableDeclaration node) {
+    // Get the variable declaration list
+    final varList = node.variables;
+    if (varList.variables.isEmpty) return null;
+
+    // Get the first variable's initializer
+    final firstVar = varList.variables.first;
+    final initializer = firstVar.initializer;
+    if (initializer == null) return null;
+
+    // Top-level function calls like compute(...) resolve as MethodInvocation
+    if (initializer is MethodInvocation) {
+      // Verify it's actually a compute() call
+      if (initializer.methodName.name != 'compute') return null;
+      return _parseComputeArgs(initializer.argumentList);
+    }
+
+    // Function expression invocations like localCompute() resolve as FunctionExpressionInvocation
+    if (initializer is FunctionExpressionInvocation) {
+      return _parseComputeArgs(initializer.argumentList);
+    }
+
+    return null;
+  }
+
+  /// Parse the arguments of a compute() call to extract body, encode, and decode.
+  ({String body, String? encode, String? decode})? _parseComputeArgs(ArgumentList argumentList) {
+    final args = argumentList.arguments;
+    if (args.isEmpty) return null;
+
+    // First positional argument is the compute body
+    final body = args.first.toString();
+
+    // Look for named 'encode' and 'decode' arguments
+    String? encode;
+    String? decode;
+    for (final arg in args) {
+      if (arg is NamedArgument) {
+        if (arg.name.lexeme == 'encode') {
+          encode = arg.argumentExpression.toString();
+        } else if (arg.name.lexeme == 'decode') {
+          decode = arg.argumentExpression.toString();
+        }
+      }
+    }
+
+    return (body: body, encode: encode, decode: decode);
+  }
+
+  /// Extract dependency identifiers from the `deps:` named argument of a compute() call.
+  ///
+  /// Returns a list of identifier names, or null if no deps argument is provided.
+  List<String>? _extractDeps(TopLevelVariableDeclaration node) {
+    final varList = node.variables;
+    if (varList.variables.isEmpty) return null;
+
+    final firstVar = varList.variables.first;
+    final initializer = firstVar.initializer;
+    if (initializer == null) return null;
+
+    ArgumentList? argumentList;
+    if (initializer is MethodInvocation && initializer.methodName.name == 'compute') {
+      argumentList = initializer.argumentList;
+    } else if (initializer is FunctionExpressionInvocation) {
+      argumentList = initializer.argumentList;
+    }
+    if (argumentList == null) return null;
+
+    for (final arg in argumentList.arguments) {
+      if (arg is NamedArgument && arg.name.lexeme == 'deps') {
+        final listLiteral = arg.argumentExpression;
+        if (listLiteral is ListLiteral) {
+          return listLiteral.elements
+              .whereType<Identifier>()
+              .map((id) => id.name)
+              .toList();
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Resolve the source text of each dependency identifier.
+  ///
+  /// For same-file identifiers, extracts the full declaration source.
+  /// For imported identifiers, extracts the declaration from the imported file.
+  Future<Map<String, String>> _resolveDepsSource(
+    List<String> depNames,
+    ResolvedUnitResult resolvedUnit,
+    String sourceContent,
+  ) async {
+    final result = <String, String>{};
+    final remaining = Set<String>.from(depNames);
+
+    // First pass: check same-file declarations via VariableDeclaration fragments
+    for (final decl in resolvedUnit.unit.declarations) {
+      if (remaining.isEmpty) break;
+      if (decl is TopLevelVariableDeclaration) {
+        for (final variable in decl.variables.variables) {
+          final fragment = variable.declaredFragment;
+          if (fragment == null) continue;
+          final element = fragment.element;
+          if (remaining.remove(element.name)) {
+            result[element.name!] = sourceContent.substring(decl.offset, decl.end);
+          }
+        }
+      } else {
+        final fragment = decl.declaredFragment;
+        if (fragment == null) continue;
+        final element = fragment.element;
+        if (remaining.remove(element.name)) {
+          result[element.name!] = sourceContent.substring(decl.offset, decl.end);
+        }
+      }
+    }
+
+    if (remaining.isEmpty) return result;
+
+    // Second pass: resolve imported identifiers not found in same file
+    for (final depName in remaining) {
+      // Look up in library scope
+      final lookupResult = resolvedUnit.libraryFragment.scope.lookup(depName);
+      final element = lookupResult.getter;
+      if (element == null) {
+        logger.info('dep "$depName" not found in scope, skipping');
+        continue;
+      }
+
+      // Get the source file for this element
+      try {
+        final libElement = element.library;
+        if (libElement == null) continue;
+
+        final resolvedLib = await resolvedUnit.session.getResolvedLibraryByElement(libElement);
+        if (resolvedLib is! ResolvedLibraryResult) continue;
+
+        final fragmentDecl = resolvedLib.getFragmentDeclaration(element.firstFragment);
+        final node = fragmentDecl?.node;
+        if (node == null) continue;
+
+        // Read the source file
+        final source = libElement.firstFragment.source;
+        final file = File(source.fullName);
+        if (!file.existsSync()) continue;
+        final fileContent = file.readAsStringSync();
+
+        result[depName] = fileContent.substring(node.offset, node.end);
+      } catch (e) {
+        logger.info('Failed to resolve dep "$depName": $e');
+      }
+    }
+
+    return result;
+  }
+}

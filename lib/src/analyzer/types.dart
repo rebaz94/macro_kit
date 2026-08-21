@@ -84,6 +84,7 @@ mixin Types on BaseAnalyzer {
       filterMethods: cap.peek('filterMethods')?.toStringValue() ?? '',
       filterClassMethodMetadata: cap.peek('filterClassMethodMetadata')?.toStringValue() ?? '',
       topLevelFunctions: cap.peek('topLevelFunctions')?.toBoolValue() ?? false,
+      topLevelVariables: cap.peek('topLevelVariables')?.toBoolValue() ?? false,
       typeDefRecords: cap.peek('typeDefRecords')?.toBoolValue() ?? false,
       collectClassSubTypes: cap.peek('collectClassSubTypes')?.toBoolValue() ?? false,
       filterCollectSubTypes: cap.peek('filterCollectSubTypes')?.toStringValue() ?? '',

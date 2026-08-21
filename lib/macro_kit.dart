@@ -11,6 +11,8 @@ export 'src/core/core.dart' hide MacroX, BaseMacroGenerator;
 export 'src/core/extension.dart';
 export 'src/core/modifier.dart';
 export 'src/macro/asset_path/asset_path_macro.dart';
+export 'src/macro/compute/compute_macro.dart';
+export 'src/macro/compute/dart_code.dart' show DartCode;
 export 'src/macro/data_class/config.dart' hide JsonKeyConfig, DataClassMacroConfig;
 export 'src/macro/data_class/data_class_macro.dart' hide dataClassMacroCapability;
 export 'src/macro/data_class/helpers.dart';

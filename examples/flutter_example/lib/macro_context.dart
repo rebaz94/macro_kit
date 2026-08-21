@@ -97,6 +97,7 @@ Future<void> setupMacro() async {
       'DataClassMacro': DataClassMacro.initialize,
       'AssetPathMacro': AssetPathMacro.initialize,
       'JsonSchemaMacro': JsonSchemaMacro.initialize,
+      'ComputeMacro': ComputeMacro.initialize,
       'FormMacro': FormMacro.initialize,
       'TimedMacro': TimedMacro.initialize,
       'RecordMacro': RecordMacro.initialize,

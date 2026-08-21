@@ -1459,6 +1459,143 @@ class MacroFunctionDeclaration {
   }
 }
 
+/// Represents a variable declaration with its macro configuration.
+///
+/// This is a generic data class used by any macro that needs to process
+/// top-level variables or class fields. Macro-specific data should be
+/// stored in the [data] map.
+///
+/// ## Usage
+///
+/// ```dart
+/// final declaration = MacroVariableDeclaration(
+///   libraryId: 123,
+///   variableId: 'myVar:abc',
+///   configs: [macroConfig],
+///   importPrefix: '',
+///   variableName: 'myVar',
+///   startLine: 10,
+///   endLine: 12,
+///   modifier: MacroModifier.create(isFinal: true),
+///   data: {'customKey': 'customValue'},
+/// );
+/// ```
+class MacroVariableDeclaration {
+  const MacroVariableDeclaration({
+    required this.libraryId,
+    required this.variableId,
+    required this.configs,
+    required this.importPrefix,
+    required this.variableName,
+    required this.startLine,
+    required this.endLine,
+    required this.modifier,
+    this.isFieldOf,
+    this.fieldType,
+    this.data = const {},
+  });
+
+  static MacroVariableDeclaration fromJson(Map<String, dynamic> json) {
+    final libraryId = (json['lid'] as num).toInt();
+    final variableId = json['vid'] as String;
+    final configs = (json['cf'] as List).map((e) => MacroConfig.fromJson(e as Map<String, dynamic>)).toList();
+
+    return MacroVariableDeclaration(
+      libraryId: libraryId,
+      variableId: variableId,
+      configs: configs,
+      importPrefix: (json['ip'] as String?) ?? '',
+      variableName: json['vn'] as String,
+      startLine: (json['sl'] as num).toInt(),
+      endLine: (json['el'] as num).toInt(),
+      modifier: json['m'] == null
+          ? const MacroModifier({})
+          : MacroModifier((json['m'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as bool))),
+      isFieldOf: json['fo'] as String?,
+      fieldType: json['ft'] as String?,
+      data: (json['d'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
+
+  /// The ID of the library where this variable is declared.
+  final int libraryId;
+
+  /// Unique identifier for this variable declaration.
+  final String variableId;
+
+  /// List of macro configurations applied to this variable.
+  final List<MacroConfig> configs;
+
+  /// The import prefix used when importing this variable (empty string if none).
+  final String importPrefix;
+
+  /// The name of the variable (e.g., `_versionMacro`).
+  final String variableName;
+
+  /// The start line of the variable declaration in the source file.
+  final int startLine;
+
+  /// The end line of the variable declaration in the source file.
+  final int endLine;
+
+  /// Declaration modifiers.
+  final MacroModifier modifier;
+
+  /// The class name if this variable is a class field, null for top-level variables.
+  final String? isFieldOf;
+
+  /// The type annotation of the field if [isFieldOf] is set.
+  final String? fieldType;
+
+  /// Macro-specific data map.
+  ///
+  /// Use this to pass custom data to the macro generator.
+  /// For example, the compute macro stores `computedResult`, `asConst`, and `private` here.
+  final Map<String, dynamic> data;
+
+  MacroVariableDeclaration copyWith({
+    int? libraryId,
+    String? variableId,
+    List<MacroConfig>? configs,
+    Map<String, dynamic>? data,
+  }) {
+    return MacroVariableDeclaration(
+      libraryId: libraryId ?? this.libraryId,
+      variableId: variableId ?? this.variableId,
+      configs: configs ?? this.configs,
+      importPrefix: importPrefix,
+      variableName: variableName,
+      startLine: startLine,
+      endLine: endLine,
+      modifier: modifier,
+      isFieldOf: isFieldOf,
+      fieldType: fieldType,
+      data: data ?? this.data,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lid': libraryId,
+      'vid': variableId,
+      'cf': configs.map((e) => e.toJson()).toList(),
+      'ip': importPrefix,
+      'vn': variableName,
+      'sl': startLine,
+      'el': endLine,
+      if (modifier.value.isNotEmpty) 'm': modifier.value,
+      if (isFieldOf != null) 'fo': isFieldOf,
+      if (fieldType != null) 'ft': fieldType,
+      if (data.isNotEmpty) 'd': data,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'MacroVariableDeclaration{libraryId: $libraryId, variableId: $variableId, configs: $configs, importPrefix: $importPrefix, variableName: $variableName, startLine: $startLine, endLine: $endLine, modifier: $modifier, isFieldOf: $isFieldOf, fieldType: $fieldType, data: $data}';
+  }
+}
+
 /// Represents a record declaration with its metadata, members, and macro configurations.
 class MacroRecordDeclaration {
   const MacroRecordDeclaration({
@@ -1811,7 +1948,7 @@ enum AssetChangeType {
 }
 
 /// The target type that the macro has been applied to
-enum TargetType { clazz, typeDefRecord, function, enumType, asset }
+enum TargetType { clazz, typeDefRecord, function, enumType, asset, variable }
 
 /// State information about the asset directory when processing asset-related macros.
 ///

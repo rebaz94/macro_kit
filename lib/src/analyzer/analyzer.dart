@@ -11,6 +11,7 @@ import 'package:macro_kit/src/analyzer/analyze_class_method.dart';
 import 'package:macro_kit/src/analyzer/analyze_enum.dart';
 import 'package:macro_kit/src/analyzer/analyze_function.dart';
 import 'package:macro_kit/src/analyzer/analyze_record.dart';
+import 'package:macro_kit/src/analyzer/analyze_variable.dart';
 import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/generator.dart';
 import 'package:macro_kit/src/analyzer/types.dart';
@@ -29,6 +30,7 @@ class MacroAnalyzer extends BaseAnalyzer
         AnalyzeFunction,
         AnalyzeEnum,
         AnalyzeRecord,
+        AnalyzeVariable,
         Generator {
   MacroAnalyzer({
     required super.logger,
@@ -107,7 +109,6 @@ class MacroAnalyzer extends BaseAnalyzer
     bool containsMacro = false;
     for (final declaration in analysisResult.unit.declarations) {
       final decFrag = declaration.declaredFragment;
-      if (decFrag == null) continue;
 
       switch (declaration) {
         case ClassDeclaration() when decFrag is ClassFragment:
@@ -116,7 +117,7 @@ class MacroAnalyzer extends BaseAnalyzer
           final macroClass = await parseClass(decFrag);
           containsMacro = containsMacro ? true : macroClass != null;
 
-        case GenericTypeAlias() when decFrag.element is TypeAliasElement:
+        case GenericTypeAlias() when decFrag != null && decFrag.element is TypeAliasElement:
           if (decFrag.metadata.annotations.isEmpty) continue;
 
           final typeAliasElem = (decFrag.element as TypeAliasElement);
@@ -142,6 +143,18 @@ class MacroAnalyzer extends BaseAnalyzer
         case FunctionDeclaration() when decFrag is TopLevelFunctionFragment:
           final macroFunction = await parseTopLevelFunction(decFrag);
           containsMacro = containsMacro ? true : macroFunction != null;
+
+        case TopLevelVariableDeclaration()
+            when declaration.metadata.isNotEmpty && declaration.variables.variables.isNotEmpty:
+
+          final element = declaration.variables.variables.first.declaredFragment!.element;
+          final macroVar = await parseTopLevelVariable(
+            element,
+            astNode: declaration,
+            sourceContent: analysisResult.content,
+            resolvedUnit: analysisResult,
+          );
+          containsMacro = containsMacro ? true : macroVar != null;
       }
     }
     if (!containsMacro) {

@@ -1357,6 +1357,16 @@ class MacroAnalyzerServer implements MacroServerInterface {
     sendMessageMacroClients(GeneralMessage(message: message), clientId: channelId);
   }
 
+  @override
+  String getRunnerType(String path) {
+    final contextInfo = getContextInfoForPath(path);
+    final runCommand = contextInfo?.sourceContext.runCommand;
+    if (runCommand != null && runCommand.isNotEmpty) {
+      return runCommand.first;
+    }
+    return 'dart';
+  }
+
   void dispose() {
     _autoShutdownTimer?.cancel();
     // vmUtils?.dispose();

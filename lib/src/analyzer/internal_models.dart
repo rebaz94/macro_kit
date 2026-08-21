@@ -158,6 +158,7 @@ class AnalyzeResult {
   List<MacroClassDeclaration> _classes = [];
   List<MacroRecordDeclaration>? _records;
   List<MacroFunctionDeclaration>? _topLevelFunctions = [];
+  List<MacroVariableDeclaration>? _topLevelVariables;
 
   List<MacroClassDeclaration> get classes => _classes;
 
@@ -165,14 +166,18 @@ class AnalyzeResult {
 
   List<MacroFunctionDeclaration>? get topLevelFunctions => _topLevelFunctions;
 
+  List<MacroVariableDeclaration>? get topLevelVariables => _topLevelVariables;
+
   void update({
     List<MacroClassDeclaration>? classes,
     List<MacroFunctionDeclaration>? topLevelFunctions,
     List<MacroRecordDeclaration>? records,
+    List<MacroVariableDeclaration>? topLevelVariables,
   }) {
     _classes = classes ?? _classes;
     _topLevelFunctions = topLevelFunctions ?? _topLevelFunctions;
     _records = records ?? _records;
+    _topLevelVariables = topLevelVariables ?? _topLevelVariables;
   }
 
   void addClass(MacroClassDeclaration declaration) {
@@ -185,6 +190,10 @@ class AnalyzeResult {
 
   void addTopLevelFunction(MacroFunctionDeclaration declaration) {
     (_topLevelFunctions ??= []).add(declaration);
+  }
+
+  void addTopLevelVariable(MacroVariableDeclaration declaration) {
+    (_topLevelVariables ??= []).add(declaration);
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:macro_kit/src/analyzer/base.dart';
 import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
 import 'package:macro_kit/src/common/models.dart';
+import 'package:macro_kit/src/macro/compute/compute_executor.dart';
 
 mixin Generator on BaseAnalyzer {
   /// group parsed macro code and run user code generation
@@ -33,16 +34,21 @@ mixin Generator on BaseAnalyzer {
           classes: analyzeRes.classes,
           topLevelFunctions: analyzeRes.topLevelFunctions ?? [],
           records: analyzeRes.records ?? [],
+          topLevelVariables: analyzeRes.topLevelVariables ?? [],
         );
       } else {
         res.classes!.addAll(analyzeRes.classes);
         res.records!.addAll(analyzeRes.records ?? const []);
         res.topLevelFunctions!.addAll(analyzeRes.topLevelFunctions ?? const []);
+        res.topLevelVariables!.addAll(analyzeRes.topLevelVariables ?? const []);
       }
     }
 
     // step:2 configure the generated file path
     final (:genFilePath, partFromSource: partFromSource, :partFromGenerated) = server.buildGeneratedFileInfo(path);
+
+    // step:2.5 execute compute macros for variables before sending to client
+    await _executeComputeBodies(runConfigs, path, genFilePath);
 
     // step:3 run the macro generator
     final generated = StringBuffer("part of '$partFromGenerated';");
@@ -55,7 +61,8 @@ mixin Generator on BaseAnalyzer {
       // ignore message with empty applied to not generate empty file
       if (msg.classes?.isNotEmpty != true &&
           msg.records?.isNotEmpty != true &&
-          msg.topLevelFunctions?.isNotEmpty != true) {
+          msg.topLevelFunctions?.isNotEmpty != true &&
+          msg.topLevelVariables?.isNotEmpty != true) {
         continue;
       }
 
@@ -176,5 +183,141 @@ mixin Generator on BaseAnalyzer {
       logger.warn('Formatting generated code failed', e);
       return code;
     }
+  }
+
+  /// Execute compute bodies for all variable declarations that have compute data.
+  ///
+  /// Compares combinedHash against stored hashes in the existing `.g.dart` file.
+  /// Only recomputes when the hash differs. When deps are specified, only
+  /// changes to the compute body or listed dependencies change the hash.
+  /// When deps are omitted, any file change changes the hash.
+  Future<void> _executeComputeBodies(
+    Map<String, RunMacroMsg> runConfigs,
+    String sourceFilePath,
+    String genFilePath,
+  ) async {
+    // Read existing hashes from the generated file
+    final existingHashes = _readComputeHashes(genFilePath);
+
+    // Collect all compute bodies that need execution
+    final allComputeBodies = <String, ComputeBodyInfo>{};
+    final declarationsByVariableId = <String, MacroVariableDeclaration>{};
+
+    for (final runConfigEntry in runConfigs.entries) {
+      final msg = runConfigEntry.value;
+      if (msg.topLevelVariables?.isNotEmpty != true) continue;
+
+      for (final varDecl in msg.topLevelVariables!) {
+        final computeBody = varDecl.data['computeBody'] as String?;
+        if (computeBody == null || computeBody.isEmpty) continue;
+
+        // Compare combinedHash directly against stored value
+        final combinedHash = varDecl.data['combinedHash'] as int?;
+        if (combinedHash != null && existingHashes.containsKey(varDecl.variableName)) {
+          final stored = existingHashes[varDecl.variableName]!;
+          if (stored.hash == combinedHash) {
+            // Hash matches — reuse cached computed value
+            final newData = Map<String, dynamic>.from(varDecl.data);
+            newData['computedResult'] = stored.value;
+            // Update the declaration in the message with cached result
+            for (final runConfigEntry in runConfigs.entries) {
+              final msg = runConfigEntry.value;
+              if (msg.topLevelVariables == null) continue;
+              final idx = msg.topLevelVariables!.indexWhere(
+                (v) => v.variableName == varDecl.variableName,
+              );
+              if (idx >= 0) {
+                msg.topLevelVariables![idx] = varDecl.copyWith(data: newData);
+                break;
+              }
+            }
+            continue;
+          }
+        }
+
+        allComputeBodies[varDecl.variableName] = ComputeBodyInfo(
+          body: computeBody,
+          encode: varDecl.data['encode'] as String?,
+          decode: varDecl.data['decode'] as String?,
+        );
+        declarationsByVariableId[varDecl.variableName] = varDecl;
+      }
+    }
+
+    if (allComputeBodies.isEmpty) return;
+
+    // Get runner type from server context (dart or flutter)
+    final runnerType = server.getRunnerType(sourceFilePath);
+    final defaultStrategy = runnerType == 'flutter'
+        ? ComputeStrategy.flutterTest
+        : ComputeStrategy.dartRun;
+
+    // Execute all compute bodies that need recomputation
+    final results = await ComputeExecutor.executeAll(
+      sourceFilePath: sourceFilePath,
+      computeBodies: allComputeBodies,
+      defaultStrategy: defaultStrategy,
+    );
+
+    // Store results in declarations
+    for (final entry in results.entries) {
+      final varDecl = declarationsByVariableId[entry.key];
+      if (varDecl == null) continue;
+
+      final result = entry.value;
+      if (result.isSuccess) {
+        // Create a new data map with computedResult added
+        final newData = Map<String, dynamic>.from(varDecl.data);
+        newData['computedResult'] = result.dartLiteral;
+
+        // Replace the declaration in the message with updated data
+        for (final runConfigEntry in runConfigs.entries) {
+          final msg = runConfigEntry.value;
+          if (msg.topLevelVariables == null) continue;
+          final idx = msg.topLevelVariables!.indexWhere(
+            (v) => v.variableName == entry.key,
+          );
+          if (idx >= 0) {
+            msg.topLevelVariables![idx] = varDecl.copyWith(data: newData);
+            break;
+          }
+        }
+      } else {
+        logger.error('Compute failed for ${entry.key}: ${result.error}');
+      }
+    }
+  }
+
+  /// Read stored compute hashes and computed values from the generated `.g.dart` file.
+  ///
+  /// Returns a map of variableName -> (combinedHash, computedValue).
+  /// The hash is stored as: `const _<name>_computeHash = <combinedHash>;`
+  /// The value follows on the next line: `const <derivedName> = <value>;`
+  Map<String, ({int hash, String value})> _readComputeHashes(String genFilePath) {
+    final result = <String, ({int hash, String value})>{};
+
+    final file = File(genFilePath);
+    if (!file.existsSync()) return result;
+
+    try {
+      final content = file.readAsStringSync();
+
+      // Pattern: hash line followed by value line
+      final pattern = RegExp(
+        r'const\s+_(\w+)_computeHash\s*=\s*(-?\d+)\s*;\s*\n'
+        r'(?:const|final|var)\s+\w+\s*=\s*(.+);',
+        multiLine: true,
+      );
+      for (final match in pattern.allMatches(content)) {
+        final variableName = match.group(1)!;
+        final combinedHash = int.parse(match.group(2)!);
+        final computedValue = match.group(3)!;
+        result[variableName] = (hash: combinedHash, value: computedValue);
+      }
+    } catch (e) {
+      logger.warn('Failed to read compute hashes from $genFilePath', e);
+    }
+
+    return result;
   }
 }

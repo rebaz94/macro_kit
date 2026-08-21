@@ -51,6 +51,9 @@ abstract class MacroServerInterface {
   void sendMessageMacroClients(GeneralMessage message, {int? clientId});
 
   void onClientError(int channelId, String message, [Object? err, StackTrace? trace]);
+
+  /// Returns the runner type for the given path: 'dart' or 'flutter'.
+  String getRunnerType(String path);
 }
 
 class DefaultFakeServerInterface implements MacroServerInterface {
@@ -84,6 +87,9 @@ class DefaultFakeServerInterface implements MacroServerInterface {
 
   @override
   void sendMessageMacroClients(GeneralMessage message, {int? clientId}) {}
+
+  @override
+  String getRunnerType(String path) => 'dart';
 }
 
 abstract class BaseAnalyzer {

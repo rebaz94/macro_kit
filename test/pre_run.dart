@@ -21,6 +21,7 @@ void main() async {
     package: PackageInfo.path(testDir),
     macros: {
       'DataClassMacro': DataClassMacro.initialize,
+      'ComputeMacro': ComputeMacro.initialize,
       'AssetPathMacro': AssetPathMacro.initialize,
       'CustomMacro': CustomMacro.initialize,
     },

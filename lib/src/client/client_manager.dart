@@ -121,21 +121,25 @@ class MacroManager implements ConnectionListener {
   }
 
   void _runMacro(RunMacroMsg message) async {
-    final generated = StringBuffer();
+    final genBuffer = StringBuffer();
     final synced = await _syncMacroConfiguration(message.path);
     if (!synced) return;
 
     try {
       if (message.records?.isNotEmpty == true) {
-        await _executeRecordDeclarationMacro(message, generated);
+        await _executeRecordDeclarationMacro(message, genBuffer);
       }
 
       if (message.classes?.isNotEmpty == true) {
-        await _executeClassDeclarationMacro(message, generated);
+        await _executeClassDeclarationMacro(message, genBuffer);
       }
 
       if (message.topLevelFunctions?.isNotEmpty == true) {
-        await _executeFunctionDeclarationMacro(message, generated);
+        await _executeFunctionDeclarationMacro(message, genBuffer);
+      }
+
+      if (message.topLevelVariables?.isNotEmpty == true) {
+        await _executeVariableDeclarationMacro(message, genBuffer);
       }
     } catch (e, s) {
       logger.error('Macro execution failed', e, s);
@@ -144,13 +148,13 @@ class MacroManager implements ConnectionListener {
     }
 
     // send
-    final sent = connection.addMessage(RunMacroResultMsg(id: message.id, result: generated.toString()));
+    final sent = connection.addMessage(RunMacroResultMsg(id: message.id, result: genBuffer.toString()));
     if (!sent) {
       logger.error('Failed to publish generated code: MacroServer maybe down!');
     }
   }
 
-  Future<void> _executeRecordDeclarationMacro(RunMacroMsg message, StringBuffer generated) async {
+  Future<void> _executeRecordDeclarationMacro(RunMacroMsg message, StringBuffer genBuffer) async {
     for (final declaration in message.records ?? const <MacroRecordDeclaration>[]) {
       final hasMultipleMetadata = declaration.configs.length > 1;
       final isCombiningGenCodeMode = hasMultipleMetadata && declaration.configs.first.combine == true;
@@ -240,7 +244,7 @@ class MacroManager implements ConnectionListener {
           // then add the generated code to non combinable
 
           final shouldUseCombined = !isCombiningGenCodeMode || !firstMacroApplied || isCombingGenerator;
-          final buffer = shouldUseCombined ? generated : (generatedNonCombinable ??= StringBuffer());
+          final buffer = shouldUseCombined ? genBuffer : (generatedNonCombinable ??= StringBuffer());
 
           buffer
             ..write('\n')
@@ -261,18 +265,18 @@ class MacroManager implements ConnectionListener {
 
       // add end bracket
       if (isCombiningGenCodeMode) {
-        generated.write('\n}\n');
+        genBuffer.write('\n}\n');
       }
 
       // add non combinable to end of current generated code
       if (generatedNonCombinable != null) {
-        generated.write(generatedNonCombinable.toString());
+        genBuffer.write(generatedNonCombinable.toString());
         generatedNonCombinable = null;
       }
     }
   }
 
-  Future<void> _executeClassDeclarationMacro(RunMacroMsg message, StringBuffer generated) async {
+  Future<void> _executeClassDeclarationMacro(RunMacroMsg message, StringBuffer genBuffer) async {
     for (final declaration in message.classes ?? const <MacroClassDeclaration>[]) {
       final hasMultipleMetadata = declaration.configs.length > 1;
       final isCombiningGenCodeMode = hasMultipleMetadata && declaration.configs.first.combine == true;
@@ -398,7 +402,7 @@ class MacroManager implements ConnectionListener {
           // then add the generated code to non combinable
 
           final shouldUseCombined = !isCombiningGenCodeMode || !firstMacroApplied || isCombingGenerator;
-          final buffer = shouldUseCombined ? generated : (generatedNonCombinable ??= StringBuffer());
+          final buffer = shouldUseCombined ? genBuffer : (generatedNonCombinable ??= StringBuffer());
 
           buffer
             ..write('\n')
@@ -419,18 +423,18 @@ class MacroManager implements ConnectionListener {
 
       // add end bracket
       if (isCombiningGenCodeMode) {
-        generated.write('\n}\n');
+        genBuffer.write('\n}\n');
       }
 
       // add non combinable to end of current generated code
       if (generatedNonCombinable != null) {
-        generated.write(generatedNonCombinable.toString());
+        genBuffer.write(generatedNonCombinable.toString());
         generatedNonCombinable = null;
       }
     }
   }
 
-  Future<void> _executeFunctionDeclarationMacro(RunMacroMsg message, StringBuffer generated) async {
+  Future<void> _executeFunctionDeclarationMacro(RunMacroMsg message, StringBuffer genBuffer) async {
     for (final declaration in message.topLevelFunctions ?? const <MacroFunctionDeclaration>[]) {
       final hasMultipleMetadata = declaration.configs.length > 1;
       final isCombiningGenCodeMode = hasMultipleMetadata && declaration.configs.first.combine == true;
@@ -524,7 +528,7 @@ class MacroManager implements ConnectionListener {
           // then add the generated code to non combinable
 
           final shouldUseCombined = !isCombiningGenCodeMode || !firstMacroApplied || isCombingGenerator;
-          final buffer = shouldUseCombined ? generated : (generatedNonCombinable ??= StringBuffer());
+          final buffer = shouldUseCombined ? genBuffer : (generatedNonCombinable ??= StringBuffer());
 
           buffer
             ..write('\n')
@@ -545,13 +549,80 @@ class MacroManager implements ConnectionListener {
 
       // add end bracket
       if (isCombiningGenCodeMode) {
-        generated.write('\n}\n');
+        genBuffer.write('\n}\n');
       }
 
       // add non combinable to end of current generated code
       if (generatedNonCombinable != null) {
-        generated.write(generatedNonCombinable.toString());
+        genBuffer.write(generatedNonCombinable.toString());
         generatedNonCombinable = null;
+      }
+    }
+  }
+
+  Future<void> _executeVariableDeclarationMacro(RunMacroMsg message, StringBuffer genBuffer) async {
+    for (final declaration in message.topLevelVariables ?? const <MacroVariableDeclaration>[]) {
+      for (final (index, macroConfig) in declaration.configs.indexed) {
+        // initialize or reuse generator
+        final (macroGenrator, errMsg) = _getMacroGenerator(macroConfig);
+        if (errMsg != null || macroGenrator == null) {
+          connection.addMessage(RunMacroResultMsg(id: message.id, result: '', error: errMsg));
+          return;
+        }
+
+        // get global config if exists
+        final (globalConfig, contentPath, remapGeneratedFileTo) = _getGlobalMacroConfig(
+          macroConfig.key.name,
+          macroGenrator.globalConfigParser,
+          userMacrosConfig,
+        );
+
+        // run the macro
+        final state = MacroState(
+          macro: macroConfig.key,
+          remainingMacro: declaration.configs.whereIndexed((i, e) => i != index).map((e) => e.key),
+          globalConfig: globalConfig,
+          contentPath: contentPath,
+          remapGeneratedFileTo: remapGeneratedFileTo,
+          targetPath: message.path,
+          targetType: TargetType.variable,
+          importPrefix: declaration.importPrefix,
+          imports: message.imports,
+          libraryPaths: message.libraryPaths,
+          targetName: declaration.variableName,
+          modifier: declaration.modifier,
+          isCombingGenerator: false,
+          suffixName: macroGenrator.suffixName,
+          classesById: message.sharedClasses,
+          assetState: null,
+        );
+
+        // Store declaration data in state for the macro generator
+        state.set('isFieldOf', declaration.isFieldOf);
+        state.set('fieldType', declaration.fieldType);
+
+        // Store all macro-specific data from the declaration's data map
+        for (final entry in declaration.data.entries) {
+          state.set(entry.key, entry.value);
+        }
+
+        await macroGenrator.init(state);
+        await macroGenrator.onGenerate(state);
+
+        final generatedCode = state.generated;
+        if (generatedCode.isNotEmpty) {
+          genBuffer
+            ..write('\n')
+            ..write(generatedCode)
+            ..write('\n');
+        }
+
+        if (state.generatedNonCombinable case String nonCombinableCode) {
+          genBuffer
+            ..write('\n')
+            ..write(nonCombinableCode)
+            ..write('\n');
+        }
       }
     }
   }

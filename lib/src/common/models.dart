@@ -348,6 +348,7 @@ class RunMacroMsg implements Message {
     this.classes,
     this.records,
     this.topLevelFunctions,
+    this.topLevelVariables,
     this.assetDeclaration,
     this.assetConfig,
     this.assetBasePath,
@@ -359,7 +360,7 @@ class RunMacroMsg implements Message {
     final sharedDec = <String, MacroClassDeclaration>{};
     final pendingUpdate = <void Function()>[];
 
-    final (classesRes, records, functionRes) = runZoneGuarded(
+    final (classesRes, records, functionRes, variablesRes) = runZoneGuarded(
       fn: () {
         final rawSharedDec = json['sharedClasses'] as Map<String, dynamic>?;
 
@@ -385,12 +386,17 @@ class RunMacroMsg implements Message {
           records.add(MacroRecordDeclaration.fromJson(e as Map<String, dynamic>));
         }
 
+        final variables = <MacroVariableDeclaration>[];
+        for (final e in (json['variables'] as List?) ?? const []) {
+          variables.add(MacroVariableDeclaration.fromJson(e as Map<String, dynamic>));
+        }
+
         for (final update in pendingUpdate) {
           update();
         }
         pendingUpdate.clear();
 
-        return (classes, records, functions);
+        return (classes, records, functions, variables);
       },
       values: {
         #sharedClasses: sharedDec,
@@ -410,6 +416,7 @@ class RunMacroMsg implements Message {
       classes: classesRes,
       records: records,
       topLevelFunctions: functionRes,
+      topLevelVariables: variablesRes,
       assetDeclaration: json['asset'] != null
           ? MacroAssetDeclaration.fromJson(json['asset'] as Map<String, dynamic>)
           : null,
@@ -448,6 +455,9 @@ class RunMacroMsg implements Message {
   /// The top level function declarations of a processed dart code
   final List<MacroFunctionDeclaration>? topLevelFunctions;
 
+  /// The top level variable declarations (with compute macro results)
+  final List<MacroVariableDeclaration>? topLevelVariables;
+
   /// The file or directory which triggered macro generation
   final MacroAssetDeclaration? assetDeclaration;
 
@@ -478,6 +488,7 @@ class RunMacroMsg implements Message {
       if (classes?.isNotEmpty == true) 'classes': classes!.map((e) => e.toJson()).toList(),
       if (records?.isNotEmpty == true) 'records': records!.map((e) => e.toJson()).toList(),
       if (topLevelFunctions?.isNotEmpty == true) 'functions': topLevelFunctions!.map((e) => e.toJson()).toList(),
+      if (topLevelVariables?.isNotEmpty == true) 'variables': topLevelVariables!.map((e) => e.toJson()).toList(),
       if (assetDeclaration != null) 'asset': assetDeclaration!.toJson(),
       if (assetConfig != null) 'assetConfig': assetConfig,
       if (assetBasePath != null) 'assetBasePath': assetBasePath,
