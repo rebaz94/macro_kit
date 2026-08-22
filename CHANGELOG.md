@@ -1,3 +1,7 @@
+## 0.7.6
+
+- Fix release for github
+
 ## 0.7.5
 
 - Add documentation topic for **ComputeMacro**
