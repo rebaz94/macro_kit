@@ -1,3 +1,12 @@
+## 0.7.7
+
+- Documentation fixes for **ComputeMacro**:
+	- Clarify that any change to a tracked file dependency (`deps: ['assets/data.json']`) re-generates
+	  the compute macro on the next generation pass or an explicit `macro rebuild`
+	- Document that identifier deps and file deps both feed into the combined hash, and that compute
+	  bodies execute with the working directory set to the project root
+- Fix broken link to the renamed `doc/compute_macro.md` and register the "Compute Macro" dartdoc topic
+
 ## 0.7.6
 
 - Fix release for github

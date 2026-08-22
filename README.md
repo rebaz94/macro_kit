@@ -223,7 +223,7 @@ const version = '1.0.0';
 Supports custom serialization via `encode`/`decode`, raw code embedding via `DartCode`, and
 incremental caching with `deps` (or build-once semantics via `macroBuildOnce`).
 
-For more information, see the [Computed Macro](doc/computed_macro.md) documentation.
+For more information, see the [Compute Macro](doc/compute_macro.md) documentation.
 
 ### AssetPathMacro
 

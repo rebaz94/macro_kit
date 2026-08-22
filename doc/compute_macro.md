@@ -186,7 +186,9 @@ The entire source file content is hashed. Any edit in the file triggers re-execu
 
 ### With `deps`
 
-Only changes to the compute body itself or to the listed dependencies trigger re-execution:
+Only changes to the compute body itself or to the listed dependencies trigger re-execution.
+Dependencies can be identifiers (variables, functions, classes) or file paths—see
+[File Dependencies](#file-dependencies):
 
 ```dart
 
@@ -204,9 +206,10 @@ Dependencies may reference same-file variables, functions, or identifiers import
 
 ### File Dependencies
 
-String entries in `deps` are treated as file dependencies when they contain a path separator
-(`/`); strings without `/` are rejected with a warning. The content hash of each tracked file is
-part of the rebuild decision, so editing the file invalidates the variable on the next generation
+String entries in `deps` are treated as **file dependencies** when they contain a path separator
+(`/`); strings without `/` are rejected with a warning. **Any change to a tracked file's content
+re-generates the compute macro**: the file's content hash is part of the variable's combined hash,
+so editing the file invalidates the cached value and forces re-execution on the next generation
 pass—including an explicit rebuild via `macro rebuild`:
 
 ```dart
@@ -267,12 +270,13 @@ the temp file, so compute bodies can reference generated types (e.g., data class
 
 1. **Extraction**: The analyzer extracts the compute body source text from the AST along with any
    `encode`, `decode`, and `deps` arguments
-2. **Hashing**: A hash is computed from the body plus dependencies (or the whole file when `deps`
-   is omitted)
+2. **Hashing**: A hash is computed from the body plus dependencies—identifier source text and the
+    content hash of any file deps (or the whole file when `deps` is omitted)
 3. **Cache Check**: If the hash matches the stored hash in `.g.dart`, the cached value is reused
 4. **Temp File**: Otherwise the source file is copied to a temp file in the same directory with a
    generated `main()` entrypoint appended
-5. **Execution**: The temp file runs in an isolate or subprocess, calling each compute body
+5. **Execution**: The temp file runs in an isolate or subprocess—with the working directory set to
+   the project root—calling each compute body
 6. **Serialization**: Results are transported back and serialized into Dart literals
 7. **Generation**: The `.g.dart` file is written with the hash constant followed by the generated
    variable declaration
