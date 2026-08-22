@@ -311,11 +311,17 @@ mixin Generator on BaseAnalyzer {
     }
   }
 
+  final hashPattern = RegExp(r'^const\s+_(\w+)Hash\s*=\s*(-?\d+)\s*;\s*$');
+  // Single-line variable declaration: only its initializer is cached
+  final declPattern = RegExp(r'^(?:const|final|var)\s+\w+\s*=\s*(.+);\s*$');
+
   /// Read stored compute hashes and computed values from the generated `.g.dart` file.
   ///
   /// Returns a map of variableName -> (combinedHash, computedValue).
   /// The hash is stored as: `const _<name>Hash = <combinedHash>;`
-  /// The value follows on the next line: `const <derivedName> = <value>;`
+  /// The value is everything following the hash line up to the next hash
+  /// constant (or EOF) — a single `const/final/var` declaration line for
+  /// regular values, or a multi-line raw code block for declarations.
   Map<String, ({int hash, String value})> _readComputeHashes(String genFilePath) {
     final result = <String, ({int hash, String value})>{};
 
@@ -325,18 +331,43 @@ mixin Generator on BaseAnalyzer {
     try {
       final content = file.readAsStringSync();
 
-      // Pattern: hash line followed by value line
-      final pattern = RegExp(
-        r'const\s+_(\w+)Hash\s*=\s*(-?\d+)\s*;\s*\n'
-        r'(?:const|final|var)\s+\w+\s*=\s*(.+);',
-        multiLine: true,
-      );
-      for (final match in pattern.allMatches(content)) {
-        final variableName = match.group(1)!;
-        final combinedHash = int.parse(match.group(2)!);
-        final computedValue = match.group(3)!;
-        result[variableName] = (hash: combinedHash, value: computedValue);
+      String? currentName;
+      int? currentHash;
+      final valueBuffer = StringBuffer();
+
+      void flush() {
+        if (currentName == null || currentHash == null) return;
+
+        // Trim trailing blank lines from the collected value block
+        var value = valueBuffer.toString().trimRight();
+        if (value.isNotEmpty) {
+          // Regular variables cache only their initializer expression so it
+          // can be re-wrapped at generation time; raw code blocks are kept verbatim
+          final lines = value.split('\n');
+          if (lines.length == 1) {
+            final declMatch = declPattern.firstMatch(lines[0]);
+            if (declMatch != null) {
+              value = declMatch.group(1)!;
+            }
+          }
+          result[currentName!] = (hash: currentHash!, value: value);
+        }
+        currentName = null;
+        currentHash = null;
+        valueBuffer.clear();
       }
+
+      for (final line in content.split('\n')) {
+        final match = hashPattern.firstMatch(line);
+        if (match != null) {
+          flush();
+          currentName = match.group(1)!;
+          currentHash = int.parse(match.group(2)!);
+        } else if (currentName != null) {
+          valueBuffer.writeln(line);
+        }
+      }
+      flush();
     } catch (e) {
       logger.warn('Failed to read compute hashes from $genFilePath', e);
     }

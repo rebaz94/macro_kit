@@ -331,6 +331,15 @@ final _mixedDepsMacro = compute(
 );
 
 // ============================================================
+// 24. Modifier: isDeclaration (generate types at compile time)
+// ============================================================
+
+@Macro(ComputeMacro(modifier: ComputeModifier(isDeclaration: true)))
+final _compiledTypeMacro = compute<DartCode>(
+  () => DartCode('class CompiledUser { final String name; const CompiledUser(this.name); }'),
+);
+
+// ============================================================
 // Tests
 // ============================================================
 
@@ -462,5 +471,10 @@ void main() {
   group('Deps: file dependency', () {
     test('file dep value', () => expect(fileDep, {'version': 1, 'label': 'deps-data'}));
     test('mixed identifier + file deps', () => expect(mixedDeps, '2.1.0/config-v1'));
+  });
+
+  group('Modifier: isDeclaration', () {
+    test('generated type is usable', () => expect(CompiledUser('a').name, 'a'));
+    test('generated type is const-constructible', () => expect(const CompiledUser('b').name, 'b'));
   });
 }

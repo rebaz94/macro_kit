@@ -4,6 +4,7 @@
 final class AssetPaths {
   const AssetPaths._();
 
+  static const DsStore = 'assets/.DS_Store';
   static const butterfly = 'assets/butterfly.jpg';
 
   static const images = _Images._();
@@ -12,6 +13,12 @@ final class AssetPaths {
 final class _Images {
   const _Images._();
 
+  static const _DsStoreVal = 'assets/images/.DS_Store';
+
+  String get DsStore => _DsStoreVal;
+  static const _heroVal = 'assets/images/hero.jpg';
+
+  String get hero => _heroVal;
   static const _flutterVal = 'assets/images/flutter.jpg';
 
   String get flutter => _flutterVal;

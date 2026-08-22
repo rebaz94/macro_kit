@@ -84,6 +84,20 @@ import 'package:macro_kit/macro_kit.dart';
 /// so editing the file invalidates the variable on the next generation pass —
 /// including an explicit rebuild via the CLI (`macro rebuild`). Missing files
 /// log a warning; adding the file later triggers a rebuild.
+///
+/// To generate types (classes, enums, mixins, extensions, top-level functions...)
+/// at compile time instead of values, combine [DartCode] with
+/// `ComputeModifier(isDeclaration: true)`:
+///
+/// ```dart
+/// @Macro(ComputeMacro(modifier: ComputeModifier(isDeclaration: true)))
+/// final _userModelMacro = compute<DartCode>(
+///   () => DartCode('class UserModel { final String name; const UserModel(this.name); }'),
+/// );
+/// ```
+///
+/// The result is embedded verbatim in the `.g.dart` file — no variable
+/// declaration is wrapped around it.
 FutureOr<T> Function() compute<T>(
   FutureOr<T> Function() fn, {
   String Function(T value)? encode,
@@ -146,6 +160,7 @@ class ComputeMacro extends MacroGenerator {
   /// - `isFinal` → generates `final`
   /// - `isVar` → generates `var`
   /// - `isPrivate` → adds leading underscore to generated name
+  /// - `isDeclaration` → emits the raw result as top-level code (no variable)
   final ComputeModifier modifier;
 
   @override
@@ -176,6 +191,7 @@ class ComputeMacro extends MacroGenerator {
   /// - `const name = value;` (default)
   /// - `final name = value;`
   /// - `var name = value;`
+  /// - raw top-level code (when the modifier sets [ComputeModifier.isDeclaration])
   Future<void> _generateVariable(
     MacroState state,
     ComputeModifier mod,
@@ -187,14 +203,19 @@ class ComputeMacro extends MacroGenerator {
       throw MacroException('Compute body for ${state.targetName} returned empty result');
     }
 
-    final variableName = _deriveName(state.targetName, mod);
-
     // Add hash constant for incremental caching
     final combinedHash = state.getOrNull<int>('combinedHash');
     if (combinedHash != null) {
       buff.write('const _${state.targetName}Hash = $combinedHash;\n');
     }
 
+    // Declaration case: embed the result verbatim as top-level code
+    if (mod.isDeclaration) {
+      buff.writeln('$computedResult\n');
+      return;
+    }
+
+    final variableName = _deriveName(state.targetName, mod);
     // Variable case: determine keyword from modifier
     String keyword;
     if (mod.isFinal) {
@@ -266,12 +287,14 @@ class ComputeModifier {
   /// - [isFinal]: generates `final name = value;`
   /// - [isVar]: generates `var name = value;`
   /// - [isPrivate]: prefixes the generated name with `_`
+  /// - [isDeclaration]: embeds the raw result as top-level code instead of a variable
   ///
   /// When no keyword flag is set, `const` is generated.
   const ComputeModifier({
     this.isFinal = false,
     this.isVar = false,
     this.isPrivate = false,
+    this.isDeclaration = false,
   });
 
   /// Creates a [ComputeModifier] from the serialized constant annotation value.
@@ -286,6 +309,7 @@ class ComputeModifier {
         isFinal: namedArgs['isFinal'] == true,
         isVar: namedArgs['isVar'] == true,
         isPrivate: namedArgs['isPrivate'] == true,
+        isDeclaration: namedArgs['isDeclaration'] == true,
       );
     }
     return const ComputeModifier();
@@ -299,6 +323,17 @@ class ComputeModifier {
 
   /// Whether the generated name is prefixed with `_`.
   final bool isPrivate;
+
+  /// Whether the computed result is emitted as raw top-level code instead of
+  /// a variable declaration.
+  ///
+  /// Use with [DartCode] to generate types (classes, enums, mixins,
+  /// extensions, typedefs, functions...) at compile time. The result of the
+  /// compute body is embedded verbatim in the `.g.dart` file — no
+  /// `const/final/var` declaration is wrapped around it.
+  ///
+  /// When set, [isFinal], [isVar], and [isPrivate] are ignored.
+  final bool isDeclaration;
 }
 
 /// Processes a raw compute result before transport across isolate/process boundaries.

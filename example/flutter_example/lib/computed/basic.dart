@@ -5,7 +5,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:macro_kit/macro_kit.dart';
 
-part 'computed.g.dart';
+part 'basic.g.dart';
 
 final data = 32;
 

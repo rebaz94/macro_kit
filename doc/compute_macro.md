@@ -142,6 +142,31 @@ final _colorMacro = compute<DartCode>(
 // Generates: const color = Color(0xFF00007B);
 ```
 
+### Generating Types (Raw Declarations)
+
+To generate whole declarations—classes, enums, mixins, extensions, typedefs, top-level
+functions—at compile time, combine `DartCode` with `ComputeModifier(isDeclaration: true)`. The
+result is embedded verbatim as top-level code in the `.g.dart` file; no variable declaration is
+wrapped around it:
+
+```dart
+
+@Macro(ComputeMacro(modifier: ComputeModifier(isDeclaration: true)))
+final _userModelMacro = compute<DartCode>(
+      () => DartCode('''
+class UserModel {
+  final String name;
+  const UserModel(this.name);
+}
+'''),
+);
+// Generates the class itself in the .g.dart file — usable like any other type
+```
+
+Incremental caching still applies: a hash constant is stored next to the generated code and the
+body only re-executes when its hash changes. The other modifier flags (`isFinal`, `isVar`,
+`isPrivate`) are ignored in this mode.
+
 ### Custom Serialization with `encode`/`decode`
 
 For runtime values that aren't automatically serializable (e.g., `DateTime`, enums), provide an

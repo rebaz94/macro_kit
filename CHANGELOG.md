@@ -1,3 +1,17 @@
+## 0.8.0
+
+- **ComputeMacro** can now generate types at compile time: set
+  `ComputeModifier(isDeclaration: true)` and return [DartCode] from the compute body — the result
+  is embedded verbatim as top-level code (classes, enums, mixins, extensions, functions...) instead
+  of being wrapped in a variable declaration:
+
+  ```dart
+  @Macro(ComputeMacro(modifier: ComputeModifier(isDeclaration: true)))
+  final _userModelMacro = compute<DartCode>(
+    () => DartCode('class UserModel { final String name; const UserModel(this.name); }'),
+  );
+  ```
+
 ## 0.7.7
 
 - Documentation fixes for **ComputeMacro**:

@@ -4,21 +4,13 @@
 // ignore_for_file: unused_element, unused_local_variable, unnecessary_overrides, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 // dart format off
 
-part of 'computed.dart';
+part of 'version.dart';
 
-const __versionMacroHash = 906264747;
-const version = '1';
+const __buildTimeHash = 717650385;
+const buildTime = '2026-08-22T14:00:09.100436';
 
-const __myAgeMacroHash = 116800019;
-const myAge = 'MyAge: 32';
+const __gitCommitHash = 717650385;
+const gitCommit = 'c243461';
 
-const __randomNumberMacroHash = 340677358;
-const randomNumber = 934;
-
-const __myFavColorMacroHash = 906264747;
-const myFavColor = Color(4283215696);
-
-const __rawCodeMacroHash = 906264747;
-final rawCode = () {
-  return 99 / 33;
-}();
+const __appVersionHash = 717650385;
+const appVersion = '1.0.0+1';

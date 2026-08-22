@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:macro_kit/macro_kit.dart';
 
+import 'images/hero.dart' as i1277456958;
 import 'images/flutter.dart' as i3356018501;
 import 'images/dart.dart' as i3657187921;
 import './butterfly.dart' as i2123351816;
@@ -78,6 +79,7 @@ final class _EmbedRegistryImpl implements EmbedRegistry {
   Uint8List? readBytes(String path) => _files[path]?.call();
 
   final Map<String, Uint8List Function()> _files = {
+    '/assets/images/hero.jpg': () => i1277456958.heroData,
     '/assets/images/flutter.jpg': () => i3356018501.flutterData,
     '/assets/images/dart.svg': () => i3657187921.dartData,
     '/assets/butterfly.jpg': () => i2123351816.butterflyData,
