@@ -347,7 +347,7 @@ Enable auto-rebuild in `macro.json`:
 ## ⚠️ Current Limitations
 
 At the moment, macros can only be used on classes, top-level functions, records, and top-level
-variables (see [ComputeMacro](doc/computed_macro.md)). While this supports most common scenarios,
+variables. While this supports most common scenarios,
 upcoming releases are expected to add:
 
 - 🔜 Expanded macro features for library authors
