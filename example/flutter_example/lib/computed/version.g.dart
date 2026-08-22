@@ -6,11 +6,5 @@
 
 part of 'version.dart';
 
-const __buildTimeHash = 717650385;
-const buildTime = '2026-08-22T14:00:09.100436';
-
-const __gitCommitHash = 717650385;
-const gitCommit = 'c243461';
-
-const __appVersionHash = 717650385;
+const __appVersionHash = 865232254;
 const appVersion = '1.0.0+1';

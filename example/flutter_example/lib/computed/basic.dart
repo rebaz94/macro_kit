@@ -1,7 +1,5 @@
 // ignore_for_file: unused_element
 
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:macro_kit/macro_kit.dart';
 
@@ -17,9 +15,6 @@ final _myAgeMacro = compute(
   () => 'MyAge: $data',
   deps: [data],
 );
-
-@Macro(ComputeMacro())
-final _randomNumberMacro = compute(() => Random().nextInt(1000), deps: macroBuildOnce);
 
 @Macro(ComputeMacro())
 final _myFavColorMacro = compute(
