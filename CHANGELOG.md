@@ -1,3 +1,7 @@
+## 0.7.5
+
+- Add documentation topic for **ComputeMacro**
+
 ## 0.7.4
 
 - **ComputeMacro** now honors forced rebuilds: `always_rebuild_on_connect` re-executes all compute

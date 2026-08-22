@@ -27,6 +27,7 @@ export 'package:macro_kit/src/analyzer/base_macro.dart';
 /// {@category Installation}
 /// {@category Models}
 /// {@category Data Class Macro}
+/// {@category Compute Macro}
 /// {@category Asset Path Macro}
 /// {@category Embed Macro}
 /// {@category Global Configuration}
