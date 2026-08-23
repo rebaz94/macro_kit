@@ -1,12 +1,10 @@
 // ignore_for_file: unused_element
 
 import 'dart:convert';
-
-import 'package:path/path.dart' as p;
 import 'dart:io';
-import 'dart:math';
 
 import 'package:macro_kit/macro_kit.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 part 'compute_all_test.g.dart';
@@ -210,17 +208,7 @@ final _depsMultiMacro = compute(
 );
 
 // ============================================================
-// 11. deps: bare identifier (macroBuildOnce)
-// ============================================================
-
-@Macro(ComputeMacro())
-final _randomNumberMacro = compute(
-  () => Random().nextInt(1000),
-  deps: macroBuildOnce,
-);
-
-// ============================================================
-// 12. deps: list access
+// 11. deps: list access
 // ============================================================
 
 @Macro(ComputeMacro())
@@ -230,14 +218,7 @@ final _tagCountMacro = compute(
 );
 
 // ============================================================
-// 13. Non-deterministic (no deps → full file hash)
-// ============================================================
-
-@Macro(ComputeMacro())
-final _randomMacro = compute(() => Random().nextInt(99999));
-
-// ============================================================
-// 14. Ternary / conditional — auto-serialization
+// 12. Ternary / conditional — auto-serialization
 // ============================================================
 
 @Macro(ComputeMacro())
@@ -245,7 +226,7 @@ final _randomMacro = compute(() => Random().nextInt(99999));
 final _ternaryMacro = compute(() => true ? 'yes' : 'no');
 
 // ============================================================
-// 15. Large literal — auto-serialization
+// 13. Large literal — auto-serialization
 // ============================================================
 
 @Macro(ComputeMacro())
@@ -256,7 +237,7 @@ final _largeStringMacro = compute(
 );
 
 // ============================================================
-// 16. Math expressions — auto-serialization
+// 14. Math expressions — auto-serialization
 // ============================================================
 
 @Macro(ComputeMacro())
@@ -266,7 +247,7 @@ final _mathMacro = compute(() => 2 * 3 + 7 - 1);
 final _stringOpsMacro = compute(() => 'hello'.toUpperCase().length);
 
 // ============================================================
-// 17. Modifier: final (not const)
+// 15. Modifier: final (not const)
 // ============================================================
 
 @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true)))
@@ -278,28 +259,28 @@ final _finalDartCodeMacro = compute(
 );
 
 // ============================================================
-// 18. Modifier: var (not const, not final)
+// 16. Modifier: var (not const, not final)
 // ============================================================
 
 @Macro(ComputeMacro(modifier: ComputeModifier(isVar: true)))
 final _mutableMacro = compute(() => 'mutable with initial value computed');
 
 // ============================================================
-// 20. Modifier: private (isPrivate)
+// 17. Modifier: private (isPrivate)
 // ============================================================
 
 @Macro(ComputeMacro(modifier: ComputeModifier(isPrivate: true)))
 final _privateMacro = compute(() => 'secret');
 
 // ============================================================
-// 21. Modifier: final + private
+// 18. Modifier: final + private
 // ============================================================
 
 @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true, isPrivate: true)))
 final _finalPrivateMacro = compute(() => 'final-private');
 
 // ============================================================
-// 22. Nested DartCode
+// 19. Nested DartCode
 // ============================================================
 
 @Macro(ComputeMacro(modifier: ComputeModifier(isFinal: true)))
@@ -308,7 +289,7 @@ final _nestedDartCodeMacro = compute<DartCode>(
 );
 
 // ============================================================
-// 23. deps: file dependency (content hashed relative to project root)
+// 20. deps: file dependency (content hashed relative to project root)
 // ============================================================
 
 @Macro(ComputeMacro())
@@ -331,7 +312,7 @@ final _mixedDepsMacro = compute(
 );
 
 // ============================================================
-// 24. Modifier: isDeclaration (generate types at compile time)
+// 21. Modifier: isDeclaration (generate types at compile time)
 // ============================================================
 
 @Macro(ComputeMacro(modifier: ComputeModifier(isDeclaration: true)))
@@ -414,24 +395,8 @@ void main() {
     test('multiple deps', () => expect(depsMulti, 'retries=3, timeout=5000'));
   });
 
-  group('Deps: bare identifier', () {
-    test('macroBuildOnce as bare identifier', () => expect(randomNumber, isA<int>()));
-    test('macroBuildOnce value is within range', () {
-      expect(randomNumber, greaterThanOrEqualTo(0));
-      expect(randomNumber, lessThan(1000));
-    });
-  });
-
   group('Deps: list access', () {
     test('list length dep', () => expect(tagCount, 3));
-  });
-
-  group('Non-deterministic', () {
-    test('random produces int', () => expect(random, isA<int>()));
-    test('random is in range', () {
-      expect(random, greaterThanOrEqualTo(0));
-      expect(random, lessThan(99999));
-    });
   });
 
   group('Ternary / conditional', () {

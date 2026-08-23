@@ -38,6 +38,7 @@ class DataClassMacro extends MacroGenerator {
     this.copyWith,
     this.copyWithAsOption,
     this.toStringOverride,
+    this.fieldRename,
     this.discriminatorKey,
     this.discriminatorValue,
     this.includeDiscriminator,
@@ -59,6 +60,10 @@ class DataClassMacro extends MacroGenerator {
       copyWith: props['copyWith']?.asBoolConstantValue(),
       copyWithAsOption: props['copyWithAsOption']?.asBoolConstantValue(),
       toStringOverride: props['toStringOverride']?.asBoolConstantValue(),
+      fieldRename: MacroExt.decodeNullableEnum(
+        FieldRename.values,
+        props['fieldRename']?.asStringConstantValue()?.split('.').lastOrNull,
+      ),
       discriminatorKey: props['discriminatorKey']?.asStringConstantValue(),
       discriminatorValue: props['discriminatorValue']?.constantValue,
       includeDiscriminator: props['includeDiscriminator']?.asBoolConstantValue(),
@@ -97,6 +102,17 @@ class DataClassMacro extends MacroGenerator {
   ///
   /// Note: In a future, `Option<T>`-based copyWith will become the default behavior.
   final bool? copyWithAsOption;
+
+  /// Defines the automatic naming strategy when converting class field names
+  /// into JSON map keys.
+  ///
+  /// When null (the default), inherits from the global
+  /// [DataClassMacroConfig.fieldRename] configuration, which falls back to
+  /// [FieldRename.none].
+  ///
+  /// Note: the value for [JsonKey.name] takes precedence over this option for
+  /// fields annotated with [JsonKey].
+  final FieldRename? fieldRename;
 
   /// If `true` (the default) based on global config, it toString method
   final bool? toStringOverride;
@@ -611,7 +627,7 @@ class DataClassMacro extends MacroGenerator {
     final fromJsonGenericsArgsFnRef = <String>{};
     final fromJsonStaticFnName = config.useMapConvention ? 'fromMap' : 'fromJson';
     late final preparedMainClassTypeParams = MacroProperty.buildTypeParameter(classTypeParams);
-    var fieldRename = config.fieldRename ?? FieldRename.none;
+    var fieldRename = this.fieldRename ?? config.fieldRename ?? FieldRename.none;
 
     String fieldCast(
       MacroProperty field,
@@ -1377,7 +1393,7 @@ class DataClassMacro extends MacroGenerator {
 
     // default not to include null values
     var includeIfNull = config.includeIfNull;
-    var fieldRename = config.fieldRename ?? FieldRename.none;
+    var fieldRename = this.fieldRename ?? config.fieldRename ?? FieldRename.none;
     final prefix = state.importPrefix;
     final disKey = discriminatorKey ?? 'type';
     bool? disKeyAdded;

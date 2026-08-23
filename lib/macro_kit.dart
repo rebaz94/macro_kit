@@ -17,3 +17,4 @@ export 'src/macro/data_class/config.dart' hide JsonKeyConfig, DataClassMacroConf
 export 'src/macro/data_class/data_class_macro.dart' hide dataClassMacroCapability;
 export 'src/macro/data_class/helpers.dart';
 export 'src/macro/embed/embed_macro.dart';
+export 'src/macro/shader/shader_reloader_macro.dart';

@@ -82,6 +82,12 @@ class User with UserDataClass {
 - **`toStringOverride`** (bool?): If `true`, generates a `toString` method. Defaults to global
   config.
 
+- **`fieldRename`** (FieldRename?): The naming strategy used when converting field names into
+  JSON map keys. Takes precedence over the global `field_rename` config, which itself defaults
+  to `none`.
+    - Example: `FieldRename.snake` converts `userName` → `"user_name"`
+    - A field-level `@JsonKey(name:)` always wins over both.
+
 ### Polymorphic Classes
 
 For sealed classes or abstract class hierarchies, the macro supports discriminator-based
@@ -167,18 +173,21 @@ Create or modify `macro.json` in your project root:
 
 #### `field_rename`
 
-Defines the automatic naming strategy when converting class field names into JSON map keys.
+Defines the default naming strategy when converting class field names into JSON map keys. It can
+be overridden per class with the annotation-level `DataClassMacro(fieldRename: ...)` parameter.
 
 - **`"none"`** (default): Uses field names without modification
-- **`"snake_case"`**: Converts `camelCase` to `snake_case`
-- **`"kebab_case"`**: Converts `camelCase` to `kebab-case`
-- **`"pascal_case"`**: Converts to `PascalCase`
+- **`"camelCase"`**: Converts `my_field_name` to `myFieldName`
+- **`"kebab"`**: Converts `myFieldName` to `my-field-name`
+- **`"snake"`**: Converts `myFieldName` to `my_field_name`
+- **`"pascal"`**: Converts `my_field_name` to `MyFieldName`
+- **`"screamingSnake"`**: Converts `myFieldName` to `MY_FIELD_NAME`
 
 Example:
 
 ```json
 {
-  "field_rename": "snake_case"
+  "field_rename": "snake"
 }
 ```
 
@@ -314,7 +323,7 @@ Here's a fully configured `macro.json`:
   },
   "macros": {
     "DataClassMacro": {
-      "field_rename": "snake_case",
+      "field_rename": "snake",
       "create_from_json": true,
       "create_to_json": true,
       "create_map_to": true,

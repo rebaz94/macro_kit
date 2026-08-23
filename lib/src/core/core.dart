@@ -1932,10 +1932,11 @@ class AssetMacroInfo {
           macroName == other.macroName &&
           extension == other.extension &&
           output == other.output &&
-          config == other.config;
+          const DeepCollectionEquality().equals(config, other.config);
 
   @override
-  int get hashCode => macroName.hashCode ^ extension.hashCode ^ output.hashCode ^ config.hashCode;
+  int get hashCode =>
+      macroName.hashCode ^ extension.hashCode ^ output.hashCode ^ const DeepCollectionEquality().hash(config);
 
   @override
   String toString() {

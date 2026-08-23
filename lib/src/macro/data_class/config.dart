@@ -348,7 +348,8 @@ class DataClassMacroConfig extends MacroGlobalConfig {
   /// See [FieldRename] for details on the other options.
   ///
   /// Note: the value for [JsonKey.name] takes precedence over this option for
-  /// fields annotated with [JsonKey].
+  /// fields annotated with [JsonKey], and a `fieldRename` set on the
+  /// [DataClassMacro] annotation takes precedence over this global option.
   final FieldRename? fieldRename;
 
   /// If `true` (the default), A static function is created in '{ClassName}Json' that you can

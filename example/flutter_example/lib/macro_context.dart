@@ -102,6 +102,7 @@ Future<void> setupMacro() async {
       'TimedMacro': TimedMacro.initialize,
       'RecordMacro': RecordMacro.initialize,
       'EmbedMacro': EmbedMacro.initialize,
+      'ShaderReloaderMacro': ShaderReloaderMacro.initialize,
     },
     assetMacros: {
       'assets': [
@@ -114,6 +115,14 @@ Future<void> setupMacro() async {
           macroName: 'EmbedMacro',
           output: 'lib/embed',
           config: EmbedMacroConfig(extension: '.jpg,.txt,.svg').toJson(),
+        ),
+      ],
+      'shaders': [
+        AssetMacroInfo(
+          macroName: 'ShaderReloaderMacro',
+          extension: '.vert,.frag,.json',
+          output: 'build/shaderbundles',
+          config: const ShaderReloaderConfig().toJson(),
         ),
       ],
     },

@@ -1,3 +1,53 @@
+## 0.8.1
+
+- **New: asset macro push events for running apps**
+  - The macro server now sends a `generated_files` message to connected clients whenever an
+    asset macro successfully generates files (compiled shader bundles, embedded assets, generated code
+    files...). Each event is delivered only to clients whose registered packages own the generated
+    files; if no known context owns them (e.g. no analyzer plugin connected), it falls back to
+    notifying every client
+  - New public API: listen to `onMacroFilesGenerated` (a `Stream<List<String>>` of absolute file
+    paths) after connecting via `setupMacro()`/`runMacro()` — works in both `autoRunMacro` modes,
+    since the stream only concerns receiving events, not executing generation:
+
+  ```dart
+  onMacroFilesGenerated.listen((files) {
+    // react without watching the file system, e.g. hot reload shaders:
+    // final bytes = await File(bundlePath).readAsBytes();
+    // library.reinitializeFromBytes(ByteData.sublistView(bytes));
+  });
+  ```
+
+- **New builtin: `ShaderReloaderMacro`**
+  - An asset macro that compiles Flutter GPU shader bundles: it locates every
+    `*.shaderbundle.json` manifest in the watched directory and re-runs `impellerc` (found via
+    explicit config override, `FLUTTER_ROOT`, or the project's platform-specific ephemeral config)
+    whenever a shader source changes. Pure Dart (`dart:io` + process spawn) — no Flutter dependency.
+  - Pair it with `onMacroFilesGenerated` to hot-reload compiled bundles into a running app:
+
+  ```dart
+  assetMacros: {
+    'shaders': [
+      AssetMacroInfo(
+        macroName: 'ShaderReloaderMacro',
+        extension: '.vert,.frag,.json',
+        output: 'build/shaderbundles',
+        config: const ShaderReloaderConfig().toJson(),
+      ),
+    ],
+  },
+  ```
+
+- **New: per-class `fieldRename` for `DataClassMacro`**
+  - The naming strategy for JSON map keys can now be set on the annotation itself:
+    `@Macro(DataClassMacro(fieldRename: FieldRename.snake))`, not only globally via
+    `"field_rename"` in `macro.json`.
+  - Resolution order: annotation value → global config → `FieldRename.none`. A field-level
+    `@JsonKey(name:)` still wins over both.
+  - Also fixes the documented global values: `"field_rename"` accepts the exact `FieldRename`
+    enum names (`none`, `camelCase`, `kebab`, `snake`, `pascal`, `screamingSnake`) — the
+    previously documented `snake_case`/`kebab_case` style strings were silently ignored.
+
 ## 0.8.0
 
 - **ComputeMacro** can now generate types at compile time: set

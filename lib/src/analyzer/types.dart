@@ -4,6 +4,7 @@ import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
+
 // ignore: implementation_imports
 import 'package:analyzer/src/dart/constant/value.dart';
 import 'package:collection/collection.dart';
@@ -12,6 +13,35 @@ import 'package:macro_kit/src/analyzer/internal_models.dart';
 import 'package:macro_kit/src/analyzer/types_ext.dart';
 import 'package:macro_kit/src/core/core.dart';
 import 'package:macro_kit/src/core/modifier.dart';
+
+class AssetDirInfo {
+  AssetDirInfo({
+    required this.macro,
+    required this.relativeBasePath,
+    required this.absoluteOutputPath,
+  });
+
+  final AssetMacroInfo macro;
+  final String relativeBasePath;
+  final String absoluteOutputPath;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AssetDirInfo &&
+          runtimeType == other.runtimeType &&
+          macro == other.macro &&
+          relativeBasePath == other.relativeBasePath &&
+          absoluteOutputPath == other.absoluteOutputPath;
+
+  @override
+  int get hashCode => Object.hash(macro, relativeBasePath, absoluteOutputPath);
+
+  @override
+  String toString() {
+    return 'AssetDirInfo{macro: $macro, relativeBasePath: $relativeBasePath, absoluteOutputPath: $absoluteOutputPath}';
+  }
+}
 
 typedef TypeInfoResult = ({
   String importPrefix,

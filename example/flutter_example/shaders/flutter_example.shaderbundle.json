@@ -1,0 +1,10 @@
+{
+  "CubeVertex": {
+    "type": "vertex",
+    "file": "cube.vert"
+  },
+  "CubeFragment": {
+    "type": "fragment",
+    "file": "cube.frag"
+  }
+}

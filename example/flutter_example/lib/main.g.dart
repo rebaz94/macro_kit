@@ -6,11 +6,10 @@
 
 part of 'main.dart';
 
-mixin _MyHomePageStateForm {
+mixin _ValidationPageStateForm {
   // Value notifiers for form fields
   final nameState = ValueNotifier(Optional<String>.undefined());
   final ageState = ValueNotifier(Optional<int>.undefined());
-  final profileState = ValueNotifier(Optional<UserProfile2>.undefined());
   final myListState = ValueNotifier(Optional<List<String>>.value(['a', 'b', 'c']));
 
   // Getters and setters for form fields
@@ -40,19 +39,6 @@ mixin _MyHomePageStateForm {
     }
   }
 
-  UserProfile2? get profile {
-    final opt = profileState.value;
-    return opt.isSet ? opt.value : null;
-  }
-
-  set profile(UserProfile2? value) {
-    if (value == null) {
-      profileState.value = Optional<UserProfile2>.nullValue();
-    } else {
-      profileState.value = Optional<UserProfile2>.value(value);
-    }
-  }
-
   List<String>? get myList {
     final opt = myListState.value;
     return opt.isSet ? opt.value : null;
@@ -67,14 +53,13 @@ mixin _MyHomePageStateForm {
   }
 
   Future<Map<String, List<ValidationError>>> validate() async {
-    final state = this as _MyHomePageState;
+    final state = this as _ValidationPageState;
     final formState = <String, List<ValidationError>>{};
-    const fieldNames = ['name', 'age', 'profile', 'myList'];
+    const fieldNames = ['name', 'age', 'myList'];
     try {
       final result = await Future.wait([
         state.nameSchema.validate(nameState.value.value),
         state.ageSchema.validate(ageState.value.value),
-        state.profileSchema.validate(profileState.value.value),
         state.myListSchema.validate(myListState.value.value),
       ]);
 
@@ -95,7 +80,6 @@ mixin _MyHomePageStateForm {
   void dispose() {
     nameState.dispose();
     ageState.dispose();
-    profileState.dispose();
     myListState.dispose();
   }
 }

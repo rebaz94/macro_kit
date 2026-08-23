@@ -318,7 +318,7 @@ class MacroClientConfiguration {
           autoRebuildOnConnect == other.autoRebuildOnConnect &&
           alwaysRebuildOnConnect == other.alwaysRebuildOnConnect &&
           skipConnectRebuildWithAutoRun == other.skipConnectRebuildWithAutoRun &&
-          userMacrosConfig == other.userMacrosConfig;
+          const DeepCollectionEquality().equals(userMacrosConfig, other.userMacrosConfig);
 
   @override
   int get hashCode =>
@@ -329,7 +329,7 @@ class MacroClientConfiguration {
       autoRebuildOnConnect.hashCode ^
       alwaysRebuildOnConnect.hashCode ^
       skipConnectRebuildWithAutoRun.hashCode ^
-      userMacrosConfig.hashCode;
+      const DeepCollectionEquality().hash(userMacrosConfig);
 
   Map<String, dynamic> toJson() {
     return {

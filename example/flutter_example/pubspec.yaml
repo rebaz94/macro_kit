@@ -34,6 +34,9 @@ dependencies:
   json_schema_builder: ^0.1.6
   flutter_svg: ^2.3.0
   platform: ^3.1.6
+  flutter_gpu:
+    sdk: flutter
+  vector_math: ^2.1.5
 
   macro_kit:
     path: ../..

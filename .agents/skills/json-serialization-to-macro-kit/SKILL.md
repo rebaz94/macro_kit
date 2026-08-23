@@ -177,7 +177,7 @@ Put options under `"macros"` → `"DataClassMacro"` in `macro.json` at the proje
 
 | json_serializable option                                                | macro.json key                                                                                                                             |
 |-------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `fieldRename: FieldRename.snake`                                        | `"field_rename": "snake_case"` (`none` default, also `kebab_case`, `pascal_case`) — global only; override per field with `@JsonKey(name:)` |
+| `fieldRename: FieldRename.snake`                                        | `"field_rename": "snake"` (`none` default, also `camelCase`, `kebab`, `pascal`, `screamingSnake`) — set globally or per class via `@Macro(DataClassMacro(fieldRename: ...))` (annotation wins); override per field with `@JsonKey(name:)` |
 | `includeIfNull: true`                                                   | `"include_if_null": true`                                                                                                                  |
 | method naming (`fromJson/toJson` vs `fromMap/toMap`)                    | `"use_map_convention": true` switches to fromMap/toMap                                                                                     |
 | `createFactory: false`                                                  | per-class `@Macro(DataClassMacro(fromJson: false))`                                                                                        |
@@ -196,7 +196,7 @@ Example `macro.json`:
   },
   "macros": {
     "DataClassMacro": {
-      "field_rename": "snake_case",
+      "field_rename": "snake",
       "include_if_null": false,
       "as_literal_types": [
         "GeoPoint",
