@@ -1,4 +1,4 @@
-# `MacroCapability` Documentation
+# MacroCapability
 
 `MacroCapability` defines what parts of a declaration should be collected and made available to a
 macro during code generation. By enabling only the information you need, you reduce analysis cost

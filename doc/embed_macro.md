@@ -1,4 +1,4 @@
-## EmbedMacro Documentation
+## EmbedMacro
 
 `EmbedMacro` is a macro that embeds asset files directly into Dart code as byte arrays. It scans a
 specified directory, converts matching files into `Uint8List` data, and generates a virtual file

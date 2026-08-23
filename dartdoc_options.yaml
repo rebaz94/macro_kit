@@ -12,6 +12,8 @@ dartdoc:
       markdown: "doc/compute_macro.md"
     "Asset Path Macro":
       markdown: "doc/asset_path_macro.md"
+    "Shader Reloader Macro":
+      markdown: "doc/shader_reloader_macro.md"
     "Embed Macro":
       markdown: "doc/embed_macro.md"
     "Global Configuration":
@@ -28,6 +30,7 @@ dartdoc:
     - "Data Class Macro"
     - "Compute Macro"
     - "Asset Path Macro"
+    - "Shader Reloader Macro"
     - "Embed Macro"
     - "Global Configuration"
     - "Write New Macro"

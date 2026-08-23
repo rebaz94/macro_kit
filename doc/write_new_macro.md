@@ -1,4 +1,4 @@
-# Macro Kit Documentation
+# Macro Kit
 
 A comprehensive guide to creating and using macros in Dart with macro_kit.
 

@@ -258,6 +258,42 @@ final asset = Image.asset(AssetPaths.logo);
 final asset = Image.asset(AssetPaths.icons.home);
 ```
 
+### ShaderReloaderMacro
+
+A builtin asset macro that compiles Flutter GPU shader bundles. It watches a directory of shader
+sources and re-runs `impellerc` whenever a file changes, writing compiled `.shaderbundle` files
+into the configured output directory — so a running app can hot reload shaders without any manual
+build step.
+
+```dart
+await runMacro(
+  macros: {
+    'ShaderReloaderMacro': ShaderReloaderMacro.initialize,
+  },
+  assetMacros: {
+    'shaders': [
+      AssetMacroInfo(
+        macroName: 'ShaderReloaderMacro',
+        extension: '.vert,.frag,.json',
+        output: 'build/shaderbundles',
+        config: const ShaderReloaderConfig().toJson(),
+      ),
+    ],
+  },
+);
+```
+
+For additional details, refer to the [Shader Reloader Macro](doc/shader_reloader_macro.md)
+documentation.
+
+```dart
+// Hot reload compiled bundles into a running app
+onMacroFilesGenerated.listen((files) {
+  final bytes = File(bundlePath).readAsBytesSync();
+  library.reinitializeFromBytes(ByteData.sublistView(bytes));
+});
+```
+
 ### EmbedMacro
 
 Embeds asset files directly into Dart source code as byte arrays. This macro scans a directory,

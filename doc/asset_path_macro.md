@@ -1,4 +1,4 @@
-## AssetPathMacro Documentation
+## AssetPathMacro
 
 `AssetPathMacro` is a powerful macro that automatically generates type-safe asset path constants
 from your project's directory structure. It watches a specified directory for file changes and
@@ -139,4 +139,4 @@ With `FieldRename.camelCase`:
 
 ---
 
-<p align="right"><a href="../topics/Embed Macro-topic.html">Next: Embed Macro</a></p>
+<p align="right"><a href="../topics/Shader Reloader Macro-topic.html">Next: Shader Reloader Macro</a></p>

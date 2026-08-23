@@ -29,6 +29,7 @@ export 'package:macro_kit/src/analyzer/base_macro.dart';
 /// {@category Data Class Macro}
 /// {@category Compute Macro}
 /// {@category Asset Path Macro}
+/// {@category Shader Reloader Macro}
 /// {@category Embed Macro}
 /// {@category Global Configuration}
 /// {@category Write New Macro}
