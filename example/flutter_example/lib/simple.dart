@@ -78,6 +78,14 @@ class UserProfile3 with UserProfile3Data {
   final AddressInfo<String>? address2;
 }
 
+abstract class BaseProfile(final String name);
+
+@dataClassMacro
+class Profile(final String name, {required final int age}) with ProfileData;
+
+@dataClassMacro
+class ProfileWithBase(super.name, {required final int age}) extends BaseProfile with ProfileWithBaseData;
+
 void test() {
   var profile = UserProfile(name: 'Rebaz', age: 20);
   print(profile.copyWith(age: 30));

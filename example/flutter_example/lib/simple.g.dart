@@ -385,6 +385,114 @@ mixin UserProfile3Data {
   }
 }
 
+mixin ProfileData {
+  static Profile fromJson(Map<String, dynamic> json) {
+    return Profile(
+      json['name'] as String,
+      age: (json['age'] as num).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as Profile;
+    return <String, dynamic>{
+      'name': v.name,
+      'age': v.age,
+    };
+  }
+
+  Profile copyWith({
+    String? name,
+    int? age,
+  }) {
+    final v = this as Profile;
+    return Profile(
+      name ?? v.name,
+      age: age ?? v.age,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as Profile;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is Profile &&
+            (identical(other.name, v.name) || other.name == v.name) &&
+            (identical(other.age, v.age) || other.age == v.age));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as Profile;
+    return Object.hash(
+      runtimeType,
+      v.name,
+      v.age,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as Profile;
+    return 'Profile{name: ${v.name}, age: ${v.age}}';
+  }
+}
+
+mixin ProfileWithBaseData {
+  static ProfileWithBase fromJson(Map<String, dynamic> json) {
+    return ProfileWithBase(
+      json['name'] as String,
+      age: (json['age'] as num).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final v = this as ProfileWithBase;
+    return <String, dynamic>{
+      'name': v.name,
+      'age': v.age,
+    };
+  }
+
+  ProfileWithBase copyWith({
+    String? name,
+    int? age,
+  }) {
+    final v = this as ProfileWithBase;
+    return ProfileWithBase(
+      name ?? v.name,
+      age: age ?? v.age,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    final v = this as ProfileWithBase;
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is ProfileWithBase &&
+            (identical(other.name, v.name) || other.name == v.name) &&
+            (identical(other.age, v.age) || other.age == v.age));
+  }
+
+  @override
+  int get hashCode {
+    final v = this as ProfileWithBase;
+    return Object.hash(
+      runtimeType,
+      v.name,
+      v.age,
+    );
+  }
+
+  @override
+  String toString() {
+    final v = this as ProfileWithBase;
+    return 'ProfileWithBase{name: ${v.name}, age: ${v.age}}';
+  }
+}
+
 /// An example of Record macro that convert record definition into a class
 class ClsAddressInfo<T> {
   ClsAddressInfo({required this.building, this.country, required this.data});

@@ -77,3 +77,11 @@ class Cow extends Animal with DogData {
 
   final bool big;
 }
+
+abstract class BaseProfile(final String name);
+
+@dataClassMacro
+class Profile(final String name, {required final int age}) with ProfileData;
+
+@dataClassMacro
+class ProfileWithBase(super.name, {required final int age}) extends BaseProfile with ProfileWithBaseData;
